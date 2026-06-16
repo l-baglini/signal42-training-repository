@@ -1,0 +1,12 @@
+{
+  "name": "nerd-quest",
+  "version": "1.0.0",
+  "description": "A nerd-themed Game of the Goose — Electron desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^42.4.0"
+  }
+}
