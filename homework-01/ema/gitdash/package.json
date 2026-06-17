@@ -1,0 +1,19 @@
+{
+  "name": "gitdash",
+  "version": "1.0.0",
+  "description": "Visual Git dashboard for multiple repositories",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "electron": "^42.4.0",
+    "simple-git": "^3.36.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.0"
+  }
+}

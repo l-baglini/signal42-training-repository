@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>GitDash</title>
+<style>
+/* ── RESET & BASE ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0D0F14;
+  --surface:   #13161E;
+  --card:      #181B25;
+  --border:    #222536;
+  --border2:   #2A2E40;
+  --text:      #E2E5F0;
+  --muted:     #565C78;
+  --muted2:    #8891AE;
+  --green:     #3DAE6E;
+  --yellow:    #D4B83A;
+  --red:       #E8473F;
+  --blue:      #5B8AF0;
+  --orange:    #E8893F;
+  --accent:    #5B8AF0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── TOPBAR ───────────────────────────────────────────────────────────────── */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+
+#topbar * { -webkit-app-region: no-drag; }
+
+.logo {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+  margin-right: 4px;
+}
+.logo span { color: var(--accent); }
+
+#folder-path {
+  font-size: 12px;
+  color: var(--muted2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pick-btn, #refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+#pick-btn:hover, #refresh-btn:hover { background: var(--border); border-color: var(--muted); }
+#pick-btn { background: var(--accent); border-color: var(--accent); color: #fff; }
+#pick-btn:hover { background: #4a78e0; }
+
+#repo-count {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── MAIN AREA ────────────────────────────────────────────────────────────── */
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR (repo list) ──────────────────────────────────────────────────── */
+#sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#sidebar-header {
+  padding: 14px 16px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#repo-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+
+.repo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .12s;
+  margin-bottom: 2px;
+}
+.repo-item:hover { background: var(--border); }
+.repo-item.active { background: rgba(91,138,240,.12); }
+
+.repo-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+.repo-dot.dirty  { background: var(--yellow); }
+.repo-dot.clean  { background: var(--green); }
+.repo-dot.error  { background: var(--red); }
+
+.repo-name {
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-branch {
+  font-size: 10px;
+  color: var(--muted2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── CONTENT AREA ─────────────────────────────────────────────────────────── */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── EMPTY / LOADING STATES ───────────────────────────────────────────────── */
+#empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+#empty-state .big { font-size: 48px; }
+#empty-state h2 { font-size: 18px; font-weight: 700; color: var(--muted2); }
+#empty-state p  { font-size: 13px; line-height: 1.6; max-width: 340px; }
+
+/* ── REPO DETAIL ──────────────────────────────────────────────────────────── */
+#repo-detail { display: none; flex-direction: column; gap: 16px; }
+#repo-detail.visible { display: flex; }
+
+.detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-repo-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.detail-branch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(91,138,240,.15);
+  color: var(--blue);
+}
+
+.detail-path {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── PANELS ROW ───────────────────────────────────────────────────────────── */
+.panels-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel-body {
+  padding: 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── FILE LIST ────────────────────────────────────────────────────────────── */
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: background .1s;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+.file-row:hover { background: var(--border); }
+
+.file-tag {
+  font-size: 9px;
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.tag-M { color: var(--yellow); }
+.tag-S { color: var(--green); }
+.tag-U { color: var(--muted2); }
+.tag-D { color: var(--red); }
+
+.file-name {
+  font-size: 11px;
+  color: var(--muted2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.none-label {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── BRANCHES ─────────────────────────────────────────────────────────────── */
+.branch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  margin: 0 4px;
+  border-radius: 4px;
+}
+.branch-row.current { background: rgba(91,138,240,.08); }
+
+.branch-name {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--muted2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.branch-name.current-name { color: var(--blue); font-weight: 600; }
+
+.branch-icon { font-size: 10px; color: var(--blue); flex-shrink: 0; }
+.remote-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--border2);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* ── COMMITS ──────────────────────────────────────────────────────────────── */
+.commit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 14px;
+  margin: 0 4px;
+  border-radius: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.commit-row:last-child { border-bottom: none; }
+
+.commit-hash {
+  font-size: 10px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--accent);
+}
+.commit-subject {
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commit-meta {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ── DIFF PANEL ───────────────────────────────────────────────────────────── */
+#diff-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: none;
+}
+#diff-panel.visible { display: block; }
+
+#diff-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#diff-filename {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--muted2);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#diff-close {
+  margin-left: auto;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background .1s;
+}
+#diff-close:hover { background: var(--border); color: var(--text); }
+
+#diff-body {
+  overflow: auto;
+  max-height: 340px;
+  padding: 12px 0;
+}
+
+#diff-body pre {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.diff-line { display: block; padding: 0 16px; }
+.diff-add  { background: rgba(61,174,110,.12); color: #5dba7d; }
+.diff-del  { background: rgba(232,71,63,.12);  color: #e06060; }
+.diff-hunk { color: var(--blue); background: rgba(91,138,240,.07); }
+.diff-meta { color: var(--muted); }
+
+/* ── SCROLLBARS ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="logo">Git<span>Dash</span></div>
+  <div id="folder-path">No folder selected</div>
+  <div id="repo-count"></div>
+  <button id="refresh-btn">↻ Refresh</button>
+  <button id="pick-btn">📂 Open Folder</button>
+</div>
+
+<div id="main">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-header">Repositories</div>
+    <div id="repo-list"></div>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+    <div id="empty-state">
+      <div class="big">🗂</div>
+      <h2>Open a folder to get started</h2>
+      <p>Select a directory containing multiple Git repositories. GitDash will scan and display all of them at once.</p>
+    </div>
+
+    <div id="repo-detail">
+      <div class="detail-header">
+        <div class="detail-repo-name" id="d-name"></div>
+        <div class="detail-branch-badge">⎇ <span id="d-branch"></span></div>
+        <div class="detail-path" id="d-path"></div>
+      </div>
+
+      <div class="panels-row">
+        <!-- Changes -->
+        <div class="panel">
+          <div class="panel-header">📝 Changes</div>
+          <div class="panel-body" id="d-changes"></div>
+        </div>
+        <!-- Branches -->
+        <div class="panel">
+          <div class="panel-header">⎇ Branches</div>
+          <div class="panel-body" id="d-branches"></div>
+        </div>
+        <!-- Commits -->
+        <div class="panel">
+          <div class="panel-header">🕒 Recent Commits</div>
+          <div class="panel-body" id="d-commits"></div>
+        </div>
+      </div>
+
+      <!-- Diff -->
+      <div id="diff-panel">
+        <div id="diff-header">
+          DIFF <span id="diff-filename"></span>
+          <span id="diff-close">✕</span>
+        </div>
+        <div id="diff-body"><pre id="diff-pre"></pre></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = window.gitdash;
+
+let currentFolder = null;
+let repos = [];          // [{ name, path }]
+let statuses = {};       // { path: statusObj }
+let activeRepo = null;
+
+// ── ELEMENTS ──────────────────────────────────────────────────────────────────
+const pickBtn      = document.getElementById('pick-btn');
+const refreshBtn   = document.getElementById('refresh-btn');
+const folderPath   = document.getElementById('folder-path');
+const repoCount    = document.getElementById('repo-count');
+const repoList     = document.getElementById('repo-list');
+const emptyState   = document.getElementById('empty-state');
+const repoDetail   = document.getElementById('repo-detail');
+const diffPanel    = document.getElementById('diff-panel');
+const diffFilename = document.getElementById('diff-filename');
+const diffPre      = document.getElementById('diff-pre');
+const diffClose    = document.getElementById('diff-close');
+
+// ── PICK FOLDER ───────────────────────────────────────────────────────────────
+pickBtn.addEventListener('click', async () => {
+  const folder = await api.pickFolder();
+  if (!folder) return;
+  currentFolder = folder;
+  folderPath.textContent = folder;
+  await loadRepos();
+});
+
+refreshBtn.addEventListener('click', () => { if (currentFolder) loadRepos(); });
+
+// ── LOAD REPOS ────────────────────────────────────────────────────────────────
+async function loadRepos() {
+  repoList.innerHTML = '<div style="padding:12px 16px;color:var(--muted);font-size:11px;">Scanning…</div>';
+  repos = await api.scanRepos(currentFolder);
+  repoCount.textContent = `${repos.length} repo${repos.length !== 1 ? 's' : ''}`;
+
+  // Fetch all statuses in parallel
+  const results = await Promise.all(repos.map(r => api.repoStatus(r.path)));
+  statuses = {};
+  repos.forEach((r, i) => { statuses[r.path] = results[i]; });
+
+  renderSidebar();
+  if (repos.length > 0) selectRepo(repos[0]);
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  repoList.innerHTML = '';
+  if (repos.length === 0) {
+    repoList.innerHTML = '<div style="padding:12px 16px;color:var(--muted);font-size:11px;">No Git repos found.</div>';
+    return;
+  }
+  repos.forEach(r => {
+    const s = statuses[r.path];
+    const dirty = s?.ok && (s.modified.length + s.staged.length + s.untracked.length + s.deleted.length) > 0;
+    const dotClass = !s?.ok ? 'error' : dirty ? 'dirty' : 'clean';
+
+    const item = document.createElement('div');
+    item.className = 'repo-item';
+    item.dataset.path = r.path;
+    item.innerHTML = `
+      <div class="repo-dot ${dotClass}"></div>
+      <div style="overflow:hidden;flex:1">
+        <div class="repo-name">${r.name}</div>
+        <div class="repo-branch">${s?.ok ? ('⎇ ' + s.current) : 'error'}</div>
+      </div>`;
+    item.addEventListener('click', () => selectRepo(r));
+    repoList.appendChild(item);
+  });
+}
+
+// ── SELECT REPO ───────────────────────────────────────────────────────────────
+function selectRepo(repo) {
+  activeRepo = repo;
+  // highlight sidebar
+  document.querySelectorAll('.repo-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.path === repo.path);
+  });
+
+  const s = statuses[repo.path];
+  emptyState.style.display = 'none';
+  repoDetail.classList.add('visible');
+  diffPanel.classList.remove('visible');
+
+  document.getElementById('d-name').textContent   = repo.name;
+  document.getElementById('d-branch').textContent = s?.ok ? s.current : '—';
+  document.getElementById('d-path').textContent   = repo.path;
+
+  renderChanges(s);
+  renderBranches(s);
+  renderCommits(s);
+}
+
+// ── CHANGES ───────────────────────────────────────────────────────────────────
+function renderChanges(s) {
+  const el = document.getElementById('d-changes');
+  if (!s?.ok) { el.innerHTML = `<div class="none-label">Error: ${s?.error}</div>`; return; }
+
+  const files = [
+    ...s.staged.map(f    => ({ f, tag: 'S', label: 'Staged' })),
+    ...s.modified.map(f  => ({ f, tag: 'M', label: 'Modified' })),
+    ...s.deleted.map(f   => ({ f, tag: 'D', label: 'Deleted' })),
+    ...s.renamed.map(f   => ({ f, tag: 'R', label: 'Renamed' })),
+    ...s.untracked.map(f => ({ f, tag: 'U', label: 'Untracked' })),
+  ];
+
+  if (files.length === 0) {
+    el.innerHTML = '<div class="none-label">✓ Working tree clean</div>';
+    return;
+  }
+
+  el.innerHTML = files.map(({ f, tag }) => `
+    <div class="file-row" data-file="${f}" title="Click to view diff">
+      <span class="file-tag tag-${tag}">${tag}</span>
+      <span class="file-name">${f}</span>
+    </div>`).join('');
+
+  el.querySelectorAll('.file-row').forEach(row => {
+    row.addEventListener('click', () => showDiff(row.dataset.file));
+  });
+}
+
+// ── BRANCHES ─────────────────────────────────────────────────────────────────
+function renderBranches(s) {
+  const el = document.getElementById('d-branches');
+  if (!s?.ok) { el.innerHTML = ''; return; }
+
+  const locals  = s.branches.filter(b => !b.startsWith('remotes/'));
+  const remotes = s.branches.filter(b => b.startsWith('remotes/'));
+
+  el.innerHTML = [
+    ...locals.map(b => {
+      const isCur = b === s.current || b === `* ${s.current}`;
+      const name = b.replace(/^\*\s*/, '');
+      return `<div class="branch-row ${isCur ? 'current' : ''}">
+        ${isCur ? '<span class="branch-icon">⎇</span>' : '<span style="width:14px"></span>'}
+        <span class="branch-name ${isCur ? 'current-name' : ''}">${name}</span>
+      </div>`;
+    }),
+    ...remotes.slice(0, 8).map(b => `
+      <div class="branch-row">
+        <span style="width:14px"></span>
+        <span class="branch-name">${b.replace('remotes/', '')}</span>
+        <span class="remote-tag">remote</span>
+      </div>`),
+  ].join('');
+}
+
+// ── COMMITS ───────────────────────────────────────────────────────────────────
+function renderCommits(s) {
+  const el = document.getElementById('d-commits');
+  if (!s?.ok || !s.commits.length) {
+    el.innerHTML = '<div class="none-label">No commits found.</div>';
+    return;
+  }
+  el.innerHTML = s.commits.map(c => `
+    <div class="commit-row">
+      <span class="commit-hash">${c.hash}</span>
+      <span class="commit-subject">${escHtml(c.subject)}</span>
+      <span class="commit-meta">${escHtml(c.author || '')} · ${escHtml(c.date || '')}</span>
+    </div>`).join('');
+}
+
+// ── DIFF ──────────────────────────────────────────────────────────────────────
+async function showDiff(filePath) {
+  if (!activeRepo) return;
+  diffFilename.textContent = filePath;
+  diffPre.innerHTML = '<span style="color:var(--muted)">Loading diff…</span>';
+  diffPanel.classList.add('visible');
+
+  const raw = await api.fileDiff(activeRepo.path, filePath);
+  diffPre.innerHTML = renderDiff(raw);
+  diffPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+diffClose.addEventListener('click', () => diffPanel.classList.remove('visible'));
+
+function renderDiff(raw) {
+  return raw.split('\n').map(line => {
+    const cls = line.startsWith('+') && !line.startsWith('+++') ? 'diff-add'
+              : line.startsWith('-') && !line.startsWith('---') ? 'diff-del'
+              : line.startsWith('@@') ? 'diff-hunk'
+              : (line.startsWith('diff') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) ? 'diff-meta'
+              : '';
+    return `<span class="diff-line ${cls}">${escHtml(line)}</span>`;
+  }).join('\n');
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+</script>
+</body>
+</html>
