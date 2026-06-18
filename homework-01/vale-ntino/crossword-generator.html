@@ -281,6 +281,7 @@
 const I18N = {
   it:{
     name:"Italiano",
+    title:"Cruciverba", eyebrow:"Generato con l'AI",
     tagline:"Scrivi qualche parola-tema: l'AI sceglie parole collegate e le definizioni, poi monto la griglia. Risolvilo a schermo (anche da telefono) o stampalo.",
     lang:"Lingua", seeds:"Parole-seme (temi)",
     seedsPlaceholder:"mare, vacanza, sole, gelato",
@@ -308,6 +309,7 @@ const I18N = {
   },
   en:{
     name:"English",
+    title:"Crossword", eyebrow:"AI-generated",
     tagline:"Type a few theme words: the AI picks related words and clues, then I build the grid. Solve it on screen (even on a phone) or print it.",
     lang:"Language", seeds:"Seed words (themes)",
     seedsPlaceholder:"sea, holiday, sun, ice cream",
@@ -733,6 +735,9 @@ async function generate(useSample){
 function applyLang(){
   const t=I18N[state.lang], d=DIFF[state.lang];
   document.documentElement.lang=state.lang;
+  $("#title").textContent=t.title;
+  $("#eyebrow").textContent=t.eyebrow;
+  document.title=t.title;
   $("#tagline").textContent=t.tagline;
   $("#l-lang").textContent=t.lang;
   $("#l-seeds").textContent=t.seeds;
@@ -751,6 +756,7 @@ function applyLang(){
   $("#solBtn").textContent=state.showSol?t.hideSol:t.showSol;
   $("#checkBtn").textContent=t.check; $("#clearBtn").textContent=t.clear;
   if(state.layout) $("#playHint").textContent=t.playHint;
+  if(state.layout) $("#placedInfo").innerHTML=t.placed(state.layout.placed,state.layout.total);
   $("#foot").textContent=t.foot;
   // re-render clues headers if a layout exists
   if(state.layout) renderClues(state.layout);
