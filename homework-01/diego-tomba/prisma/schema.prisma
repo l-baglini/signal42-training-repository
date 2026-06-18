@@ -1,0 +1,102 @@
+// RepoWatcher — Prisma schema.
+//
+// SQLite by default for a local single-user setup. To move to Postgres/MySQL,
+// change `provider` + the DATABASE_URL — the domain and use cases are unaffected
+// because they depend on repository interfaces, not on Prisma.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Key-value application settings (tokens, budget, db path). Single-user, local.
+model Settings {
+  key   String @id
+  value String
+
+  @@map("settings")
+}
+
+/// A repository the user wants to keep an eye on.
+model WatchedRepo {
+  id           Int      @id @default(autoincrement())
+  owner        String
+  name         String
+  platform     String   @default("github")
+  scheduleCron String?
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@unique([owner, name, platform])
+  @@map("watched_repos")
+}
+
+/// A reusable prompt that guides the AI narrator. Only one is active at a time.
+model Prompt {
+  id        Int      @id @default(autoincrement())
+  name      String
+  content   String
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("prompts")
+}
+
+/// A generated storytelling report, kept for history.
+model Report {
+  id                  Int      @id @default(autoincrement())
+  repoOwner           String
+  repoName            String
+  markdown            String
+  eventsProcessed     Int      @default(0)
+  costUsd             Float    @default(0)
+  inputTokens         Int      @default(0)
+  outputTokens        Int      @default(0)
+  cacheCreationTokens Int      @default(0)
+  cacheReadTokens     Int      @default(0)
+  model               String?
+  generatedAt         DateTime @default(now())
+
+  @@index([repoOwner, repoName])
+  @@index([generatedAt])
+  @@map("reports")
+}
+
+/// One agent run — the basis for cost estimates and the usage indicator.
+model UsageRecord {
+  id                  Int      @id @default(autoincrement())
+  taskType            String
+  inputTokens         Int
+  outputTokens        Int
+  cacheCreationTokens Int      @default(0)
+  cacheReadTokens     Int      @default(0)
+  costUsd             Float    @default(0)
+  durationMs          Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  @@index([taskType])
+  @@index([createdAt])
+  @@map("runs")
+}
+
+/// A normalized repository event (PR / Issue / Project board), deduplicated and
+/// scoped per repository so reports never mix events across repos.
+model RepoEvent {
+  id         Int      @id @default(autoincrement())
+  repoOwner  String
+  repoName   String
+  eventType  String
+  platform   String
+  externalId String
+  data       String
+  fetchedAt  DateTime
+
+  @@unique([repoOwner, repoName, platform, eventType, externalId], name: "repo_event_dedup")
+  @@index([fetchedAt])
+  @@index([repoOwner, repoName])
+  @@map("repo_events")
+}
