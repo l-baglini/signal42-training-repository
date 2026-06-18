@@ -1,0 +1,19 @@
+{
+  "name": "claude-usage-proxy",
+  "version": "1.0.0",
+  "description": "Proxy server that exposes Claude Code local usage data over HTTP for ESP32",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "happy": "MOCK=happy node server.js",
+    "neutral": "MOCK=neutral node server.js",
+    "sad": "MOCK=sad node server.js",
+    "angry": "MOCK=angry node server.js",
+    "tired": "MOCK=tired node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "express": "^4.18.2"
+  }
+}
