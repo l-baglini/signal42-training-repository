@@ -1,0 +1,45 @@
+name: Scraping pipeline
+
+on:
+  # schedule:
+  #   # Ogni giorno alle 19:00 UTC — decommentare dopo aver configurato i secrets
+  #   - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Fonti da scrapare (es: mit,telegram,centrisociali)'
+        required: false
+        default: 'mit,telegram,centrisociali'
+
+jobs:
+  scrape:
+    # Requires ANTHROPIC_API_KEY, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+    # APP_URL and CRON_SECRET configured in Settings → Secrets → Actions.
+    name: Run scraping pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SOURCES: ${{ github.event.inputs.sources || 'mit,telegram,centrisociali' }}
+        run: npx tsx --tsconfig scripts/tsconfig.json scripts/run-pipeline.ts
+
+      - name: Send notifications
+        run: |
+          curl -s -X POST "${{ secrets.APP_URL }}/api/notify?secret=${{ secrets.CRON_SECRET }}"
