@@ -248,6 +248,7 @@
 const I18N = {
   it:{
     name:"Italiano",
+    title:"Cruciverba", eyebrow:"Offline · IA nel browser",
     tagline:"Tutto in locale: un modello LLM gira dentro il tuo browser (WebGPU), sceglie parole legate ai tuoi temi e scrive le definizioni. Niente server, niente API. Pronto da stampare.",
     lang:"Lingua", seeds:"Parole-seme (temi)",
     seedsPlaceholder:"mare, vacanza, sole, gelato",
@@ -276,6 +277,7 @@ const I18N = {
   },
   en:{
     name:"English",
+    title:"Crossword", eyebrow:"Offline · in-browser AI",
     tagline:"Fully local: an LLM runs inside your browser (WebGPU), picks words tied to your themes and writes the clues. No server, no API. Ready to print.",
     lang:"Language", seeds:"Seed words (themes)",
     seedsPlaceholder:"sea, holiday, sun, ice cream",
@@ -629,6 +631,7 @@ function fillModels(){
 function applyLang(){
   const t=T(),d=DIFF[state.lang];
   document.documentElement.lang=state.lang;
+  $("#title").textContent=t.title; $("#eyebrow").textContent=t.eyebrow; document.title=t.title;
   $("#tagline").textContent=t.tagline;
   $("#l-lang").textContent=t.lang; $("#l-seeds").textContent=t.seeds;
   $("#seeds").placeholder=t.seedsPlaceholder; $("#h-seeds").textContent=t.seedsHint;
@@ -641,7 +644,7 @@ function applyLang(){
   $("#pz-title").textContent=t.puzzle; $("#sol-title").textContent=t.solution; $("#printBtn").textContent=t.print;
   $("#solBtn").textContent=state.showSol?t.hideSol:t.showSol; $("#foot").textContent=t.foot;
   $("#checkBtn").textContent=t.check; $("#clearBtn").textContent=t.clear;
-  if(state.layout) $("#playHint").textContent=t.playHint;
+  if(state.layout){ $("#playHint").textContent=t.playHint; $("#placedInfo").innerHTML=t.placed(state.layout.placed,state.layout.total); }
   if(!state.engine) setEngineStatus("");
   else setEngineStatus(t.modelReady);
   fillModels();
