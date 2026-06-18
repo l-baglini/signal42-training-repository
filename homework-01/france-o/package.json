@@ -1,0 +1,17 @@
+{
+  "name": "onetag-ad-inspector",
+  "version": "0.1.0",
+  "description": "Chrome extension that detects Onetag-served ads inside iframes and lists them in a custom DevTools panel.",
+  "private": true,
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node build.js",
+    "watch": "node build.js --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.20.2",
+    "typescript": "^5.4.5"
+  }
+}

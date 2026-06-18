@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>OneTag Inspector</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font: 12px/1.5 -apple-system, system-ui, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      .count {
+        background: rgba(237, 28, 36, 0.15);
+        color: #ed1c24;
+        border-radius: 8px;
+        padding: 0 7px;
+        font-size: 11px;
+        font-weight: 600;
+        min-width: 8px;
+        text-align: center;
+      }
+      .count:empty {
+        display: none;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      li {
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+      }
+      li.ad {
+        cursor: pointer;
+      }
+      li.ad:hover {
+        background: rgba(237, 28, 36, 0.08);
+      }
+      li.closed {
+        opacity: 0.5;
+        cursor: default;
+      }
+      li.closed .url {
+        text-decoration: line-through;
+      }
+      li.closed .badge {
+        background: rgba(128, 128, 128, 0.18);
+        color: inherit;
+      }
+      li.section {
+        padding: 6px 12px;
+        border-bottom: none;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        border-top: 1px solid rgba(128, 128, 128, 0.3);
+        margin-top: 4px;
+      }
+      .url {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .meta {
+        margin-top: 3px;
+        opacity: 0.7;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0 6px;
+        margin-right: 4px;
+        border-radius: 8px;
+        background: rgba(237, 28, 36, 0.15);
+        color: #ed1c24;
+        font-size: 10px;
+      }
+      .empty {
+        padding: 24px 12px;
+        opacity: 0.6;
+        text-align: center;
+      }
+
+      /* Integration section */
+      .integration {
+        padding: 8px 12px 10px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+      }
+      .list-title {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        padding: 8px 12px 0;
+      }
+      .ihead {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .ihead:hover {
+        opacity: 0.92;
+      }
+      .ihead .tw {
+        width: 9px;
+        font-size: 9px;
+        opacity: 0.6;
+      }
+      .ihead .ilabel {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      .ihead .isum {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: auto;
+        font-size: 11px;
+        opacity: 0.85;
+      }
+      .ibody {
+        margin-top: 7px;
+      }
+      .note {
+        opacity: 0.7;
+      }
+      .prebid-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+      }
+      .prebid-head .ver {
+        opacity: 0.6;
+        font-weight: 400;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 6px 0 2px;
+      }
+      .chip {
+        background: rgba(128, 128, 128, 0.15);
+        border-radius: 8px;
+        padding: 1px 6px;
+        font-size: 10px;
+      }
+      .unit {
+        margin-top: 7px;
+        padding-left: 6px;
+        border-left: 2px solid transparent;
+      }
+      .integration.hl .unit.ot-won {
+        border-left-color: #2ea043;
+      }
+      .integration.hl .unit.ot-lost {
+        border-left-color: #d29922;
+        background: rgba(210, 153, 34, 0.07);
+      }
+      .uhead {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .uhead .tw {
+        width: 9px;
+        font-size: 9px;
+        opacity: 0.6;
+        flex: none;
+      }
+      .unit .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        word-break: break-all;
+      }
+      .unit .floor {
+        opacity: 0.6;
+      }
+      .uhead .winner {
+        margin-left: auto;
+        padding-left: 6px;
+        font-size: 10px;
+        white-space: nowrap;
+        opacity: 0.85;
+        color: #2ea043;
+      }
+      .uhead .slot-state {
+        margin-left: auto;
+        padding-left: 6px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .uhead .slot-state .hb {
+        opacity: 0.6;
+      }
+      .uhead .go {
+        flex: none;
+        cursor: pointer;
+        border: none;
+        background: rgba(128, 128, 128, 0.18);
+        color: inherit;
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 1;
+        padding: 2px 5px;
+      }
+      .uhead .go:hover {
+        background: rgba(26, 115, 232, 0.3);
+      }
+      .ubody {
+        margin-top: 3px;
+      }
+      .subhead {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin: 10px 0 4px;
+        font-size: 11px;
+        font-weight: 600;
+        opacity: 0.8;
+      }
+      .kv {
+        display: flex;
+        gap: 6px;
+        padding: 1px 0 1px 10px;
+        font-size: 11px;
+      }
+      .kv .k {
+        min-width: 88px;
+        opacity: 0.6;
+      }
+      .kv .v {
+        font-variant-numeric: tabular-nums;
+        word-break: break-all;
+      }
+      .bid {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+        padding: 1px 0 1px 10px;
+        font-size: 11px;
+      }
+      .bid .bidder {
+        min-width: 78px;
+      }
+      .bid .cpm {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.85;
+      }
+      .bid .st {
+        font-size: 9px;
+        padding: 0 5px;
+        border-radius: 7px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .st.won {
+        background: rgba(46, 160, 67, 0.2);
+        color: #2ea043;
+      }
+      .st.bid {
+        background: rgba(128, 128, 128, 0.18);
+      }
+      .st.no-bid {
+        background: rgba(237, 28, 36, 0.12);
+        color: #ed1c24;
+      }
+      .bid .reason {
+        opacity: 0.55;
+        word-break: break-word;
+      }
+      /* OneTag presence toggle + row highlighting */
+      .ot-toggle {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #ed1c24;
+        flex: none;
+        cursor: pointer;
+      }
+      .ot-toggle.off {
+        opacity: 0.3;
+      }
+      .ot-toggle:hover {
+        box-shadow: 0 0 0 2px rgba(237, 28, 36, 0.35);
+      }
+      .integration.hl .has-onetag {
+        background: rgba(237, 28, 36, 0.13);
+        border-radius: 4px;
+        box-shadow: inset 2px 0 0 #ed1c24;
+      }
+      /* Auto-refresh history */
+      .refresh-count {
+        background: rgba(128, 128, 128, 0.2);
+        border-radius: 8px;
+        padding: 0 5px;
+        font-size: 10px;
+      }
+      .unit.frozen {
+        opacity: 0.55;
+      }
+      .refresh-sep {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 9px 0 3px;
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .refresh-sep::before,
+      .refresh-sep::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: rgba(128, 128, 128, 0.3);
+      }
+      /* Overview */
+      .overview {
+        padding: 8px 12px 10px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+      }
+      .section-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        margin-bottom: 6px;
+      }
+      .section-sublabel {
+        font-size: 10px;
+        font-weight: 600;
+        opacity: 0.55;
+        margin: 6px 0 2px;
+      }
+      .section-sublabel.toggle {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .seller {
+        padding: 2px 0 2px 10px;
+      }
+      .seller-head {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .rel {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-radius: 7px;
+        padding: 0 5px;
+        background: rgba(128, 128, 128, 0.2);
+      }
+      .rel.direct {
+        background: rgba(46, 160, 67, 0.18);
+        color: #2ea043;
+      }
+      .seller-name {
+        font-weight: 600;
+      }
+      .seller-meta {
+        font-size: 10px;
+        opacity: 0.65;
+        padding-left: 10px;
+        word-break: break-all;
+      }
+      .kv .v a {
+        color: #4ea1ff;
+      }
+      .warn {
+        color: #d29922;
+      }
+      /* Overview dashboard cards */
+      .cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .card {
+        min-width: 0;
+        padding: 6px 8px;
+        border: 1px solid rgba(127, 127, 127, 0.18);
+        border-radius: 7px;
+        background: rgba(127, 127, 127, 0.08);
+      }
+      .card.wide {
+        grid-column: 1 / -1;
+      }
+      .card-label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      .card-value {
+        margin-top: 3px;
+        font-size: 12px;
+        word-break: break-word;
+      }
+      .card-sub {
+        margin-top: 1px;
+        font-size: 10px;
+        opacity: 0.6;
+      }
+      .domain-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .domain-name {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-weight: 600;
+        word-break: break-all;
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .pill {
+        font-size: 9px;
+        border-radius: 8px;
+        padding: 0 6px;
+        background: rgba(127, 127, 127, 0.2);
+      }
+      .pill.ok {
+        background: rgba(46, 160, 67, 0.18);
+        color: #2ea043;
+      }
+      .pill.warn {
+        background: rgba(210, 153, 34, 0.2);
+        color: #d29922;
+      }
+      .card-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .card-toggle-label {
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      .ads-link {
+        margin-left: auto;
+        font-size: 10px;
+        color: #4ea1ff;
+        text-transform: none;
+        letter-spacing: normal;
+      }
+      .card-body {
+        margin-top: 6px;
+      }
+      .warn-icon {
+        color: #d29922;
+        margin-right: 4px;
+        cursor: help;
+      }
+      .help {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        line-height: 12px;
+        text-align: center;
+        border-radius: 50%;
+        background: rgba(128, 128, 128, 0.25);
+        font-size: 9px;
+        cursor: help;
+      }
+      .ok {
+        color: #2ea043;
+      }
+      /* OneTag ads section */
+      .ads {
+        border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+      }
+      .ads .ihead {
+        padding: 8px 12px;
+      }
+      .ads .empty {
+        padding: 16px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="overview" id="overview"></section>
+    <section class="integration" id="integration"></section>
+    <section class="ads" id="ads">
+      <div class="ihead" id="ads-head">
+        <span class="tw" id="ads-tw">▸</span>
+        <span class="ilabel">OneTag ads</span>
+        <span class="isum"><span class="count" id="count"></span></span>
+      </div>
+      <div class="ibody" id="ads-body">
+        <ul id="list"></ul>
+        <div class="empty" id="empty">No OneTag ads detected on this page.</div>
+      </div>
+    </section>
+    <script src="panel.js"></script>
+  </body>
+</html>
