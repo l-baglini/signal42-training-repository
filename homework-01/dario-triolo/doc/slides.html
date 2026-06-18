@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EspañolFlow — Presentation</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #C60B1E;
+    --red-dark: #9B0717;
+    --yellow: #F1BF00;
+    --yellow-light: #FFF3CC;
+    --white: #FFFFFF;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --green: #16A34A;
+    --blue: #2563EB;
+    --purple: #7C3AED;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+    --transition: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: var(--font);
+    background: var(--gray-900);
+  }
+
+  /* ── Presentation shell ── */
+  #presentation {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Slide viewport ── */
+  #viewport {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Individual slide ── */
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity var(--transition), transform var(--transition);
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+    z-index: 1;
+  }
+  .slide.exit-left {
+    opacity: 0;
+    transform: translateX(-60px);
+    z-index: 0;
+  }
+
+  /* ── Slide header bar ── */
+  .slide-header {
+    background: var(--white);
+    border-bottom: 3px solid var(--yellow);
+    padding: 12px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 56px;
+    flex-shrink: 0;
+  }
+  .slide-header .brand {
+    font-size: 15px; font-weight: 700;
+    color: var(--red);
+    letter-spacing: 0.01em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .slide-header .brand span { color: var(--gray-700); font-weight: 400; }
+  .slide-header .slide-num {
+    font-size: 13px; color: var(--gray-500);
+    font-weight: 500;
+  }
+
+  /* ── Slide body ── */
+  .slide-body {
+    flex: 1; overflow-y: auto;
+    padding: 36px 48px 40px;
+    background: var(--gray-50);
+  }
+  .slide-body.no-padding { padding: 0; }
+
+  /* ── Slide title ── */
+  .slide-title {
+    font-size: 28px; font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 28px;
+    line-height: 1.2;
+  }
+  .slide-title .accent { color: var(--red); }
+
+  /* ── Controls bar ── */
+  #controls {
+    background: var(--gray-900);
+    padding: 10px 40px;
+    display: flex; align-items: center; justify-content: center; gap: 20px;
+    flex-shrink: 0;
+  }
+  .ctrl-btn {
+    background: var(--gray-700);
+    color: var(--white);
+    border: none; cursor: pointer;
+    padding: 8px 22px; border-radius: 6px;
+    font-size: 14px; font-weight: 600;
+    font-family: var(--font);
+    transition: background 0.2s, transform 0.1s;
+    display: flex; align-items: center; gap: 6px;
+    user-select: none;
+  }
+  .ctrl-btn:hover { background: var(--red); }
+  .ctrl-btn:active { transform: scale(0.96); }
+  .ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ctrl-btn:disabled:hover { background: var(--gray-700); }
+  #counter {
+    color: var(--gray-300);
+    font-size: 14px; font-weight: 600;
+    min-width: 56px; text-align: center;
+  }
+  #progress-bar {
+    position: absolute; bottom: 0; left: 0;
+    height: 3px; background: var(--yellow);
+    transition: width var(--transition);
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 1 — TITLE
+  ═══════════════════════════════════════ */
+  #slide-1 .slide-body {
+    background: linear-gradient(135deg, var(--red) 0%, var(--red-dark) 100%);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; flex-direction: column;
+    padding: 40px;
+  }
+  .title-flag { font-size: 72px; line-height: 1; margin-bottom: 20px; }
+  .title-main {
+    font-size: 58px; font-weight: 800;
+    color: var(--white);
+    letter-spacing: -0.02em; margin-bottom: 16px;
+  }
+  .title-main em { color: var(--yellow); font-style: normal; }
+  .title-subtitle {
+    font-size: 22px; color: rgba(255,255,255,0.85);
+    font-weight: 400; margin-bottom: 14px;
+  }
+  .title-cefr {
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 40px;
+  }
+  .cefr-badge {
+    background: rgba(255,255,255,0.15);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    color: var(--white);
+    padding: 4px 14px; border-radius: 20px;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.05em;
+  }
+  .title-footer {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.75);
+    padding: 10px 24px; border-radius: 8px;
+    font-size: 13px; font-style: italic;
+    max-width: 540px;
+  }
+  #slide-1 .slide-header { background: rgba(0,0,0,0.35); border-bottom-color: rgba(255,255,255,0.15); }
+  #slide-1 .slide-header .brand { color: var(--yellow); }
+  #slide-1 .slide-header .brand span { color: rgba(255,255,255,0.6); }
+  #slide-1 .slide-header .slide-num { color: rgba(255,255,255,0.5); }
+
+  /* ═══════════════════════════════════════
+     SLIDE 2 — PROBLEM STATEMENT
+  ═══════════════════════════════════════ */
+  .pain-cards { display: flex; flex-direction: column; gap: 20px; }
+  .pain-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 24px 28px;
+    border-left: 5px solid var(--red);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    display: flex; align-items: flex-start; gap: 18px;
+  }
+  .pain-icon { font-size: 36px; flex-shrink: 0; line-height: 1; }
+  .pain-text { font-size: 18px; color: var(--gray-700); line-height: 1.5; font-weight: 500; }
+
+  /* ═══════════════════════════════════════
+     SLIDE 3 — SOLUTION
+  ═══════════════════════════════════════ */
+  .feature-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+  }
+  .feature-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 22px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-top: 3px solid var(--yellow);
+    text-align: center;
+  }
+  .feature-card .fc-value {
+    font-size: 26px; font-weight: 800;
+    color: var(--red); margin-bottom: 6px;
+  }
+  .feature-card .fc-label {
+    font-size: 14px; font-weight: 700;
+    color: var(--gray-900); margin-bottom: 8px;
+  }
+  .feature-card .fc-desc {
+    font-size: 13px; color: var(--gray-500); line-height: 1.4;
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 4 — CEFR LEVELS
+  ═══════════════════════════════════════ */
+  .cefr-levels { display: flex; flex-direction: column; gap: 14px; }
+  .cefr-row {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 18px 22px;
+    display: flex; align-items: center; gap: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .cefr-badge-large {
+    width: 60px; height: 60px; border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-weight: 800; font-size: 20px; color: var(--white);
+    line-height: 1;
+  }
+  .cefr-badge-large small { font-size: 10px; font-weight: 600; opacity: 0.85; }
+  .cefr-a1 { background: var(--green); }
+  .cefr-a2 { background: var(--blue); }
+  .cefr-b1 { background: var(--purple); }
+  .cefr-b2 { background: var(--red); }
+  .cefr-content { flex: 1; }
+  .cefr-name { font-size: 17px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .cefr-topics { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cefr-topic {
+    background: var(--gray-100); color: var(--gray-700);
+    padding: 3px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 500;
+  }
+  .cefr-count {
+    flex-shrink: 0;
+    background: var(--yellow-light); color: var(--gray-900);
+    border: 1.5px solid var(--yellow);
+    padding: 6px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 700; text-align: center;
+  }
+  .cefr-arrow {
+    display: flex; align-items: center; gap: 0;
+    margin: 0 4px; flex-shrink: 0;
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 5 — ARCHITECTURE
+  ═══════════════════════════════════════ */
+  .arch-wrapper {
+    background: var(--white);
+    border-radius: 14px;
+    padding: 28px 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .arch-browser {
+    border: 2px solid var(--gray-300);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .arch-browser-bar {
+    background: var(--gray-100);
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1.5px solid var(--gray-200);
+    font-size: 12px; color: var(--gray-500); font-weight: 600;
+  }
+  .arch-browser-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block;
+  }
+  .arch-inner { padding: 20px; }
+  .arch-layer {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .arch-layer-title {
+    background: var(--gray-100);
+    padding: 6px 14px;
+    font-size: 11px; font-weight: 700;
+    color: var(--gray-500); letter-spacing: 0.08em;
+    text-transform: uppercase; border-bottom: 1px solid var(--gray-200);
+  }
+  .arch-layer-body {
+    padding: 12px 14px;
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  }
+  .arch-chip {
+    background: var(--white);
+    border: 1.5px solid var(--gray-300);
+    border-radius: 6px; padding: 5px 12px;
+    font-size: 12px; font-weight: 700; color: var(--gray-700);
+  }
+  .arch-chip.red { border-color: var(--red); color: var(--red); background: #FFF5F5; }
+  .arch-chip.yellow { border-color: #D4A800; color: #7A5F00; background: var(--yellow-light); }
+  .arch-chip.blue { border-color: var(--blue); color: var(--blue); background: #EFF6FF; }
+  .arch-chip.green { border-color: var(--green); color: var(--green); background: #F0FDF4; }
+  .arch-chip.purple { border-color: var(--purple); color: var(--purple); background: #F5F3FF; }
+  .arch-connector {
+    text-align: center; font-size: 18px; color: var(--gray-300);
+    margin: -4px 0; line-height: 1;
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 6 — DATA ARCHITECTURE
+  ═══════════════════════════════════════ */
+  .data-layout { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: start; }
+  .code-block {
+    background: #1E1E2E;
+    border-radius: 12px;
+    padding: 22px 24px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: #CDD6F4;
+    overflow-x: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .code-block .c-key { color: #89B4FA; }
+  .code-block .c-type { color: #CBA6F7; }
+  .code-block .c-str { color: #A6E3A1; }
+  .code-block .c-num { color: #FAB387; }
+  .code-block .c-comment { color: #6C7086; font-style: italic; }
+  .code-block .c-op { color: #89DCEB; }
+  .data-stats {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .data-stat-card {
+    background: var(--white);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-top: 3px solid var(--red);
+    min-width: 140px;
+  }
+  .data-stat-card .dsv { font-size: 28px; font-weight: 800; color: var(--red); }
+  .data-stat-card .dsl { font-size: 12px; color: var(--gray-500); font-weight: 600; margin-top: 2px; }
+
+  /* ═══════════════════════════════════════
+     SLIDE 7 — USER JOURNEY
+  ═══════════════════════════════════════ */
+  .journey-flow {
+    display: flex; align-items: flex-start;
+    gap: 0; overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .journey-step {
+    flex: 1; min-width: 130px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .journey-icon-wrap {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--white);
+    border: 3px solid var(--gray-200);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; margin-bottom: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .journey-step:nth-child(odd) .journey-icon-wrap { border-color: var(--red); }
+  .journey-step:nth-child(even) .journey-icon-wrap { border-color: var(--yellow); }
+  .journey-name { font-size: 13px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .journey-desc { font-size: 11.5px; color: var(--gray-500); line-height: 1.45; padding: 0 4px; }
+  .journey-arrow {
+    flex-shrink: 0;
+    font-size: 20px; color: var(--gray-300);
+    margin-top: 20px; padding: 0 4px;
+    align-self: flex-start;
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 8 — PROGRESS SYSTEM
+  ═══════════════════════════════════════ */
+  .progress-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .progress-section-title {
+    font-size: 15px; font-weight: 700; color: var(--gray-900);
+    margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .progress-section-title::before {
+    content: ''; display: block;
+    width: 4px; height: 18px;
+    background: var(--red); border-radius: 2px;
+  }
+  .progress-how-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .progress-how-list li {
+    background: var(--white);
+    border-radius: 8px; padding: 12px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    font-size: 13px; color: var(--gray-700); line-height: 1.5;
+  }
+  .progress-how-list li strong { color: var(--gray-900); display: block; margin-bottom: 2px; }
+  .progress-how-list .ls-key {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--gray-100); color: var(--red);
+    padding: 2px 6px; border-radius: 4px;
+  }
+
+  /* ═══════════════════════════════════════
+     SLIDE 9 — TECH STACK
+  ═══════════════════════════════════════ */
+  .tech-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+  }
+  .tech-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 22px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-bottom: 3px solid var(--gray-200);
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .tech-card:hover { border-bottom-color: var(--red); transform: translateY(-2px); }
+  .tech-icon { font-size: 32px; margin-bottom: 10px; line-height: 1; }
+  .tech-name { font-size: 17px; font-weight: 800; color: var(--gray-900); }
+  .tech-version {
+    display: inline-block;
+    background: var(--yellow-light); color: #7A5F00;
+    border: 1px solid var(--yellow);
+    padding: 1px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; margin: 4px 0 8px;
+  }
+  .tech-desc { font-size: 13px; color: var(--gray-500); line-height: 1.4; }
+
+  /* ═══════════════════════════════════════
+     SLIDE 10 — TOKEN REPORT
+  ═══════════════════════════════════════ */
+  #slide-10 .slide-body { background: var(--gray-50); }
+  .token-header {
+    text-align: center; margin-bottom: 28px;
+  }
+  .token-subtitle { font-size: 15px; color: var(--gray-500); margin-top: 6px; font-style: italic; }
+  .token-table {
+    width: 100%; border-collapse: collapse;
+    background: var(--white);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-bottom: 22px;
+  }
+  .token-table th {
+    background: var(--red); color: var(--white);
+    padding: 12px 20px; text-align: left;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.05em;
+  }
+  .token-table td {
+    padding: 11px 20px;
+    font-size: 14px; color: var(--gray-700);
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .token-table tr:last-child td { border-bottom: none; }
+  .token-table tr:nth-child(even) td { background: var(--gray-50); }
+  .token-table td:first-child { font-weight: 600; color: var(--gray-500); font-size: 13px; width: 220px; }
+  .token-table td:last-child { font-weight: 700; color: var(--gray-900); }
+  .token-callout {
+    background: var(--yellow-light);
+    border: 2px solid var(--yellow);
+    border-radius: 10px; padding: 14px 22px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .token-callout-icon { font-size: 22px; }
+  .token-callout-text { font-size: 14px; color: var(--gray-700); }
+  .token-callout-text code {
+    font-family: var(--mono); background: rgba(0,0,0,0.07);
+    padding: 2px 6px; border-radius: 4px; font-size: 13px;
+  }
+  .token-footer-note {
+    text-align: center; font-size: 12px; color: var(--gray-400);
+    margin-top: 4px;
+  }
+
+  /* ── Scrollbar styling ── */
+  .slide-body::-webkit-scrollbar { width: 6px; }
+  .slide-body::-webkit-scrollbar-track { background: transparent; }
+  .slide-body::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 3px; }
+
+  /* ── Keyboard hint ── */
+  .kbd-hint {
+    font-size: 11px; color: var(--gray-600);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--gray-700); border: 1px solid var(--gray-600);
+    color: var(--gray-200); border-radius: 3px;
+    padding: 1px 5px; font-size: 11px;
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+<div id="presentation">
+
+  <!-- ══════════════════════════════════════
+       SLIDE 1 — TITLE
+  ══════════════════════════════════════ -->
+  <div class="slide active" id="slide-1">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Presentation</span></div>
+      <div class="slide-num">1 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="title-flag">🇪🇸</div>
+      <div class="title-main">Español<em>Flow</em></div>
+      <div class="title-subtitle">Interactive Spanish Grammar Learning Platform</div>
+      <div class="title-cefr">
+        <span class="cefr-badge">A1</span>
+        <span class="cefr-badge">A2</span>
+        <span class="cefr-badge">B1</span>
+        <span class="cefr-badge">B2</span>
+        <span class="cefr-badge" style="background:rgba(241,191,0,0.25);border-color:rgba(241,191,0,0.6);">CEFR Aligned</span>
+      </div>
+      <div class="title-footer">
+        Built entirely by Claude Sonnet 4.6 — zero lines of human code
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 2 — PROBLEM STATEMENT
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-2">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Problem Statement</span></div>
+      <div class="slide-num">2 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">The Challenge of Learning <span class="accent">Spanish Grammar</span></div>
+      <div class="pain-cards">
+        <div class="pain-card">
+          <div class="pain-icon">📚</div>
+          <div class="pain-text">Grammar textbooks are static — no interactivity or instant feedback to reinforce learning.</div>
+        </div>
+        <div class="pain-card">
+          <div class="pain-icon">🎯</div>
+          <div class="pain-text">Apps gamify but skip depth — learners accumulate points without retaining actual grammar rules.</div>
+        </div>
+        <div class="pain-card">
+          <div class="pain-icon">📊</div>
+          <div class="pain-text">No structured progression from beginner to upper-intermediate — learners get stuck or jump topics randomly.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 3 — SOLUTION OVERVIEW
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-3">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Solution Overview</span></div>
+      <div class="slide-num">3 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">EspañolFlow: <span class="accent">Grammar-First</span> Learning</div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="fc-value">40</div>
+          <div class="fc-label">Structured Lessons</div>
+          <div class="fc-desc">CEFR-aligned A1→B2 progression with clear learning objectives per lesson.</div>
+        </div>
+        <div class="feature-card">
+          <div class="fc-value">3</div>
+          <div class="fc-label">Exercise Types</div>
+          <div class="fc-desc">Multiple choice, fill-in-the-blank, and translation exercises per lesson.</div>
+        </div>
+        <div class="feature-card">
+          <div class="fc-value">⚡</div>
+          <div class="fc-label">Instant Feedback</div>
+          <div class="fc-desc">Detailed explanations for every correct and incorrect answer, not just a score.</div>
+        </div>
+        <div class="feature-card">
+          <div class="fc-value">💾</div>
+          <div class="fc-label">Progress Tracking</div>
+          <div class="fc-desc">Session-persistent progress via localStorage — resume anytime, no account needed.</div>
+        </div>
+        <div class="feature-card">
+          <div class="fc-value">🌐</div>
+          <div class="fc-label">Zero Installation</div>
+          <div class="fc-desc">Runs in any modern browser — npm install and go, or open the built files directly.</div>
+        </div>
+        <div class="feature-card">
+          <div class="fc-value">🤖</div>
+          <div class="fc-label">AI-Generated</div>
+          <div class="fc-desc">Every lesson, exercise, and explanation authored by Claude Sonnet 4.6.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 4 — CEFR LEVEL SYSTEM
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-4">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— CEFR Level System</span></div>
+      <div class="slide-num">4 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Four <span class="accent">CEFR</span> Proficiency Levels</div>
+      <div class="cefr-levels">
+        <div class="cefr-row">
+          <div class="cefr-badge-large cefr-a1">A1<small>Beginner</small></div>
+          <div class="cefr-content">
+            <div class="cefr-name">Beginner — Building the foundation</div>
+            <div class="cefr-topics">
+              <span class="cefr-topic">Alphabet & Pronunciation</span>
+              <span class="cefr-topic">Basic verbs: ser / estar</span>
+              <span class="cefr-topic">Present tense conjugation</span>
+              <span class="cefr-topic">Gender & articles</span>
+            </div>
+          </div>
+          <div class="cefr-count">10 lessons</div>
+        </div>
+        <div class="cefr-row">
+          <div class="cefr-badge-large cefr-a2">A2<small>Elementary</small></div>
+          <div class="cefr-content">
+            <div class="cefr-name">Elementary — Expanding core knowledge</div>
+            <div class="cefr-topics">
+              <span class="cefr-topic">Irregular verbs</span>
+              <span class="cefr-topic">Preterite tense</span>
+              <span class="cefr-topic">Object pronouns</span>
+              <span class="cefr-topic">Comparative adjectives</span>
+            </div>
+          </div>
+          <div class="cefr-count">10 lessons</div>
+        </div>
+        <div class="cefr-row">
+          <div class="cefr-badge-large cefr-b1">B1<small>Intermediate</small></div>
+          <div class="cefr-content">
+            <div class="cefr-name">Intermediate — Mastering complexity</div>
+            <div class="cefr-topics">
+              <span class="cefr-topic">Subjunctive mood</span>
+              <span class="cefr-topic">Future &amp; Conditional</span>
+              <span class="cefr-topic">Por vs Para</span>
+              <span class="cefr-topic">Imperfect tense</span>
+            </div>
+          </div>
+          <div class="cefr-count">10 lessons</div>
+        </div>
+        <div class="cefr-row">
+          <div class="cefr-badge-large cefr-b2">B2<small>Upper Int.</small></div>
+          <div class="cefr-content">
+            <div class="cefr-name">Upper Intermediate — Advanced structures</div>
+            <div class="cefr-topics">
+              <span class="cefr-topic">Si clauses</span>
+              <span class="cefr-topic">Passive voice</span>
+              <span class="cefr-topic">Reported speech</span>
+              <span class="cefr-topic">Perfect subjunctive</span>
+            </div>
+          </div>
+          <div class="cefr-count">10 lessons</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 5 — SYSTEM ARCHITECTURE
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-5">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— System Architecture</span></div>
+      <div class="slide-num">5 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title"><span class="accent">System</span> Architecture</div>
+      <div class="arch-wrapper">
+        <div class="arch-browser">
+          <div class="arch-browser-bar">
+            <span class="arch-browser-dot" style="background:#FF5F57"></span>
+            <span class="arch-browser-dot" style="background:#FEBC2E"></span>
+            <span class="arch-browser-dot" style="background:#28C840"></span>
+            <span style="margin-left:8px;">Browser — Single Page Application</span>
+          </div>
+          <div class="arch-inner">
+            <div class="arch-layer">
+              <div class="arch-layer-title">Rendering &amp; Tooling</div>
+              <div class="arch-layer-body">
+                <span class="arch-chip red">React 18</span>
+                <span class="arch-chip blue">React Router v6</span>
+                <span class="arch-chip yellow">CSS Custom Properties</span>
+                <span class="arch-chip purple">Vite 5</span>
+              </div>
+            </div>
+            <div class="arch-connector">↓</div>
+            <div class="arch-layer">
+              <div class="arch-layer-title">Pages Layer</div>
+              <div class="arch-layer-body">
+                <span class="arch-chip">Home</span>
+                <span class="arch-chip">LevelPage</span>
+                <span class="arch-chip">LessonPage</span>
+                <span class="arch-chip">ProgressPage</span>
+              </div>
+            </div>
+            <div class="arch-connector">↓</div>
+            <div class="arch-layer">
+              <div class="arch-layer-title">Components Layer</div>
+              <div class="arch-layer-body">
+                <span class="arch-chip">LevelCard</span>
+                <span class="arch-chip">LessonCard</span>
+                <span class="arch-chip">ExerciseBlock</span>
+                <span class="arch-chip">ContentRenderer</span>
+                <span class="arch-chip">ProgressBar</span>
+              </div>
+            </div>
+            <div class="arch-connector">↓</div>
+            <div class="arch-layer">
+              <div class="arch-layer-title">Data &amp; State Layer</div>
+              <div class="arch-layer-body">
+                <span class="arch-chip green">Lesson Data (40 lessons)</span>
+                <span class="arch-chip green">useProgress Hook</span>
+                <span class="arch-chip green">localStorage</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 6 — DATA ARCHITECTURE
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-6">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Data Architecture</span></div>
+      <div class="slide-num">6 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title"><span class="accent">Data</span> Architecture</div>
+      <div class="data-layout">
+        <div class="code-block"><span class="c-type">Lesson</span> {
+  <span class="c-key">id</span><span class="c-op">:</span> <span class="c-str">'b1-07'</span>
+  <span class="c-key">level</span><span class="c-op">:</span> <span class="c-str">'B1'</span>
+  <span class="c-key">title</span><span class="c-op">:</span> <span class="c-str">'Subjunctive: Wishes &amp; Recommendations'</span>
+  <span class="c-key">estimatedTime</span><span class="c-op">:</span> <span class="c-str">'30 min'</span>
+
+  <span class="c-key">content</span><span class="c-op">:</span> [
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'rule'</span>, <span class="c-key">title</span><span class="c-op">:</span> <span class="c-str">'Formation'</span>, <span class="c-key">text</span><span class="c-op">:</span> <span class="c-str">'...'</span> }
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'table'</span>, <span class="c-key">headers</span><span class="c-op">:</span> [<span class="c-str">'Verb'</span>, <span class="c-str">'Triggers'</span>, <span class="c-str">'Example'</span>] }
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'examples'</span>, <span class="c-key">items</span><span class="c-op">:</span> [{ <span class="c-key">spanish</span>, <span class="c-key">english</span> }] }
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'tip'</span>, <span class="c-key">text</span><span class="c-op">:</span> <span class="c-str">'Remember WEIRDO...'</span> }
+  ]
+
+  <span class="c-key">exercises</span><span class="c-op">:</span> [  <span class="c-comment">← exactly 5 per lesson</span>
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'multiple-choice'</span>, <span class="c-key">options</span><span class="c-op">:</span> [...], <span class="c-key">correct</span><span class="c-op">:</span> <span class="c-num">2</span> }
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'fill-blank'</span>, <span class="c-key">template</span><span class="c-op">:</span> <span class="c-str">'Quiero que ___ aquí.'</span> }
+    { <span class="c-key">type</span><span class="c-op">:</span> <span class="c-str">'translate'</span>, <span class="c-key">direction</span><span class="c-op">:</span> <span class="c-str">'en-es'</span> }
+  ]
+}</div>
+        <div class="data-stats">
+          <div class="data-stat-card">
+            <div class="dsv">40</div>
+            <div class="dsl">Lessons</div>
+          </div>
+          <div class="data-stat-card">
+            <div class="dsv">200</div>
+            <div class="dsl">Exercises</div>
+          </div>
+          <div class="data-stat-card">
+            <div class="dsv">3</div>
+            <div class="dsl">Exercise Types</div>
+          </div>
+          <div class="data-stat-card">
+            <div class="dsv">4</div>
+            <div class="dsl">CEFR Levels</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 7 — USER JOURNEY
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-7">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— User Experience Flow</span></div>
+      <div class="slide-num">7 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title"><span class="accent">User</span> Journey</div>
+      <div class="journey-flow">
+        <div class="journey-step">
+          <div class="journey-icon-wrap">🏠</div>
+          <div class="journey-name">Home</div>
+          <div class="journey-desc">See all 4 CEFR levels with live progress bars per level.</div>
+        </div>
+        <div class="journey-arrow">→</div>
+        <div class="journey-step">
+          <div class="journey-icon-wrap">📋</div>
+          <div class="journey-name">Choose Level</div>
+          <div class="journey-desc">Browse 10 lessons, see completion status and estimated time.</div>
+        </div>
+        <div class="journey-arrow">→</div>
+        <div class="journey-step">
+          <div class="journey-icon-wrap">📖</div>
+          <div class="journey-name">Read Lesson</div>
+          <div class="journey-desc">Content blocks with grammar rules, tables, and worked examples.</div>
+        </div>
+        <div class="journey-arrow">→</div>
+        <div class="journey-step">
+          <div class="journey-icon-wrap">✏️</div>
+          <div class="journey-name">Practice</div>
+          <div class="journey-desc">5 exercises with instant feedback and detailed explanations.</div>
+        </div>
+        <div class="journey-arrow">→</div>
+        <div class="journey-step">
+          <div class="journey-icon-wrap">🏆</div>
+          <div class="journey-name">Complete</div>
+          <div class="journey-desc">Score card with trophy and encouraging message to continue.</div>
+        </div>
+        <div class="journey-arrow">→</div>
+        <div class="journey-step">
+          <div class="journey-icon-wrap">📊</div>
+          <div class="journey-name">Track Progress</div>
+          <div class="journey-desc">Dashboard with completion stats and scores per level.</div>
+        </div>
+      </div>
+      <div style="margin-top:28px; background: var(--white); border-radius:12px; padding:20px 24px; box-shadow:0 2px 8px rgba(0,0,0,.07);">
+        <div style="font-size:13px; font-weight:700; color:var(--gray-500); text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px;">Key Design Principles</div>
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:180px; background:var(--gray-50); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--gray-700); line-height:1.5;">
+            <strong style="color:var(--red);">No account required</strong><br>
+            Progress stored locally in the browser — start learning in 10 seconds.
+          </div>
+          <div style="flex:1; min-width:180px; background:var(--gray-50); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--gray-700); line-height:1.5;">
+            <strong style="color:var(--red);">Grammar-first</strong><br>
+            Read the rule before you practice it — spaced repetition by design.
+          </div>
+          <div style="flex:1; min-width:180px; background:var(--gray-50); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--gray-700); line-height:1.5;">
+            <strong style="color:var(--red);">Immediate correction</strong><br>
+            Every wrong answer shows why, not just what the right answer is.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 8 — PROGRESS SYSTEM
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-8">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Progress System</span></div>
+      <div class="slide-num">8 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Progress &amp; <span class="accent">Persistence</span></div>
+      <div class="progress-layout">
+        <div>
+          <div class="progress-section-title">How it works</div>
+          <ul class="progress-how-list">
+            <li>
+              <strong>Storage key</strong>
+              <span class="ls-key">espanol_flow_progress</span> in window.localStorage
+            </li>
+            <li>
+              <strong>Tracks completed lessons</strong>
+              A de-duplicated set of completed lesson IDs (e.g. <span class="ls-key">"a1-01"</span>)
+            </li>
+            <li>
+              <strong>Stores exercise scores</strong>
+              Per-lesson object with <span class="ls-key">correct</span>, <span class="ls-key">total</span>, and <span class="ls-key">completedAt</span> timestamp
+            </li>
+            <li>
+              <strong>Calculates completion</strong>
+              Percentage completion per CEFR level + overall progress across all 40 lessons
+            </li>
+            <li>
+              <strong>Persists across sessions</strong>
+              No expiry — stays until the user clears browser storage
+            </li>
+          </ul>
+        </div>
+        <div>
+          <div class="progress-section-title">Stored JSON structure</div>
+          <div class="code-block" style="font-size:12.5px;">{
+  <span class="c-key">"completedLessons"</span><span class="c-op">:</span> [
+    <span class="c-str">"a1-01"</span>, <span class="c-str">"a1-02"</span>, <span class="c-str">"a2-01"</span>
+  ],
+  <span class="c-key">"exerciseResults"</span><span class="c-op">:</span> {
+    <span class="c-str">"a1-01"</span><span class="c-op">:</span> {
+      <span class="c-key">"correct"</span><span class="c-op">:</span> <span class="c-num">5</span>,
+      <span class="c-key">"total"</span><span class="c-op">:</span> <span class="c-num">5</span>,
+      <span class="c-key">"completedAt"</span><span class="c-op">:</span> <span class="c-str">"2024-01-15T..."</span>
+    },
+    <span class="c-str">"a1-02"</span><span class="c-op">:</span> {
+      <span class="c-key">"correct"</span><span class="c-op">:</span> <span class="c-num">4</span>,
+      <span class="c-key">"total"</span><span class="c-op">:</span> <span class="c-num">5</span>,
+      <span class="c-key">"completedAt"</span><span class="c-op">:</span> <span class="c-str">"2024-01-15T..."</span>
+    }
+  }
+}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 9 — TECH STACK
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-9">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— Technology Stack</span></div>
+      <div class="slide-num">9 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title"><span class="accent">Technology</span> Stack</div>
+      <div class="tech-grid">
+        <div class="tech-card">
+          <div class="tech-icon">⚛️</div>
+          <div class="tech-name">React</div>
+          <div class="tech-version">v18</div>
+          <div class="tech-desc">Component-based UI with hooks — useState, useEffect, custom useProgress.</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-icon">⚡</div>
+          <div class="tech-name">Vite</div>
+          <div class="tech-version">v5</div>
+          <div class="tech-desc">Lightning-fast dev server with HMR and optimised production build output.</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-icon">🔀</div>
+          <div class="tech-name">React Router</div>
+          <div class="tech-version">v6</div>
+          <div class="tech-desc">Declarative client-side routing with nested routes and URL-based navigation.</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-icon">🎨</div>
+          <div class="tech-name">Vanilla CSS</div>
+          <div class="tech-version">Custom props</div>
+          <div class="tech-desc">CSS custom properties for theming — no utility framework, no class bloat.</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-icon">💾</div>
+          <div class="tech-name">localStorage</div>
+          <div class="tech-version">Web API</div>
+          <div class="tech-desc">Zero-backend progress persistence — no server, no auth, no database.</div>
+        </div>
+        <div class="tech-card">
+          <div class="tech-icon">📦</div>
+          <div class="tech-name">npm</div>
+          <div class="tech-version">v10</div>
+          <div class="tech-desc">Dependency management — <code style="font-family:var(--mono);font-size:11px;background:var(--gray-100);padding:1px 4px;border-radius:3px;">npm install &amp;&amp; npm run dev</code> to start.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 10 — TOKEN CONSUMPTION
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-10">
+    <div class="slide-header">
+      <div class="brand">🇪🇸 EspañolFlow <span>— AI Generation Report</span></div>
+      <div class="slide-num">10 / 10</div>
+    </div>
+    <div class="slide-body">
+      <div class="token-header">
+        <div class="slide-title" style="margin-bottom:4px;">🤖 Built by Claude — <span class="accent">Token Consumption Report</span></div>
+        <div class="token-subtitle">Every file generated by claude-sonnet-4-6 via Claude Code CLI</div>
+      </div>
+      <table class="token-table">
+        <thead>
+          <tr><th>Metric</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Model</td><td>Claude Sonnet 4.6 (claude-sonnet-4-6)</td></tr>
+          <tr><td>Orchestration</td><td>Workflow — 12 parallel/sequential agents</td></tr>
+          <tr><td>Subagent Tokens (actual)</td><td><strong>299,282</strong></td></tr>
+          <tr><td>Agent Tool Uses</td><td><strong>75</strong></td></tr>
+          <tr><td>Generation Time</td><td><strong>15 min 47 sec</strong> (947 s)</td></tr>
+          <tr><td>Files Generated</td><td><strong>28 files</strong></td></tr>
+          <tr><td>Lines of Code</td><td><strong>6,833 lines</strong></td></tr>
+          <tr><td>Human Code Written</td><td><strong>0 lines</strong></td></tr>
+          <tr><td>Lessons / Exercises Authored</td><td><strong>40 lessons · 200 exercises</strong></td></tr>
+        </tbody>
+      </table>
+      <div class="token-callout">
+        <div class="token-callout-icon">💡</div>
+        <div class="token-callout-text">
+          Subagent token count is <strong>exact</strong> (reported by the Workflow engine). Run <code>/usage</code> in Claude Code to see the full session total including orchestration context.
+        </div>
+      </div>
+      <div class="token-footer-note">
+        Built with Claude Code · claude.ai/code
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CONTROLS
+  ══════════════════════════════════════ -->
+  <div id="controls" style="position:relative;">
+    <div id="progress-bar"></div>
+    <button class="ctrl-btn" id="btn-prev" disabled>← Prev</button>
+    <span id="counter">1 / 10</span>
+    <button class="ctrl-btn" id="btn-next">Next →</button>
+    <div class="kbd-hint" style="position:absolute;right:40px;bottom:50%;transform:translateY(50%);">
+      <span class="kbd">←</span>
+      <span class="kbd">→</span>
+      <span style="color:var(--gray-500);margin-left:2px;">arrow keys</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const TOTAL = 10;
+  let current = 1;
+  let isAnimating = false;
+
+  const slides = Array.from({ length: TOTAL }, (_, i) =>
+    document.getElementById('slide-' + (i + 1))
+  );
+  const counter = document.getElementById('counter');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const progressBar = document.getElementById('progress-bar');
+
+  function updateUI() {
+    counter.textContent = current + ' / ' + TOTAL;
+    btnPrev.disabled = current === 1;
+    btnNext.disabled = current === TOTAL;
+    const pct = ((current - 1) / (TOTAL - 1)) * 100;
+    progressBar.style.width = pct + '%';
+  }
+
+  function goTo(next) {
+    if (next < 1 || next > TOTAL || next === current || isAnimating) return;
+    isAnimating = true;
+
+    const prev = current;
+    const outSlide = slides[prev - 1];
+    const inSlide = slides[next - 1];
+
+    // Set initial position of incoming slide based on direction
+    const goingForward = next > prev;
+
+    // Remove any stale exit class from incoming slide
+    inSlide.classList.remove('exit-left');
+    // Position incoming: start offset in the correct direction
+    inSlide.style.transform = goingForward ? 'translateX(60px)' : 'translateX(-60px)';
+    inSlide.style.opacity = '0';
+    inSlide.style.transition = 'none';
+
+    // Force reflow
+    void inSlide.offsetWidth;
+
+    // Activate incoming slide
+    inSlide.classList.add('active');
+    inSlide.style.transform = '';
+    inSlide.style.opacity = '';
+    inSlide.style.transition = '';
+
+    // Animate outgoing slide
+    outSlide.classList.remove('active');
+    if (goingForward) {
+      outSlide.classList.add('exit-left');
+    } else {
+      // Going backward — slide out to the right
+      outSlide.style.transform = 'translateX(60px)';
+      outSlide.style.opacity = '0';
+    }
+
+    current = next;
+    updateUI();
+
+    // Cleanup after transition
+    setTimeout(function () {
+      outSlide.classList.remove('exit-left');
+      outSlide.style.transform = '';
+      outSlide.style.opacity = '';
+      isAnimating = false;
+    }, 520);
+  }
+
+  btnPrev.addEventListener('click', function () { goTo(current - 1); });
+  btnNext.addEventListener('click', function () { goTo(current + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      goTo(current + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goTo(current - 1);
+    }
+  });
+
+  // Initialize
+  updateUI();
+})();
+</script>
+</body>
+</html>
