@@ -1,0 +1,478 @@
+/* Quake-Lite — lobby + HUD styles grow here from Step 2 on. */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #111;
+  color: #eee;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+}
+
+#lobby {
+  display: flex;
+  justify-content: center;
+  padding-top: 10vh;
+}
+
+.panel {
+  width: 360px;
+  background: #1a1f29;
+  border: 1px solid #2e3744;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.panel h1 {
+  margin: 0 0 16px;
+  font-size: 24px;
+}
+
+.panel h2 {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  color: #9aa7b8;
+}
+
+.panel label {
+  display: block;
+  margin-bottom: 4px;
+  color: #9aa7b8;
+  font-size: 14px;
+}
+
+.panel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  background: #10141c;
+  border: 1px solid #2e3744;
+  border-radius: 4px;
+  color: #eee;
+}
+
+.panel button {
+  padding: 8px 14px;
+  background: #3a6ea5;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.panel button:disabled {
+  background: #2e3744;
+  color: #6b7585;
+  cursor: not-allowed;
+}
+
+#create-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* colour picker: a row of palette swatches; the chosen one is ringed */
+#color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #3a6ea5;
+}
+
+#sens {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+/* room rows: name + the dots of colours already taken in that room */
+.room-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.color-dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.error {
+  color: #e07a5f;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+#room-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#room-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #232a36;
+}
+
+#room-list .empty {
+  color: #6b7585;
+}
+
+#game canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* clicks must reach the canvas for pointer lock */
+}
+
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+}
+
+#hud-stats {
+  position: absolute;
+  left: 24px;
+  bottom: 20px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #dfe6ee;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+#hud-hp.low {
+  color: #e05c5c;
+}
+
+#hud-kills {
+  font-size: 16px;
+  color: #9aa7b8;
+}
+
+#hud-protect {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #6fd6ff;
+}
+
+#scoreboard {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  background: rgba(16, 20, 28, 0.88);
+  border: 1px solid #2e3744;
+  border-radius: 8px;
+  padding: 14px 22px;
+  min-width: 320px;
+}
+
+#scoreboard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+#scoreboard th {
+  text-align: left;
+  color: #9aa7b8;
+  font-weight: 600;
+  padding: 4px 14px 8px 4px;
+  border-bottom: 1px solid #2e3744;
+}
+
+#scoreboard td {
+  padding: 6px 14px 6px 4px;
+}
+
+#scoreboard tr.me td {
+  color: #ffe066;
+}
+
+/* damage vignette: red inward glow flashed (via Web Animations) on taking a hit.
+   Both an inset shadow and a radial-gradient edge are used — the gradient renders
+   reliably over the WebGL canvas where a lone inset shadow can look faint. */
+#damage-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  box-shadow: inset 0 0 120px 50px rgba(220, 0, 0, 0.9);
+  background: radial-gradient(ellipse at center,
+    rgba(220, 0, 0, 0) 55%,
+    rgba(220, 0, 0, 0.55) 100%);
+}
+
+/* kill feed: top-right stack of fading lines (SPEC §9.2) */
+#killfeed {
+  position: absolute;
+  right: 20px;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.killfeed-line {
+  background: rgba(16, 20, 28, 0.75);
+  border: 1px solid #2e3744;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 14px;
+  color: #cfd8e3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  animation: killfeed-fade 4s forwards;
+}
+
+.killfeed-line.mine {
+  border-color: #ffe066;
+}
+
+.killfeed-line .kf-name {
+  font-weight: 700;
+  color: #fff;
+}
+
+@keyframes killfeed-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Souls-style death screen: dark vignette + crimson serif "You Died" (fade-in
+   driven by Web Animations in hud.js). Below the game-over overlay (z-index 30). */
+#you-died {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 25;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,
+    rgba(25, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.88) 100%);
+}
+
+#you-died[hidden] {
+  display: none;
+}
+
+#you-died .yd-main {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 10px;
+  text-transform: uppercase;
+  color: #8a0f0f;
+  text-shadow: 0 0 24px rgba(0, 0, 0, 0.95), 0 2px 6px #000;
+}
+
+#you-died .yd-by {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  color: #c9b8b8;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 1px 3px #000;
+}
+
+#you-died .yd-by:empty {
+  display: none;
+}
+
+/* match status: countdown timer + waiting/active subtitle, top-centre */
+#match-status {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+#match-timer {
+  font-size: 30px;
+  font-weight: 800;
+  color: #dfe6ee;
+  letter-spacing: 1px;
+}
+
+#match-sub {
+  font-size: 13px;
+  color: #9aa7b8;
+}
+
+/* while waiting for a second player, grey the (not yet running) clock */
+#match-status[data-phase="waiting"] #match-timer {
+  color: #6b7585;
+}
+
+/* game-over overlay: final standings, then a server-closed socket reloads to lobby */
+#gameover {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.78);
+  z-index: 30;
+}
+
+#gameover[hidden] {
+  display: none;
+}
+
+.gameover-card {
+  width: 360px;
+  background: #1a1f29;
+  border: 1px solid #2e3744;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.gameover-card h2 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+#go-reason {
+  color: #9aa7b8;
+  margin-bottom: 16px;
+}
+
+.gameover-card table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.gameover-card th {
+  text-align: left;
+  color: #9aa7b8;
+  font-weight: 600;
+  padding: 4px 14px 8px 4px;
+  border-bottom: 1px solid #2e3744;
+}
+
+.gameover-card td {
+  padding: 6px 14px 6px 4px;
+  text-align: left;
+}
+
+.gameover-card tr.me td {
+  color: #ffe066;
+}
+
+#go-footer {
+  margin-top: 18px;
+  color: #6b7585;
+  font-size: 13px;
+}
+
+/* in-game pause / options overlay (shown when the mouse is released mid-game) */
+#options {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.6);
+  z-index: 10;
+}
+
+#options[hidden] {
+  display: none;
+}
+
+.options-card {
+  width: 300px;
+  background: #1a1f29;
+  border: 1px solid #2e3744;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.options-card h2 {
+  margin: 0 0 16px;
+}
+
+.options-card label {
+  display: block;
+  margin-bottom: 6px;
+  color: #9aa7b8;
+  font-size: 14px;
+}
+
+.options-card #opt-sens {
+  width: 100%;
+}
+
+.options-card #opt-resume {
+  margin-top: 18px;
+  padding: 8px 18px;
+  background: #3a6ea5;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* a + drawn with two bars so it stays crisp at any zoom */
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: #dfe6ee;
+}
+
+#crosshair::before {
+  left: 6px;
+  top: 0;
+  width: 2px;
+  height: 14px;
+}
+
+#crosshair::after {
+  left: 0;
+  top: 6px;
+  width: 14px;
+  height: 2px;
+}
