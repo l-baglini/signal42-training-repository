@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-chaos-dark text-slate-100 antialiased;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.btn {
+  @apply rounded-lg px-4 py-2 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.btn-primary {
+  @apply btn bg-chaos-red text-white hover:bg-red-700;
+}
+.btn-ghost {
+  @apply btn bg-white/10 hover:bg-white/20;
+}
+.input {
+  @apply w-full rounded-lg bg-white/10 border border-white/15 px-3 py-2 outline-none focus:border-chaos-red placeholder:text-slate-400;
+}
+.panel {
+  @apply bg-chaos-panel rounded-xl border border-white/10 shadow-xl;
+}
+
+@keyframes rage-pulse {
+  0%, 100% { box-shadow: inset 0 0 60px 20px rgba(192, 57, 43, 0.35); }
+  50% { box-shadow: inset 0 0 120px 50px rgba(192, 57, 43, 0.65); }
+}
+.rage-overlay {
+  animation: rage-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes toast-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.toast-in {
+  animation: toast-in 0.25s ease-out;
+}

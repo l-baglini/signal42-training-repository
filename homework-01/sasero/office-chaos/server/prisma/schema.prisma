@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  displayName   String
+  jobTitle      String?
+  avatar        Json?
+  xp            Int            @default(0)
+  createdAt     DateTime       @default(now())
+  memberships   Membership[]
+  notifications Notification[]
+  weeklyScores  WeeklyScore[]
+}
+
+model Workspace {
+  id           String                @id @default(cuid())
+  name         String
+  createdAt    DateTime              @default(now())
+  layout       Json? // custom office layout { width, height, tiles, objects }; null = default office
+  memberships  Membership[]
+  invites      Invite[]
+  weeklyScores WeeklyScore[]
+  snapshots    LeaderboardSnapshot[]
+}
+
+model Membership {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  role        String    @default("member")
+  deskIndex   Int
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, workspaceId])
+  @@unique([workspaceId, deskIndex])
+}
+
+model Invite {
+  token       String    @id
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  createdById String
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+}
+
+model WeeklyScore {
+  id               String    @id @default(cuid())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId      String
+  weekStart        DateTime
+  destructionScore Int       @default(0)
+  destructions     Int       @default(0)
+  fires            Int       @default(0)
+  combos           Int       @default(0)
+  rageActivations  Int       @default(0)
+  kos              Int       @default(0)
+  bestKoStreak     Int       @default(0)
+  timesKnockedOut  Int       @default(0)
+
+  @@unique([userId, workspaceId, weekStart])
+  @@index([workspaceId, weekStart])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  workspaceId String
+  type        String
+  payload     Json
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, workspaceId, read])
+}
+
+model LeaderboardSnapshot {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  weekStart   DateTime
+  data        Json
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, weekStart])
+}

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+        working-directory: server
+      - run: npm test
+        working-directory: server
+
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [server-tests, client-build]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+
+  # Deploy to staging on push to main (S1-2). Placeholder: wire to your
+  # Railway/Render deploy hook and add the secret to enable it.
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - name: Trigger deploy hook
+        run: |
+          if [ -n "${{ secrets.STAGING_DEPLOY_HOOK }}" ]; then
+            curl -fsS -X POST "${{ secrets.STAGING_DEPLOY_HOOK }}"
+          else
+            echo "STAGING_DEPLOY_HOOK not configured — skipping deploy."
+          fi
