@@ -85,11 +85,28 @@ fi
 # ── 4. Launcher ────────────────────────────────────────────────────────────
 step "4/5  Launcher"
 mkdir -p "$BIN_DIR"
+LOG_FILE="$HOME/.local/share/workbreak/workbreak.log"
+
 cat > "$INSTALL_DIR/workbreak-launcher" << LAUNCHER
 #!/bin/bash
+# WorkBreak launcher — avvio silenzioso (nessun terminale visibile)
 export PYTHONPATH="$INSTALL_DIR"
+export DISPLAY="\${DISPLAY:-:0}"
+export DBUS_SESSION_BUS_ADDRESS="\${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
 cd "$INSTALL_DIR"
-exec "$VENV/bin/python" "$INSTALL_DIR/main.py" "\$@"
+
+# Se avviato da terminale con --debug, mostra i log sul terminale
+if [[ "\$1" == "--debug" ]]; then
+    exec "$VENV/bin/python" "$INSTALL_DIR/main.py"
+fi
+
+# Altrimenti avvia in background, log su file (rotazione semplice: max 1MB)
+if [ -f "$LOG_FILE" ] && [ \$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 1048576 ]; then
+    mv "$LOG_FILE" "${LOG_FILE}.old"
+fi
+nohup "$VENV/bin/python" "$INSTALL_DIR/main.py" \
+    >> "$LOG_FILE" 2>&1 &
+disown
 LAUNCHER
 chmod +x "$INSTALL_DIR/workbreak-launcher"
 ln -sf "$INSTALL_DIR/workbreak-launcher" "$BIN_DIR/workbreak"
@@ -151,7 +168,9 @@ echo "   Cerca l'icona 🌿 nel system tray."
 echo "   Se non appare subito, esegui: workbreak"
 echo ""
 echo "   Comandi utili:"
-echo "   workbreak                            avvio manuale"
+echo "   workbreak                            avvio silenzioso (nessun terminale)"
+echo "   workbreak --debug                    avvio con log sul terminale"
+echo "   tail -f $LOG_FILE   log in tempo reale"
 echo "   systemctl --user status workbreak   stato del servizio"
 echo "   systemctl --user restart workbreak  riavvia"
 echo "   systemctl --user stop workbreak     ferma"
