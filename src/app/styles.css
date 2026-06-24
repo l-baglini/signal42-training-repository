@@ -275,6 +275,49 @@ button.ghost {
   font-size: 13px;
 }
 
+.fret-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.marker-ok {
+  color: #5ee0a0;
+  font-size: 13px;
+}
+
+.marker-warn {
+  color: #ffb84d;
+  font-size: 13px;
+}
+
+.marker-previews {
+  display: flex;
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+
+.marker-fig {
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.marker-img {
+  width: 56px;
+  height: 56px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 3px;
+}
+
+.marker-img svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 kbd {
   background: var(--panel-2);
   border: 1px solid var(--border);

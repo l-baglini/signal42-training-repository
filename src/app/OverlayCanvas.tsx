@@ -2,8 +2,9 @@
  * OverlayCanvas: the per-frame render loop drawing dots/grid over the live video,
  * and the calibration tap-capture surface.
  *
- * Per-frame work is trivial (PRD §5.2): the cached homography and selected
- * positions are reapplied each frame — NO per-frame computer vision in M1.
+ * Per-frame work here is trivial: it reapplies a homography (the cached
+ * calibration H, or the live marker-tracked H from useMarkerTracking) to the
+ * selected positions. The actual ArUco detection lives in the tracking hook.
  *
  * Coordinates: H maps fretboard-space (u,v) → NORMALIZED display space [0,1].
  * We multiply by the canvas CSS size to get pixels, so alignment survives window
@@ -22,6 +23,7 @@ import {
   gridLines,
 } from '../core/geometry';
 import type { Point, StringNumber, UV } from '../core/types';
+import type { LiveHomography } from './useMarkerTracking';
 
 const COLORS = {
   dot: 'rgba(56, 132, 255, 0.55)',
@@ -38,9 +40,11 @@ const COLORS = {
 
 interface OverlayCanvasProps {
   canvasRef: RefObject<HTMLCanvasElement>;
+  /** Live tracked homography (written by useMarkerTracking) used when tracking. */
+  liveHRef: RefObject<LiveHomography>;
 }
 
-export function OverlayCanvas({ canvasRef }: OverlayCanvasProps) {
+export function OverlayCanvas({ canvasRef, liveHRef }: OverlayCanvasProps) {
   // The loop reads live values from the store on each frame to avoid stale
   // closures; it only needs to be set up once.
   const addTap = useStore((s) => s.addTap);
@@ -69,7 +73,7 @@ export function OverlayCanvas({ canvasRef }: OverlayCanvasProps) {
       ctx.clearRect(0, 0, cssW, cssH);
 
       if (cssW > 0 && cssH > 0) {
-        draw(ctx, cssW, cssH);
+        draw(ctx, cssW, cssH, liveHRef);
       }
       animationRef.current = requestAnimationFrame(frame);
     };
@@ -79,7 +83,7 @@ export function OverlayCanvas({ canvasRef }: OverlayCanvasProps) {
       running = false;
       cancelAnimationFrame(animationRef.current);
     };
-  }, [canvasRef]);
+  }, [canvasRef, liveHRef]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const st = useStore.getState();
@@ -114,24 +118,44 @@ function dotRadius(cssW: number, cssH: number): number {
   return Math.max(8, Math.min(cssW, cssH) * 0.026);
 }
 
-function draw(ctx: CanvasRenderingContext2D, cssW: number, cssH: number) {
+function draw(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  liveHRef: RefObject<LiveHomography>,
+) {
   const st = useStore.getState();
 
   if (st.calibrating) {
-    drawCalibrationDraft(ctx, cssW, cssH, st.draftTaps, st.draftFarFret);
+    drawCalibrationDraft(
+      ctx,
+      cssW,
+      cssH,
+      st.draftTaps,
+      st.draftNearFret,
+      st.draftFarFret,
+    );
     return;
   }
 
   const cal = st.calibration;
   if (!cal) return;
 
+  // Choose the homography: when tracking, prefer the live marker-solved H;
+  // fall back to the cached calibration H when markers are momentarily lost.
+  let H = cal.H;
+  if (st.tracking) {
+    const live = liveHRef.current?.H;
+    if (live) H = live;
+  }
+
   if (st.showGrid) {
-    drawGrid(ctx, cal.H, cal.farFret, cssW, cssH, COLORS.grid, 1);
+    drawGrid(ctx, H, cal.farFret, cssW, cssH, COLORS.grid, 1);
   }
 
   const resolved = resolveSelection(st.selection);
   if (resolved) {
-    drawSelection(ctx, cal.H, cssW, cssH, resolved);
+    drawSelection(ctx, H, cssW, cssH, resolved);
   }
 }
 
@@ -261,19 +285,20 @@ function drawCalibrationDraft(
   cssW: number,
   cssH: number,
   taps: { x: number; y: number }[],
+  nearFret: number,
   farFret: number,
 ) {
   // Once all 4 taps are in, preview the full grid so the user can sanity-check.
   if (taps.length === 4) {
     try {
-      const targets = calibrationTargets(farFret);
+      const targets = calibrationTargets(nearFret, farFret);
       const H = getPerspectiveTransform(
         targets,
         taps.map((t) => ({ x: t.x, y: t.y })),
       );
       drawGrid(ctx, H, farFret, cssW, cssH, COLORS.gridPreview, 1.5);
-      // Emphasize nut and far-fret lines.
-      drawGridLine(ctx, H, fretU(0), cssW, cssH);
+      // Emphasize the two tapped reference frets.
+      drawGridLine(ctx, H, fretU(nearFret), cssW, cssH);
       drawGridLine(ctx, H, fretU(farFret), cssW, cssH);
     } catch {
       /* degenerate taps; markers below still show what was tapped */

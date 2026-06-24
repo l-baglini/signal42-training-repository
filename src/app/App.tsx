@@ -1,8 +1,10 @@
 /**
  * App shell: lays out the live video + overlay stage and the control panel,
- * wires the camera stream, hotkeys, error banner, and "reset all".
+ * wires the camera stream, marker tracking, hotkeys, error banner, and
+ * "reset all".
  *
- * Local-only (PRD F1/§7): no network calls. The camera stream is in-memory only.
+ * Local-only (PRD F1/§7): no network calls. The camera stream and ArUco
+ * detection are in-memory only.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,11 +12,14 @@ import { CameraPicker, CameraVideo, useCameraStream } from './Camera';
 import { OverlayCanvas } from './OverlayCanvas';
 import { Calibration } from './Calibration';
 import { SelectionPanel } from './SelectionPanel';
+import { MarkersPanel } from './MarkersPanel';
+import { useMarkerTracking, type LiveHomography } from './useMarkerTracking';
 import { useStore } from './store';
 
 export function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const liveHRef = useRef<LiveHomography>({ H: null, updatedAt: 0 });
   const [aspect, setAspect] = useState(16 / 9);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,12 +28,15 @@ export function App() {
   const calibrating = useStore((s) => s.calibrating);
   const startCalibration = useStore((s) => s.startCalibration);
   const toggleGrid = useStore((s) => s.toggleGrid);
+  const toggleTracking = useStore((s) => s.toggleTracking);
   const resetAll = useStore((s) => s.resetAll);
 
   const onError = useCallback((m: string | null) => setError(m), []);
   useCameraStream(videoRef, deviceId, onError);
+  const { detectNow } = useMarkerTracking(videoRef, liveHRef);
 
-  // Hotkeys: C = (re)calibrate, G = toggle grid. Ignored while typing in inputs.
+  // Hotkeys: C = (re)calibrate, G = toggle grid, T = toggle tracking.
+  // Ignored while typing in inputs.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -44,11 +52,14 @@ export function App() {
         if (!useStore.getState().calibrating) startCalibration();
       } else if (e.key === 'g' || e.key === 'G') {
         toggleGrid();
+      } else if (e.key === 't' || e.key === 'T') {
+        const cal = useStore.getState().calibration;
+        if (cal?.markerAnchors) toggleTracking();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [startCalibration, toggleGrid]);
+  }, [startCalibration, toggleGrid, toggleTracking]);
 
   const needsCalibration = !calibration && !calibrating;
 
@@ -82,7 +93,7 @@ export function App() {
       <main className="layout">
         <section className="stage" style={{ aspectRatio: String(aspect) }}>
           <CameraVideo videoRef={videoRef} onAspectRatio={setAspect} />
-          <OverlayCanvas canvasRef={canvasRef} />
+          <OverlayCanvas canvasRef={canvasRef} liveHRef={liveHRef} />
           {needsCalibration && (
             <div className="stage-hint">
               Select your camera, then press <kbd>C</kbd> to calibrate.
@@ -100,7 +111,8 @@ export function App() {
             <h2>Camera</h2>
             <CameraPicker />
           </div>
-          <Calibration />
+          <Calibration detectNow={detectNow} />
+          <MarkersPanel />
           <SelectionPanel />
         </aside>
       </main>

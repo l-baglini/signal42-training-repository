@@ -4,9 +4,12 @@ A personal, **local-only** desktop web app that overlays guitar finger-placement
 dots onto a live webcam feed of your fretboard. Pick a scale or chord and the
 correct dots appear, aligned to your real guitar.
 
-This is **Milestone 1 (MVP)** per [docs/FretGuide-PRD.md](docs/FretGuide-PRD.md):
-manual 4-tap calibration, the G major scale box, and the seven diatonic chords of
-G major. No markers, no audio, no hand tracking — those are later milestones.
+Covers **Milestone 1 (MVP)** per [docs/FretGuide-PRD.md](docs/FretGuide-PRD.md)
+— manual 4-tap calibration, the G major scale box, and the seven diatonic chords
+of G major — plus **live ArUco marker tracking** (Milestone 3) so the overlay
+follows the guitar as it moves, and a **configurable near/far calibration span**
+for wide or partly-occluded camera views. Audio detection and hand tracking
+remain later milestones.
 
 > **Privacy:** the camera feed is processed in memory only. Nothing is recorded,
 > uploaded, or persisted. The app makes no network calls at runtime. Only your
@@ -73,29 +76,61 @@ FretGuide's **Camera** picker.
 ## Calibration (the 4-tap flow)
 
 1. Pick your camera in the **Camera** panel; confirm you see the live feed.
-2. Press **C** (or click **Calibrate**). Optionally choose a different **far
-   fret** (default **12** — fret 12 sits at exactly half the scale length, which
-   is why it's a convenient target). Pick the far fret first; choosing it resets
-   any taps.
+2. Press **C** (or click **Calibrate**). Pick the **near** and **far** reference
+   frets (defaults **Nut** and **12**). Choose frets that are clearly visible in
+   your frame — if the nut is off-screen or hidden behind your hand, use e.g.
+   **fret 3 ↔ fret 12** instead. Pick the frets first; changing them resets taps.
 3. Click the **4 points on the video**, in this exact prompted order:
-   1. **Nut × Low E** (thickest string)
-   2. **Nut × High E** (thinnest string)
+   1. **Near fret × Low E** (thickest string)
+   2. **Near fret × High E** (thinnest string)
    3. **Far fret × High E** (thinnest string)
    4. **Far fret × Low E** (thickest string)
    - Mis-tapped? Click **Undo last tap**.
 4. After the 4th tap a **faint green fret grid** is drawn. Check that its lines
-   sit on the real frets/strings, then click **Accept**.
+   sit on the real frets/strings, then click **Accept**. If markers are visible,
+   the panel shows "● N markers detected — tracking will be enabled" and Accept
+   registers them.
 5. Choose **Scale** or **Chord** and a target. The dots appear on the live feed.
 
 Calibration is saved and survives reloads. Recalibrate any time with the
 **Recalibrate** button or the **C** hotkey. **Reset all** clears everything.
 
+---
+
+## Live tracking (markers) — make the overlay follow the guitar
+
+Without markers, the overlay is fixed to wherever you calibrated; if the guitar
+drifts you must recalibrate. With a few **ArUco markers** attached, FretGuide
+re-solves the alignment every frame so the grid **follows the guitar as it
+moves**.
+
+1. In the **Tracking** panel, click **Print markers** (ids 0–2 are generated
+   locally — no internet). Print and cut them out.
+2. **Attach 2–3 markers** to the guitar near the neck, **flat and roughly in the
+   plane of the fretboard** (e.g. on the body top near the neck, the pickguard,
+   or the headstock face). Keep them visible and unobstructed. Bigger / closer
+   markers detect more reliably — if none are detected, move the camera closer.
+3. **Calibrate once** (the 4-tap flow above). On **Accept**, any visible markers
+   are registered to the fretboard. The panel reports how many were registered.
+4. Tick **Follow the guitar (marker tracking)** (or press **T**). Move the guitar
+   — the overlay tracks it. The panel shows **N/М markers visible**, or **Markers
+   lost** (it holds the last position until they reappear).
+
+Registration is saved, so after the one calibration tracking resumes
+automatically on reload — as long as the markers stay attached in the same spots.
+
+**Accuracy note:** a single homography is exact only when markers are coplanar
+with the fretboard, so keep them flat and near the neck plane. Small drift tracks
+well; very large reorientation may need a re-tap. Manual recalibration (**C**) is
+always available as the fallback.
+
 ### Hotkeys
 
-| Key | Action               |
-| --- | -------------------- |
-| `C` | Start (re)calibration|
-| `G` | Toggle the fret grid |
+| Key | Action                          |
+| --- | ------------------------------- |
+| `C` | Start (re)calibration           |
+| `G` | Toggle the fret grid            |
+| `T` | Toggle marker tracking on/off   |
 
 ---
 
@@ -134,6 +169,11 @@ CV alignment against a real guitar can't run in CI — verify it by hand:
       right open / muted strings.
 - [ ] Dots stay aligned while the video plays and when you resize the window.
 - [ ] Reload the page: calibration and selection are restored and still aligned.
+- [ ] **Markers:** with markers attached, calibration reports them registered;
+      enabling tracking makes the overlay follow the guitar as you move/rotate it.
+- [ ] Cover the markers → status shows "Markers lost" and the overlay holds; bring
+      them back → it resumes. Reload → tracking resumes without re-tapping.
+- [ ] Calibrate with a non-nut **near fret** (e.g. 3) when the nut is off-frame.
 - [ ] **Reset all** clears saved state.
 - [ ] _Drift test:_ play for a few minutes; note when a re-tap becomes necessary
       (informs the Phase-2 marker work).
@@ -144,13 +184,17 @@ CV alignment against a real guitar can't run in CI — verify it by hand:
 
 ```
 src/
-  core/            # pure, framework-free, unit-tested
-    types.ts       # FretPosition, ChordVoicing, ScaleBox, Calibration, …
-    geometry.ts    # u(n), dot coords, getPerspectiveTransform, applyHomography
-    content.ts     # PRD Appendix A datasets + selector
-    theory.ts      # tonal-backed (string,fret)→note + validation
-    __tests__/     # vitest specs (incl. synthetic-homography round-trip)
-  app/             # React UI (Camera, OverlayCanvas, Calibration, SelectionPanel)
+  core/                 # pure, framework-free, unit-tested
+    types.ts            # FretPosition, ChordVoicing, Calibration, DetectedMarker, …
+    geometry.ts         # u(n), dot coords, homography solve/invert, DLT
+    content.ts          # PRD Appendix A datasets + selector
+    theory.ts           # tonal-backed (string,fret)→note + validation
+    markers.ts          # register markers + per-frame tracking solve
+    __tests__/          # vitest specs (incl. synthetic-homography round-trips)
+  app/                  # React UI
+    Camera, OverlayCanvas, Calibration, SelectionPanel, MarkersPanel
+    useMarkerTracking.ts  # ArUco detection loop → live homography
+  js-aruco2.d.ts        # types for the untyped marker library
 docs/FretGuide-PRD.md
 DECISIONS.md
 ```

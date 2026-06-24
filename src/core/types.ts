@@ -61,10 +61,34 @@ export interface Calibration {
   H: number[][];
   /** The 4 image points the user tapped, in the fixed prompted order. */
   taps: Tap[];
+  /** Which fret was tapped as the "near" reference (default 0 = nut). */
+  nearFret: number;
   /** Which fret was tapped as the "far" reference (default 12). */
   farFret: number;
+  /**
+   * ArUco markers registered to fretboard-space at calibration time: marker id →
+   * its 4 corners in fretboard-space (u,v). Enables live tracking — re-solving H
+   * each frame from the markers' current image positions. Absent if no markers
+   * were visible during calibration.
+   */
+  markerAnchors?: Record<number, UV[]>;
   /** Epoch ms when this calibration was created. */
   createdAt: number;
+}
+
+/** A marker detected in the current frame (corners in normalized image space). */
+export interface DetectedMarker {
+  id: number;
+  /** Four corners in normalized image space [0,1], same convention as taps. */
+  corners: Point[];
+}
+
+/** Live tracking status surfaced to the UI. */
+export interface TrackingStatus {
+  /** Number of registered markers currently visible (0 = lost). */
+  visible: number;
+  /** Total markers registered at calibration. */
+  registered: number;
 }
 
 /** A fretboard-space point. */

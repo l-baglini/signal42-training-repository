@@ -7,7 +7,10 @@ import {
   fretU,
   getPerspectiveTransform,
   gridLines,
+  imageToFretboard,
+  invertHomography,
   OPEN_MARKER_U,
+  solveHomographyDLT,
   stringV,
 } from '../geometry';
 import type { Point, StringNumber, UV } from '../types';
@@ -72,7 +75,7 @@ describe('getPerspectiveTransform — input guards', () => {
   });
 
   it('throws on a degenerate (collinear) tap set', () => {
-    const src = calibrationTargets(12);
+    const src = calibrationTargets(0, 12);
     const collinear: Point[] = [
       { x: 0, y: 0 },
       { x: 1, y: 1 },
@@ -97,8 +100,8 @@ describe('synthetic-homography round-trip (PRD §9)', () => {
   ];
   const EPS = 1e-6;
 
-  function roundTripFor(farFret: number) {
-    const targets: UV[] = calibrationTargets(farFret);
+  function roundTripFor(farFret: number, nearFret = 0) {
+    const targets: UV[] = calibrationTargets(nearFret, farFret);
     const taps: Point[] = targets.map((uv) => applyHomography(H_KNOWN, uv));
     const Hsolved = getPerspectiveTransform(targets, taps);
     return Hsolved;
@@ -120,7 +123,7 @@ describe('synthetic-homography round-trip (PRD §9)', () => {
   });
 
   it('reproduces the tapped corners themselves to within epsilon', () => {
-    const targets = calibrationTargets(12);
+    const targets = calibrationTargets(0, 12);
     const Hsolved = roundTripFor(12);
     for (const uv of targets) {
       const expected = applyHomography(H_KNOWN, uv);
@@ -136,6 +139,120 @@ describe('synthetic-homography round-trip (PRD §9)', () => {
     const actual = dotPixel(Hsolved, 3, 7);
     expect(actual.x).toBeCloseTo(expected.x, 4);
     expect(actual.y).toBeCloseTo(expected.y, 4);
+  });
+});
+
+describe('calibrationTargets — configurable near + far fret', () => {
+  it('defaults near to the nut (u=0)', () => {
+    const t = calibrationTargets(0, 12);
+    expect(t[0]).toEqual({ u: 0, v: 0 });
+    expect(t[2]!.u).toBeCloseTo(0.5, 12); // far = fret 12
+  });
+
+  it('places the near edge at a non-zero fret when requested', () => {
+    const t = calibrationTargets(3, 12);
+    expect(t[0]!.u).toBeCloseTo(fretU(3), 12);
+    expect(t[1]!.u).toBeCloseTo(fretU(3), 12);
+    expect(t[2]!.u).toBeCloseTo(fretU(12), 12);
+  });
+
+  it('round-trips a homography solved from a fret-3↔fret-12 span', () => {
+    const H = [
+      [700, 30, 110],
+      [-40, 560, 80],
+      [0.05, 0.02, 1],
+    ];
+    const targets = calibrationTargets(3, 12);
+    const taps = targets.map((uv) => applyHomography(H, uv));
+    const solved = getPerspectiveTransform(targets, taps);
+    const a = dotPixel(H, 4, 7);
+    const b = dotPixel(solved, 4, 7);
+    expect(b.x).toBeCloseTo(a.x, 4);
+    expect(b.y).toBeCloseTo(a.y, 4);
+  });
+});
+
+describe('solveHomographyDLT (least-squares, N ≥ 4)', () => {
+  const H = [
+    [820, 40, 130],
+    [-55, 610, 95],
+    [0.06, 0.03, 1],
+  ];
+
+  it('matches the exact 4-point solver on 4 points', () => {
+    const src: UV[] = calibrationTargets(0, 12);
+    const dst = src.map((uv) => applyHomography(H, uv));
+    const solved = solveHomographyDLT(src, dst);
+    for (const uv of [
+      { u: 0.2, v: 0.3 },
+      { u: 0.4, v: 0.8 },
+    ]) {
+      const e = applyHomography(H, uv);
+      const a = applyHomography(solved, uv);
+      expect(a.x).toBeCloseTo(e.x, 3);
+      expect(a.y).toBeCloseTo(e.y, 3);
+    }
+  });
+
+  it('recovers H from many (>4) spread points', () => {
+    const src: UV[] = [];
+    for (const u of [0, 0.1, 0.25, 0.4, 0.5, 0.7]) {
+      for (const v of [0, 0.5, 1]) src.push({ u, v });
+    }
+    const dst = src.map((uv) => applyHomography(H, uv));
+    const solved = solveHomographyDLT(src, dst);
+    const e = applyHomography(H, { u: 0.33, v: 0.66 });
+    const a = applyHomography(solved, { u: 0.33, v: 0.66 });
+    expect(a.x).toBeCloseTo(e.x, 3);
+    expect(a.y).toBeCloseTo(e.y, 3);
+  });
+
+  it('throws on fewer than 4 points', () => {
+    expect(() =>
+      solveHomographyDLT(
+        [
+          { u: 0, v: 0 },
+          { u: 1, v: 0 },
+          { u: 1, v: 1 },
+        ],
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      ),
+    ).toThrow();
+  });
+});
+
+describe('invertHomography + imageToFretboard', () => {
+  const H = [
+    [820, 40, 130],
+    [-55, 610, 95],
+    [0.06, 0.03, 1],
+  ];
+
+  it('inverse-maps image points back to their fretboard-space origin', () => {
+    for (const uv of [
+      { u: 0, v: 0 },
+      { u: 0.5, v: 1 },
+      { u: 0.3, v: 0.7 },
+    ]) {
+      const img = applyHomography(H, uv);
+      const back = imageToFretboard(H, img);
+      expect(back.u).toBeCloseTo(uv.u, 9);
+      expect(back.v).toBeCloseTo(uv.v, 9);
+    }
+  });
+
+  it('invertHomography ∘ H ≈ identity on a probe point', () => {
+    const Hinv = invertHomography(H);
+    const uv = { u: 0.42, v: 0.13 };
+    const img = applyHomography(H, uv);
+    const back = applyHomography(Hinv, { u: img.x, v: img.y });
+    // applyHomography on Hinv treats (x,y) as (u,v) inputs — same algebra.
+    expect(back.x).toBeCloseTo(uv.u, 9);
+    expect(back.y).toBeCloseTo(uv.v, 9);
   });
 });
 
