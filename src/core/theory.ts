@@ -125,7 +125,11 @@ export function validateScale(box: ScaleBox): ValidationIssue[] {
  */
 export function validateRoots(
   rootPitchClass: string,
-  positions: readonly { string: StringNumber; fret: number; isRoot?: boolean }[],
+  positions: readonly {
+    string: StringNumber;
+    fret: number;
+    isRoot?: boolean;
+  }[],
 ): ValidationIssue[] {
   const rootChroma = Note.chroma(rootPitchClass);
   const issues: ValidationIssue[] = [];

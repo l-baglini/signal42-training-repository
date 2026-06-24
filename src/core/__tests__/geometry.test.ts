@@ -67,10 +67,7 @@ describe('applyHomography', () => {
 describe('getPerspectiveTransform — input guards', () => {
   it('throws unless exactly 4 correspondences are given', () => {
     expect(() =>
-      getPerspectiveTransform(
-        [{ u: 0, v: 0 }],
-        [{ x: 0, y: 0 }],
-      ),
+      getPerspectiveTransform([{ u: 0, v: 0 }], [{ x: 0, y: 0 }]),
     ).toThrow();
   });
 

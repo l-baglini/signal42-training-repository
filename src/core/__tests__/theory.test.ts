@@ -57,7 +57,9 @@ describe('curated data validation (PRD C3)', () => {
   it('every chord position note belongs to its chord quality', () => {
     for (const id of CHORD_IDS) {
       const voicing = CHORDS[id]!;
-      expect(validateChord(voicing), `${id} has out-of-chord notes`).toEqual([]);
+      expect(validateChord(voicing), `${id} has out-of-chord notes`).toEqual(
+        [],
+      );
     }
   });
 
@@ -66,9 +68,10 @@ describe('curated data validation (PRD C3)', () => {
       const voicing = CHORDS[id]!;
       // Chord tonic = the root pitch class (first letter(s) before quality).
       const tonic = chordPitchClasses(id)[0]!;
-      expect(validateRoots(tonic, voicing.positions), `${id} root mismatch`).toEqual(
-        [],
-      );
+      expect(
+        validateRoots(tonic, voicing.positions),
+        `${id} root mismatch`,
+      ).toEqual([]);
     }
   });
 

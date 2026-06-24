@@ -132,7 +132,9 @@ describe('A.2 — diatonic chord voicings', () => {
   }
 
   it('Bm is the only barre chord (has a baseFret)', () => {
-    const withBase = CHORD_IDS.filter((id) => CHORDS[id]!.baseFret !== undefined);
+    const withBase = CHORD_IDS.filter(
+      (id) => CHORDS[id]!.baseFret !== undefined,
+    );
     expect(withBase).toEqual(['Bm']);
   });
 
