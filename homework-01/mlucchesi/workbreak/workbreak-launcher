@@ -1,0 +1,21 @@
+#!/bin/bash
+# WorkBreak launcher — avvio silenzioso
+INSTALL_DIR="$HOME/.local/share/workbreak"
+LOG_FILE="$INSTALL_DIR/workbreak.log"
+VENV="$INSTALL_DIR/venv"
+
+export PYTHONPATH="$INSTALL_DIR"
+export DISPLAY="${DISPLAY:-:0}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+cd "$INSTALL_DIR"
+
+if [[ "$1" == "--debug" ]]; then
+    exec "$VENV/bin/python" "$INSTALL_DIR/main.py"
+fi
+
+if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 1048576 ]; then
+    mv "$LOG_FILE" "${LOG_FILE}.old"
+fi
+nohup "$VENV/bin/python" "$INSTALL_DIR/main.py" \
+    >> "$LOG_FILE" 2>&1 &
+disown

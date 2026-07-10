@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;700&display=swap" rel="stylesheet">
+    <title>Sellers Inspector | OneTag</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="index.css">
+    <script>
+        var ssps = <%- JSON.stringify(ssps) %>;
+        var page = <%- page %>;
+    </script>
+</head>
+<body>
+    <div class="static">
+        <div class="status">
+            <a class="logo" href="/">
+                <img src="logo.png" alt="logo">
+            </a>
+        </div>
+        <div class="results">
+            <div class="content">
+                <div class="data">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th></th>
+                            <% ssps.filter(ssp => ssp.isSelected).map((ssp) => { %>
+                                <th><%= ssp.domain %></th>
+                            <% }) %>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <% for (let i = 0; i < pageSize; i++) { %>
+                            <tr>
+                                <td><%= i + 1 %></td>
+                                <% ssps.filter(ssp => ssp.isSelected).map((ssp) => { %>
+                                    <td
+                                        data-import-diff="<%= ssp.sellers[i] ? ssp.sellers[i].importDiff : '' %>"
+                                        <%= ssp.sellers[i] && ssp.sellers[i].wasInsertedOnFirstImport ? 'data-first-import' : '' %>
+                                    >
+                                        <% if (ssp.sellers[i]) { %>
+                                            <div class="header">
+                                                <div class="seller-id" data-id="<%= ssp.sellers[i]._id %>"><%= ssp.sellers[i].sellerId %></div>
+                                                <% if (!ssp.sellers[i].wasInsertedOnFirstImport) { %>
+                                                    <div class="import-date"><%= ssp.sellers[i].importDate %></div>
+                                                <% } %>
+                                            </div>
+                                            <div class="seller-name"><%= ssp.sellers[i].sellerName %></div>
+                                            <div class="seller-domain" title="<%= ssp.sellers[i].sellerDomain %>"><%= ssp.sellers[i].sellerDomain %></div>
+                                        <% } %>
+                                    </td>
+                                <% }) %>
+                            </tr>
+                        <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <button class="prev arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                            <path transform="rotate(-180, 12, 12)" d="M5 3l3.057-3 11.943 12-11.943 12-3.057-3 9-9z"/>
+                        </svg>
+                    </button>
+                    <button class="filters-opener">Filters</button>
+                    <button class="next arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                            <path d="M5 3l3.057-3 11.943 12-11.943 12-3.057-3 9-9z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modals">
+        <div class="filters modal">
+            <div class="content">
+                <div class="title">
+                    <span>Filters</span>
+                    <div class="closer">&times;</div>
+                </div>
+                <form method="get">
+                    <div class="row ssps">
+                        <div class="row">
+                            <label for="ssp">Included SSPs:</label>
+                            <div>
+                                <button class="select-numeric">Select numeric IDs</button>
+                                <button class="select-all">Select all</button>
+                            </div>
+                        </div>
+                        <select id="ssp" name="ssp" multiple>
+                            <% ssps.map((ssp, index) => { %>
+                                <option value="<%= index %>" <%= ssp.isSelected ? 'selected' : '' %>><%= ssp.domain %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="dates">
+                            <span>Collection date</span>
+                            <button class="clear-dates">Clear</button>
+                        </div>
+                        <div>
+                            <table>
+                                <tr>
+                                    <td>
+                                        <label for="from-date">from</label>
+                                    </td>
+                                    <td>
+                                        <input id="from-date" type="date" name="from-date" value="<%= fromDate %>"/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <label for="to-date">to</label>
+                                    </td>
+                                    <td>
+                                        <input id="to-date" type="date" name="to-date" value="<%= toDate %>"/>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <label for="page-size">Results per page</label>
+                        <input id="page-size" type="number" name="page-size" max="10000" value="<%= pageSize %>"/>
+                    </div>
+                    <div class="buttons">
+                        <input type="submit" value="Apply"/>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="details modal">
+            <div class="content">
+                <div class="title">
+                    <span>Seller Details</span>
+                    <div class="closer">&times;</div>
+                </div>
+                <table>
+                    <tr>
+                        <td>ID</td>
+                        <td class="seller-id"></td>
+                    </tr>
+                    <tr>
+                        <td>Name</td>
+                        <td class="seller-name"></td>
+                    </tr>
+                    <tr>
+                        <td>Domain</td>
+                        <td class="seller-domain"></td>
+                    </tr>
+                    <tr class="import-date-section">
+                        <td>Imported on</td>
+                        <td class="import-date"></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+<script src="index.js"></script>
+</html>

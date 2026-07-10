@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gatherer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gatherer}
+      POSTGRES_DB: ${POSTGRES_DB:-gatherer}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gatherer}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Async driver URL built from the same POSTGRES_* values as the db service.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gatherer}:${POSTGRES_PASSWORD:-gatherer}@db:5432/${POSTGRES_DB:-gatherer}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
+      DIGEST_MODEL: ${DIGEST_MODEL:-claude-sonnet-4-6}
+      CLUSTER_MODEL: ${CLUSTER_MODEL:-claude-haiku-4-5}
+      DEFAULT_SCHEDULE_CRON: ${DEFAULT_SCHEDULE_CRON:-0 6 * * *}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      IMAGE_STORE_DIR: /data/images
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - images:/data/images
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata:
+  images:

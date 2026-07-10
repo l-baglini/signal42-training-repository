@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Space Invaders</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      color: #0f0;
+      overflow: hidden;
+    }
+
+    #hud {
+      display: flex;
+      justify-content: space-between;
+      width: 800px;
+      padding: 8px 4px;
+      font-size: 18px;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px #0f0;
+    }
+
+    canvas {
+      border: 1px solid #0f04;
+      box-shadow: 0 0 30px #0f02;
+      display: block;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #000c;
+      z-index: 10;
+    }
+
+    #overlay h1 {
+      font-size: 52px;
+      letter-spacing: 6px;
+      color: #0f0;
+      text-shadow: 0 0 20px #0f0, 0 0 60px #0f0;
+      margin-bottom: 16px;
+    }
+
+    #overlay p {
+      font-size: 16px;
+      color: #0a0;
+      margin: 6px 0;
+      letter-spacing: 2px;
+    }
+
+    #overlay .subtitle {
+      font-size: 24px;
+      color: #0f0;
+      text-shadow: 0 0 10px #0f0;
+      margin-bottom: 24px;
+    }
+
+    #overlay .blink {
+      animation: blink 1s step-start infinite;
+      color: #fff;
+      font-size: 20px;
+      letter-spacing: 3px;
+      margin-top: 32px;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    #lives {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .life-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+<div id="hud">
+  <span>SCORE: <span id="score">0</span></span>
+  <span>LEVEL: <span id="level">1</span></span>
+  <span id="lives">LIVES: </span>
+  <span>HI: <span id="hiscore">0</span></span>
+</div>
+
+<canvas id="canvas" width="800" height="600"></canvas>
+
+<div id="overlay">
+  <h1>SPACE INVADERS</h1>
+  <div class="subtitle">— EARTH DEFENSE FORCE —</div>
+  <p>← → MOVE &nbsp;&nbsp; SPACE SHOOT</p>
+  <p>Destroy all aliens before they reach the ground</p>
+  <div class="blink">PRESS SPACE TO START</div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

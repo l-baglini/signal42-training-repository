@@ -1,0 +1,37 @@
+{
+  "name": "onetag-sellers-data",
+  "version": "2.0.0",
+  "private": true,
+  "description": "OneTag sellers.json inspector & importer — TypeScript, container/Fargate ready",
+  "main": "dist/server/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server/index.js",
+    "start:server": "node dist/server/index.js",
+    "import": "node dist/import/index.js --now",
+    "import:schedule": "node dist/import/index.js",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:import": "tsx src/import/index.ts --now"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "luxon": "^3.5.0",
+    "mongodb": "^6.12.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^20.17.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
