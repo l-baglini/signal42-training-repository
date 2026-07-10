@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="index.css">
     <script>
-        var ssps = <%- JSON.stringify(ssps) %>;
+        var ssps = <%- JSON.stringify(ssps).replace(/[<>&]/g, (c) => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026' })[c]) %>;
         var page = <%- page %>;
     </script>
 </head>
