@@ -407,9 +407,16 @@ class SyntheticSource:
 
     def __init__(self, width: int = 1920, height: int = 1080, max_fret: int = 12,
                  fps: float | None = 30.0, refuse_every: int = 0,
-                 colour: bool = False) -> None:
+                 colour: bool = False, motion: bool = False,
+                 pose_t: float = 0.0) -> None:
         self.width, self.height, self.max_fret = width, height, max_fret
         self.fps, self.refuse_every, self.colour = fps, refuse_every, colour
+        #: Still by default. The drift exists to prove the overlay tracks a moving board
+        #: and it does that job in the tests; on screen it is only in the way. You are
+        #: reading a shape off the neck and matching it with your hands, and a neck that
+        #: will not hold still makes that harder for no gain -- the real guitar supplies
+        #: all the movement this needs to cope with.
+        self.motion, self.pose_t = motion, pose_t
         self._i = 0
         self._t0 = time.monotonic()
 
@@ -422,7 +429,8 @@ class SyntheticSource:
             if slack > 0:
                 time.sleep(slack)
 
-        H = synthetic_pose(t, self.width, self.height, self.max_fret)
+        H = synthetic_pose(t if self.motion else self.pose_t,
+                           self.width, self.height, self.max_fret)
         gray = draw_synthetic_board(H, self.width, self.height, self.max_fret)
         chroma = (synthetic_chroma(H, self.width, self.height, self.max_fret)
                   if self.colour else (None, None))
@@ -565,7 +573,8 @@ def open_source(spec: str, **kw) -> FrameSource:
     if spec == "synthetic":
         return SyntheticSource(**{k: v for k, v in kw.items()
                                   if k in ("width", "height", "max_fret", "fps",
-                                           "refuse_every", "colour")})
+                                           "refuse_every", "colour", "motion",
+                                           "pose_t")})
     if spec == "replay":
         return ReplaySource(**{k: v for k, v in kw.items()
                                if k in ("frames_dir", "labels_path", "max_fret", "fps",

@@ -54,7 +54,7 @@ def test_synthetic_frames_are_deterministic_in_time():
 
 def test_the_synthetic_pose_actually_moves():
     """A static pose would let a whole class of frame/pose-pairing bug pass unnoticed."""
-    src = SyntheticSource(width=640, height=360, fps=None)
+    src = SyntheticSource(width=640, height=360, fps=None, motion=True)
     first = src.read().H
     for _ in range(30):
         last = src.read().H
@@ -252,7 +252,7 @@ def test_the_board_is_warm_and_the_room_is_not():
 
 def test_chroma_follows_the_board_as_it_moves():
     """A static chroma plane would look right in a screenshot and wrong in motion."""
-    src = SyntheticSource(width=320, height=180, fps=None, colour=True)
+    src = SyntheticSource(width=320, height=180, fps=None, colour=True, motion=True)
     first = src.read().u
     for _ in range(30):
         last = src.read().u
@@ -406,3 +406,18 @@ def test_every_modal_box_fits_on_a_full_neck():
 
     for key in ("G", "C", "E", "A#"):
         assert all(m.clipped == 0 for m in key_modes(key, max_fret=21)), key
+
+
+def test_the_synthetic_neck_holds_still_by_default():
+    """You are reading a shape off the neck and matching it with your hands. A board that
+    drifts while you do that is only in the way, and the real guitar already supplies all
+    the movement the tracker has to cope with."""
+    src = SyntheticSource(width=320, height=180, fps=None)
+    poses = [src.read().H for _ in range(20)]
+    assert all(np.allclose(poses[0], H) for H in poses[1:]), "the still neck moved"
+
+
+def test_motion_is_still_available_for_testing_tracking():
+    src = SyntheticSource(width=320, height=180, fps=None, motion=True)
+    poses = [src.read().H for _ in range(40)]
+    assert not np.allclose(poses[0], poses[-1]), "motion=True did not move the board"

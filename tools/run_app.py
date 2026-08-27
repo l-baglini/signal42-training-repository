@@ -114,6 +114,10 @@ def main() -> int:
     ap.add_argument("--rematch-ms", type=float, default=150.0)
     ap.add_argument("--greyscale", action="store_true",
                     help="skip the chroma planes; also toggled live with c")
+    ap.add_argument("--motion", action="store_true",
+                    help="synthetic: let the neck drift. It holds still otherwise — the "
+                         "movement is there to prove the overlay tracks, not to practise "
+                         "against")
     ap.add_argument("--refuse-every", type=int, default=0,
                     help="synthetic: periodically refuse the pose, to exercise NO LOCK")
     ap.add_argument("--frames", type=int, default=0,
@@ -156,6 +160,7 @@ def main() -> int:
             enrollment=args.enrollment, match_width=args.match_width,
             rematch_ms=args.rematch_ms, smooth=not args.no_smooth,
             colour=not args.greyscale, refuse_every=args.refuse_every, fps=30.0,
+            motion=args.motion,
         )
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as e:
         print(e)

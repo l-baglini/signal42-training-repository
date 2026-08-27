@@ -71,6 +71,9 @@ That matters for the modes: Misolidio ends at fret 13 and Eolio at 15, so on the
 twelve frets the camera can pose they are cut short. On the synthetic neck all
 seven boxes fit whole, which makes it the better place to learn them.
 
+The neck holds still. Add `--motion` to make it drift, which is there to prove
+the overlay tracks a moving board rather than to practise against.
+
 Add `--refuse-every 40` to watch the `NO LOCK` state, or `--source replay` to
 play back the labelled dataset instead.
 
