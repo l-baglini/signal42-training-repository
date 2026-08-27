@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 193 tests
+.venv/bin/python -m pytest tests/ -q      # 212 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -64,11 +64,19 @@ That covers synthetic-homography round-trips, the fret law, note identities
 against tonal's tables, the heatmap codec's accuracy ceiling, and the trust
 gate's refusal conditions.
 
-**Not provable here:** whether a dot lands on a real fret, whether tracking
-survives real motion blur, whether the camera pipeline works. Anything touching
-`capture.py`, `predict.py`'s live path, or `render.py`'s visual output needs a
-human at the instrument. Say so plainly rather than implying test-green means
-working. The manual checks are in [QUICKSTART.md](QUICKSTART.md).
+It also covers **where the overlay draws**. `source.SyntheticSource` draws a
+moving fretboard from a matrix it also returns, so the pose is exact and every
+dot can be checked against where the geometry says it belongs
+(`tests/test_render.py`). Use it — an overlay change is not unverifiable, and
+`tools/preview_render.py` will show you the result as a PNG.
+
+**Still not provable here:** whether a dot lands on a *real* fret, whether the
+model finds a *real* fretboard, whether tracking survives real motion blur,
+whether the camera pipeline works. Anything touching `capture.py` or
+`predict.py`'s live path needs a human at the instrument, and so does any claim
+about how the overlay *looks* as opposed to where it lands. Say so plainly
+rather than implying test-green means working. The manual checks are in
+[QUICKSTART.md](QUICKSTART.md).
 
 Do not add tests that skip without hardware. A test that quietly skips is worse
 than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows/ci.yml).
@@ -81,7 +89,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 |---|---|
 | `fretguide/` | The package. Flat layout on purpose — see the comment in `pyproject.toml`. |
 | `tools/` | CLI entry points. They `sys.path.insert` the repo root deliberately, so they run inside the Windows training bundle where nothing is pip-installed. Don't "clean that up". |
-| `tests/` | Must stay hardware-free. |
+| `fretguide/source.py` | Frame sources. `SyntheticSource` needs no camera, no model and no dataset — it is how the overlay and the shell get developed and tested here. |
+| `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
 | `dataset/labels.json` | **Hand-clicked and irreplaceable.** `dataset/frames/` is gitignored and regenerable; the labels are not. Never rewrite this programmatically without being asked. |
 | `docs/research/` | Evidence. Read it before proposing an approach that was already measured and rejected. |
 | `docs/archive/v1/` | **Frozen. Do not edit, lint, test or "fix".** Excluded from ruff. It exists so the rebuild is legible. |
@@ -107,5 +116,11 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 MVP is vision-only and works. Audio note-verification is researched
 ([05-audio-stack.md](docs/research/05-audio-stack.md)) and deliberately parked;
 it consumes the selected target plus an audio stream and touches neither the
-tracker nor the renderer. The UI is an OpenCV window with keyboard hotkeys —
-the PySide6 native-GL shell in PRD-v2 §6.1 is not built yet.
+tracker nor the renderer.
+
+The UI is still an OpenCV window with keyboard hotkeys. The native PySide6 shell
+that replaces it is planned in [docs/PLAN-shell.md](docs/PLAN-shell.md); P0 (the
+GL/shader go-no-go, `tools/probe_gl.py`) and P1 (frame sources and the render
+parity harness) are done, P2 onward is not. `render.py` and `tools/run_app.py`
+are deliberately kept as the diagnostic path — do not delete them when the shell
+lands.

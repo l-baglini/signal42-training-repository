@@ -98,9 +98,10 @@ per-module conventions.
 | [`fretguide/model.py`](fretguide/model.py) | FretNet, the keypoint U-Net (torch, training only) |
 | [`fretguide/predict.py`](fretguide/predict.py) | Live OpenVINO inference, pose fit, smoothing |
 | [`fretguide/render.py`](fretguide/render.py) | The overlay |
+| [`fretguide/source.py`](fretguide/source.py) | Frame sources: live camera, dataset replay, or a synthetic board needing no hardware at all |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 193 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 212 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -120,10 +121,16 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-193 tests, ~7 seconds, no hardware. They cover the parts that *can* be proven
+212 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.
+
+They also cover the overlay itself, which is unusual for a computer-vision app
+and is what [`fretguide/source.py`](fretguide/source.py) buys: a synthetic
+source draws a moving fretboard from a matrix it also hands back, so the pose is
+exact and every drawn dot can be checked against where the geometry says it
+belongs. See [`tests/test_render.py`](tests/test_render.py).
 
 They deliberately do **not** cover whether a dot lands on your actual fret.
 That needs a camera and an instrument, and it is judged by eye — see

@@ -1,6 +1,6 @@
 # The PySide6 shell — plan
 
-**Status:** proposed, not built. **Date:** 2026-08-27.
+**Status:** P0 and P1 done; P2 onward not built. **Date:** 2026-08-27.
 Implements PRD-v2 §6.1 (carried-forward decision 1) and
 [`research/10-recommended-stack.md` §4](research/10-recommended-stack.md).
 
@@ -168,7 +168,7 @@ same result, every time, on a machine with no hardware attached.
 
 Each phase ends somewhere it is worth stopping.
 
-### P0 — Prove the stack (half a day)
+### P0 — Prove the stack (half a day) — **done**
 
 Install PySide6 on Python 3.13 and confirm a `QOpenGLWidget` gets a real GL
 context on the Arc iGPU under Wayland. **Do this before anything else.** It is
@@ -177,11 +177,37 @@ the only step that can invalidate the whole plan, and it is cheap.
 Add PySide6 to a new `[gui]` extra, not to the runtime dependencies — the
 training and CI paths must not start needing Qt.
 
-### P1 — `FrameSource` + `ReplaySource` (1 day)
+**Result: go.** PySide6 6.11.2, GL 4.6 core on Mesa Intel Arc (MTL). Rather than
+merely opening a context, [`tools/probe_gl.py`](../tools/probe_gl.py) runs the
+whole §1.1 mechanism — three R8 planes, BT.601 in GLSL, rendered and read back —
+and the four probe colours round-trip to within 1/255.
+
+### P1 — `FrameSource` + `ReplaySource` (1 day) — **done**
 
 The abstraction from §3, and a headless script that renders frame N with its
 ground-truth pose through the *existing* `render.py`. No Qt yet. This is
 verifiable here, in CI, immediately.
+
+**Result:** [`fretguide/source.py`](../fretguide/source.py) with three sources
+and [`tools/preview_render.py`](../tools/preview_render.py). A third source was
+added beyond the plan — `SyntheticSource`, which draws the board procedurally —
+because `ReplaySource` depends on `dataset/frames/`, which is gitignored and
+absent from a fresh clone; a test needing it would be a test that silently
+skips, which CLAUDE.md forbids. The synthetic source needs no camera, no model
+and no dataset, so the overlay is testable in CI and anyone cloning the repo can
+run it.
+
+19 new tests. Two of them failed first and were right to: the initial
+perspective taper (far end 1.34× the nut) very nearly cancelled the fret law,
+flattening on-screen fret gaps from the true 1.89:1 to 1.10:1 — close enough to
+uniform that a renderer interpolating frets *linearly* would have passed. A
+backdrop that hides this project's central bug is worse than none, so the taper
+was reduced.
+
+`tests/test_render.py` recovers dot positions from the rendered **pixels**, not
+from the drawing code's own arithmetic, so it is renderer-agnostic: the same
+assertions check the QPainter overlay at P3, and "the two renderers disagree"
+becomes a test failure rather than something noticed later on a video.
 
 ### P2 — GL video widget, in colour (1–2 days)
 
@@ -258,6 +284,7 @@ honest checks:
   prettier shell that drops frames is a worse product — the current loop reports
   its own fps and the new one must too.
 - Replay goldens match between `render.py` and the Qt renderer at P3.
-- The 193 hardware-free tests still pass, plus new golden tests from P1.
+- The hardware-free suite still passes and keeps growing: 193 before this plan,
+  212 after P1.
 - Someone who has not seen the project can pick a chord without being told how.
 - A recording of it running is something worth showing on purpose.

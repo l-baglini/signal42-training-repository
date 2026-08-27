@@ -8,11 +8,23 @@ Model training: [`docs/TRAINING.md`](docs/TRAINING.md).
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install opencv-contrib-python==5.0.0.93 openvino==2026.2.1 pillow pytest
-# training only (not needed to run the app):
+.venv/bin/pip install -e ".[dev]"
+# training only, and only on a machine with a GPU worth using:
 .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
-.venv/bin/pip install onnx
+.venv/bin/pip install -e ".[train]"
 ```
+
+Versions are pinned in [`pyproject.toml`](pyproject.toml), which also explains
+why torch is not a runtime dependency.
+
+**No camera, no guitar, nothing trained?** You can still run the whole overlay:
+
+```bash
+.venv/bin/python tools/preview_render.py --chord Bm --frames 3
+```
+
+That draws a synthetic fretboard from a known pose and renders the overlay onto
+it — no hardware, no dataset, no model. See [`fretguide/source.py`](fretguide/source.py).
 
 ## Each session: get the phone camera onto /dev/video4
 
@@ -107,7 +119,7 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 193 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 212 tests, no camera or GPU needed
 ```
 
 ## Layout

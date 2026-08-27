@@ -1,5 +1,5 @@
 ---
-description: Run the full hardware-free check (ruff + 193 tests) and report honestly what it does and does not prove.
+description: Run the full hardware-free check (ruff + 212 tests) and report honestly what it does and does not prove.
 allowed-tools: Bash(.venv/bin/python -m pytest:*), Bash(.venv/bin/python -m ruff:*), Read, Grep
 ---
 
@@ -27,6 +27,6 @@ If the change under test touched any of `fretguide/capture.py`,
 specific manual check from QUICKSTART.md that a human still has to perform, and
 say that the change is unverified until they do.
 
-**Watch for a shrinking suite.** 193 tests is the current count. Fewer, or any
+**Watch for a shrinking suite.** 212 tests is the current count. Fewer, or any
 skip reported by `-rs`, means a dependency failed to install or a guard was
 removed — treat that as a failure, not a pass.
