@@ -257,3 +257,22 @@ def test_every_note_of_every_box_belongs_to_the_key():
             for p in mode_box(m, max_fret=24):
                 assert chroma_at(p.string, p.fret) in allowed, (
                     f"{key} {m.italian}: string {p.string} fret {p.fret} is outside {key}")
+
+
+def test_eolio_string_four_is_fingered_from_the_twelfth_fret():
+    """A deliberate departure from the source sheet, pinned so it is not "corrected" back.
+
+    The sheet fingers Eolio's D string 2-4, keeping the hand back at fret 11 for it. But
+    string 4's lowest note in this box is fret 12, so there is nothing at 11 to reach for,
+    and fingering it 1-3 leaves string 3 as the only place in the box where the hand has
+    to move. Same notes either way.
+    """
+    eolio = key_modes("G")[5]
+    d_string = sorted((p.fret, p.finger) for p in mode_box(eolio, max_fret=24) if p.string == 4)
+    assert d_string == [(12, 1), (14, 3)]
+
+    anchors_by_string = {
+        p.string: p.fret - p.finger + 1 for p in mode_box(eolio, max_fret=24)
+    }
+    shifted = [s for s, a in anchors_by_string.items() if a == 11]
+    assert shifted == [3], f"only string 3 should sit back at fret 11, got {shifted}"

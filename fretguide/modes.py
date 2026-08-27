@@ -122,10 +122,16 @@ SHAPES_IN_G: dict[int, tuple[tuple[int, int, int], ...]] = {
         (6, 10, 2), (6, 12, 4),
     ),
     6: (  # Eolio - Em - XI - frets 11-15
+        #
+        # String 4 is fingered 1-3, where the sheet has 2-4. A deliberate change, not a
+        # transcription slip: the sheet's fingering keeps the hand back at fret 11 for
+        # this string, but string 4's lowest note here is fret 12, so there is nothing
+        # down there to reach for. Fingering it from 12 leaves string 3 as the only place
+        # in the box where the hand has to move.
         (1, 12, 1), (1, 14, 3), (1, 15, 4),
         (2, 12, 1), (2, 13, 2), (2, 15, 4),
         (3, 11, 1), (3, 12, 2), (3, 14, 4),
-        (4, 12, 2), (4, 14, 4),
+        (4, 12, 1), (4, 14, 3),
         (5, 12, 1), (5, 14, 3), (5, 15, 4),
         (6, 12, 1), (6, 14, 3), (6, 15, 4),
     ),
