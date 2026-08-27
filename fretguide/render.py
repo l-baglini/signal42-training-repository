@@ -28,8 +28,20 @@ COL_OK = (120, 230, 120)
 COL_BAD = (70, 170, 255)
 
 
-def _halo_text(img, text, org, scale=0.6, colour=(255, 255, 255), thick=1) -> None:
-    cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, COL_OUTLINE, thick + 3, cv2.LINE_AA)
+def _halo_text(img, text, org, scale=0.6, colour=(255, 255, 255), thick=1,
+               halo: int | None = None) -> None:
+    """Text with a dark outline behind it, for legibility over moving video.
+
+    ``halo`` is the *extra* stroke width of the outline, defaulting to 3 — right for the
+    HUD's large type and much too heavy for anything small. A 4 px outline on 11 px
+    letters does not read as an outline: it bleeds out of each glyph into its neighbours,
+    and the word appears doubled or smeared. Pass a smaller halo for small text, or 0
+    where the background already gives contrast.
+    """
+    extra = 3 if halo is None else halo
+    if extra > 0:
+        cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, COL_OUTLINE,
+                    thick + extra, cv2.LINE_AA)
     cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, colour, thick, cv2.LINE_AA)
 
 
@@ -238,8 +250,12 @@ def draw_menu(img: np.ndarray, menu, layout) -> None:
 
             if row.heading:
                 _halo_text(img, row.label.upper(), (x + 10, y + int(rh * 0.7)),
-                           scale=scale * 0.8, colour=COL_HEADING)
+                           scale=scale * 0.8, colour=COL_HEADING, halo=1)
             else:
                 on = at and (row.selection is not None or column == 0)
+                # No halo on the highlighted row: it is dark text on solid amber, which
+                # has all the contrast it needs, and an outline in the same dark colour
+                # would just thicken every stroke into its neighbour.
                 _halo_text(img, row.label, (x + 10, y + int(rh * 0.7)), scale=scale,
-                           colour=COL_OUTLINE if (on and focused) else COL_TEXT)
+                           colour=COL_OUTLINE if (on and focused) else COL_TEXT,
+                           halo=0 if (on and focused) else 1)
