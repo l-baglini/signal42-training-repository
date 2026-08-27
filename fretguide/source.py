@@ -42,6 +42,20 @@ from .types import UV, Point, TrackerStatus
 #: Frets carrying inlay markers on a standard neck. Single dot except the double at 12.
 INLAY_FRETS = (3, 5, 7, 9, 12)
 
+#: Which way the synthetic neck lies, as the angle of the nut -> fret 12 axis in image
+#: coordinates (y increases downwards). 163 degrees puts fret 12 on the left and the nut on
+#: the right, with the neck rising to the right.
+#:
+#: This is not a taste decision. It is what the camera in this rig actually sees, measured
+#: from all 384 labelled frames in dataset/labels.json, which agree unanimously: fret 12
+#: left of the nut, nut higher in the image, and the high E string along the BOTTOM edge.
+#: See test_the_backdrop_matches_the_real_capture_geometry.
+#:
+#: Nothing downstream may assume an orientation -- the pose is a full homography and the
+#: overlay is derived from it. If changing this breaks anything but a screenshot, that
+#: thing had an orientation baked into it and the bug is there, not here.
+NECK_ANGLE_DEG = 163.0
+
 
 @dataclass(frozen=True)
 class FramePacket:
@@ -187,10 +201,15 @@ def synthetic_pose(t: float, width: int, height: int, max_fret: int = 12) -> np.
     also guarantees the transform is genuinely projective rather than an affine special
     case, which would quietly hide a whole class of homography bug.
     """
-    cx, cy = width * 0.5, height * 0.52
-    ang = math.radians(-17.0 + 5.0 * math.sin(t * 0.9))
+    cx, cy = width * 0.5, height * 0.5
+    ang = math.radians(NECK_ANGLE_DEG + 5.0 * math.sin(t * 0.9))
     ex = np.array([math.cos(ang), math.sin(ang)])  # along the neck, nut -> fret 12
-    ey = np.array([-math.sin(ang), math.cos(ang)])  # across the neck
+    # Across the neck, pointing from string 6 (low E) to string 1 (high E), i.e. v=0 -> v=1.
+    # Negated relative to the usual perpendicular so that the high E ends up on the lower
+    # edge of the image, which is where the real camera puts it -- the neck direction and
+    # the string direction are independent, and rotating the board without also fixing this
+    # yields a neck that lies correctly with its strings upside down.
+    ey = -np.array([-math.sin(ang), math.cos(ang)])
     length = width * 0.74 * (1.0 + 0.03 * math.sin(t * 0.62))
     w_nut = length / 8.6
     # Only a mild taper. The neck really is wider at fret 12 and the camera really does

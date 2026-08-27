@@ -60,6 +60,32 @@ def test_the_synthetic_pose_actually_moves():
     assert np.linalg.norm(a - b) > 5.0, "the board barely moved over 30 frames"
 
 
+@pytest.mark.parametrize("t", [0.0, 3.7, 9.1, 16.4])
+def test_the_backdrop_matches_the_real_capture_geometry(t):
+    """The synthetic board must lie the way the real camera sees the real guitar.
+
+    Measured from all 384 labelled frames in dataset/labels.json, which agree unanimously:
+    fret 12 is left of the nut, the nut sits higher in the image, and the high E string
+    runs along the *bottom* edge. Those three facts are asserted rather than the dataset
+    loaded, because dataset/frames/ is gitignored and a test needing it would skip.
+
+    Worth pinning, because two of the three are independent and it is easy to fix one and
+    break the other: the neck direction and the string direction are separate axes, and
+    rotating the board 180 degrees flips both. A neck lying correctly with its strings
+    upside down looks entirely plausible until you try to read a chord off it -- and it
+    would quietly invert the meaning of every screenshot used to judge the overlay.
+    """
+    H = synthetic_pose(t, 1280, 720)
+    nut = apply_homography(H, UV(0.0, 0.5))[0]
+    f12 = apply_homography(H, UV(fret_u(12), 0.5))[0]
+    low_e = apply_homography(H, UV(0.25, 0.0))[0]  # string 6
+    high_e = apply_homography(H, UV(0.25, 1.0))[0]  # string 1
+
+    assert f12[0] < nut[0], "fret 12 should be left of the nut"
+    assert nut[1] < f12[1], "the neck should rise towards the nut"
+    assert high_e[1] > low_e[1], "the high E should run along the bottom edge"
+
+
 def test_the_synthetic_pose_is_genuinely_projective():
     """Not an affine special case.
 
