@@ -1,0 +1,8 @@
+# Training dependencies for the NVIDIA box. torch is NOT here: it must come from
+# PyTorch's CUDA index, which setup.bat does first. Installing torch from plain PyPI on
+# Windows silently gives you the CPU-only build, which trains ~15x slower and is the
+# single easiest mistake to make here.
+numpy>=2.0
+opencv-contrib-python>=4.10
+onnx>=1.17
+pytest>=8.0
