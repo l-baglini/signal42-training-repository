@@ -8,6 +8,8 @@ on top of them is testable here rather than only on a guitar.
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -20,6 +22,7 @@ from fretguide.source import (
     ReplaySource,
     SyntheticSource,
     draw_synthetic_board,
+    open_source,
     synthetic_pose,
 )
 from fretguide.types import UV
@@ -261,3 +264,81 @@ def test_greyscale_and_colour_agree_on_luminance():
     a = SyntheticSource(width=320, height=180, fps=None).read()
     b = SyntheticSource(width=320, height=180, fps=None, colour=True).read()
     assert np.array_equal(a.gray, b.gray)
+
+
+# --------------------------------------------------------------------------- #
+# open_source dispatch, and the BGR composite the OpenCV app draws on
+# --------------------------------------------------------------------------- #
+
+
+def test_open_source_builds_a_synthetic_source_from_a_bare_name():
+    src = open_source("synthetic", width=320, height=180, fps=None)
+    assert isinstance(src, SyntheticSource)
+    assert src.max_fret == 12
+
+
+def test_open_source_ignores_arguments_a_source_does_not_take():
+    """Every tool passes the union of all sources' options and lets this sort it out.
+
+    Without the filtering, adding an option for one source would break the call for all
+    the others — and the failure would be a TypeError at startup on somebody else's
+    machine, since two of the four sources cannot be constructed on this one.
+    """
+    src = open_source("synthetic", width=320, height=180, fps=None,
+                      model_path="nonexistent.xml", infer_device="NPU",
+                      enrollment="nope.npz", match_width=99, device=4)
+    assert isinstance(src, SyntheticSource)
+
+
+def test_open_source_replay(tmp_path):
+    frames, labels, _ = _write_fake_dataset(tmp_path, n=2)
+    src = open_source("replay", frames_dir=frames, labels_path=labels, fps=None)
+    assert isinstance(src, ReplaySource)
+
+
+def test_hardware_free_sources_do_not_drag_in_openvino_or_qt():
+    """The point of the synthetic source is that it runs anywhere.
+
+    CameraSource defers its openvino import and the shell defers Qt; if either leaked to
+    module scope, `--source synthetic` would start failing on exactly the machines it
+    exists to serve, and only there.
+    """
+    import subprocess
+
+    code = (
+        "import sys; from fretguide.source import open_source;"
+        "open_source('synthetic', width=64, height=64, fps=None).read();"
+        "bad = [m for m in ('openvino', 'torch', 'PySide6') if m in sys.modules];"
+        "print(','.join(bad))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                         cwd=Path(__file__).resolve().parent.parent)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "", f"synthetic source imported {out.stdout.strip()}"
+
+
+def test_to_bgr_widens_greyscale_without_tinting_it():
+    packet = SyntheticSource(width=320, height=180, fps=None).read()
+    bgr = packet.to_bgr()
+    assert bgr.shape == (180, 320, 3)
+    assert np.array_equal(bgr[..., 0], bgr[..., 1]) and np.array_equal(bgr[..., 1], bgr[..., 2])
+
+
+def test_to_bgr_puts_the_colour_back_where_it_belongs():
+    """Board warm, room cool — the same assertion pair as the chroma test, one stage later.
+
+    Checking only that the image is 'in colour' would pass with the planes swapped; the
+    board and the room must disagree in the right direction.
+    """
+    from fretguide.geometry import apply_homography, fret_centre_u
+
+    packet = SyntheticSource(width=640, height=360, fps=None, colour=True).read()
+    bgr = packet.to_bgr()
+    assert bgr.shape == (360, 640, 3)
+
+    x, y = apply_homography(packet.H, UV(fret_centre_u(6), 0.5))[0]
+    b, g, r = bgr[int(y), int(x)]
+    assert int(r) > int(b) + 20, f"the board is not warm in BGR: rgb({r},{g},{b})"
+
+    b, g, r = bgr[8, 8]  # a corner of the room, well clear of the neck
+    assert int(b) > int(r), f"the room is not cool in BGR: rgb({r},{g},{b})"

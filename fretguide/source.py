@@ -5,13 +5,14 @@ Everything downstream of this module -- the OpenCV app, and the native shell in
 produced. Three producers exist, and the reason there is more than one is that only one
 of them needs hardware:
 
-===================  ==================================  ==============================
-source               frames                              pose
-===================  ==================================  ==============================
-:class:`CameraSource`  V4L2, live                        the trained model
-:class:`ReplaySource`  ``dataset/frames/*.png``          the labels -- exact
-:class:`SyntheticSource`  drawn procedurally             the matrix it was drawn from
-===================  ==================================  ==============================
+========================  ==========================  =============================
+source                    frames                      pose
+========================  ==========================  =============================
+:class:`CameraSource`     V4L2, live                  the trained model
+:class:`EnrollmentSource` V4L2, live                  match to a reference photo
+:class:`ReplaySource`     ``dataset/frames/*.png``    the labels -- exact
+:class:`SyntheticSource`  drawn procedurally          the matrix it was drawn from
+========================  ==========================  =============================
 
 The last two matter more than they look. A pose that is exact *by construction* means any
 misplaced dot is unambiguously the renderer's fault, which turns "is the model wrong or is
@@ -30,6 +31,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -88,6 +90,20 @@ class FramePacket:
     def colour(self) -> bool:
         return self.u is not None and self.v is not None
 
+    def to_bgr(self) -> np.ndarray:
+        """A BGR image for the OpenCV app to draw on. Greyscale sources widen to grey.
+
+        Repacks the planes into an I420 buffer and lets OpenCV convert, rather than doing
+        the matrix in numpy: same result, and it takes the library's optimised path
+        instead of allocating three float arrays per frame. The native shell does not use
+        this at all -- there the conversion happens on the GPU for free (shell/shaders.py).
+        """
+        if not self.colour:
+            return cv2.cvtColor(self.gray, cv2.COLOR_GRAY2BGR)
+        h, w = self.gray.shape[:2]
+        buf = np.concatenate([self.gray.reshape(-1), self.u.reshape(-1), self.v.reshape(-1)])
+        return cv2.cvtColor(buf.reshape(h * 3 // 2, w), cv2.COLOR_YUV2BGR_I420)
+
 
 @runtime_checkable
 class FrameSource(Protocol):
@@ -96,8 +112,19 @@ class FrameSource(Protocol):
     width: int
     height: int
 
+    #: Highest fret the source poses. The overlay clamps generated content to it.
+    max_fret: int
+
     def read(self) -> FramePacket | None:
         """Next packet, or None when the source is exhausted or the camera failed."""
+        ...
+
+    def reset(self) -> None:
+        """Drop any temporal state. Bound to `r` in the app, for when smoothing lags."""
+        ...
+
+    def summary(self) -> str:
+        """One line for the end of a run. Empty when there is nothing worth saying."""
         ...
 
     def close(self) -> None: ...
@@ -181,6 +208,12 @@ class ReplaySource:
         return FramePacket(gray=gray, t=time.monotonic(), index=self._i - 1,
                            H=lf.H, status=status)
 
+    def reset(self) -> None:
+        pass  # replay has no temporal state; the pose comes from the labels
+
+    def summary(self) -> str:
+        return f"replayed {self._i} of {len(self.frames)} labelled frames"
+
     def close(self) -> None:
         pass
 
@@ -235,6 +268,32 @@ def synthetic_pose(t: float, width: int, height: int, max_fret: int = 12) -> np.
     return solve_homography(corners_uv(max_fret), [Point(*p) for p in dst])
 
 
+@lru_cache(maxsize=4)
+def _backdrop(width: int, height: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """The parts of the picture that do not depend on the pose. Built once per size.
+
+    Room lighting, vignette, sensor noise and wood grain are all fixed in image space --
+    only the *board* moves through them. Regenerating them every frame cost 74 ms at 1080p
+    and capped the synthetic source at 13 fps, which made the one mode that needs no
+    hardware the slowest one in the app.
+
+    Returns (room, board_texture): two full-resolution images, of which each frame takes
+    the room and stamps the board through a mask.
+    """
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    # Uneven room light: a soft diagonal gradient plus a vignette.
+    room = 46 + 26 * (xx / width) + 14 * (yy / height)
+    r = np.hypot((xx - width / 2) / (width / 2), (yy - height / 2) / (height / 2))
+    room *= np.clip(1.15 - 0.42 * r, 0.35, 1.0)
+    room = np.clip(room + rng.normal(0, 3.0, (height, width)), 0, 255).astype(np.uint8)
+
+    # Rosewood grain, running along the neck rather than across it.
+    grain = cv2.GaussianBlur(rng.normal(0, 26, (height, width)).astype(np.float32), (1, 31), 0)
+    board = np.clip(96 + grain, 30, 200).astype(np.uint8)
+    return room, board
+
+
 def draw_synthetic_board(H: np.ndarray, width: int, height: int, max_fret: int = 12,
                          seed: int = 7) -> np.ndarray:
     """Draw a fretboard-like greyscale image for the pose ``H``.
@@ -246,22 +305,13 @@ def draw_synthetic_board(H: np.ndarray, width: int, height: int, max_fret: int =
 
     Never feed this to the model or to training. It is a backdrop, not data.
     """
-    rng = np.random.default_rng(seed)
-    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
-    # Uneven room light: a soft diagonal gradient plus a vignette.
-    bg = 46 + 26 * (xx / width) + 14 * (yy / height)
-    r = np.hypot((xx - width / 2) / (width / 2), (yy - height / 2) / (height / 2))
-    bg *= np.clip(1.15 - 0.42 * r, 0.35, 1.0)
-    img = np.clip(bg + rng.normal(0, 3.0, (height, width)), 0, 255).astype(np.uint8)
-
+    room, texture = _backdrop(width, height, seed)
+    img = room.copy()
     quad = np.array([[p.x, p.y] for p in
                      [_pt(H, uv) for uv in corners_uv(max_fret)]], dtype=np.int32)
-    cv2.fillConvexPoly(img, quad, 96, cv2.LINE_AA)
-    # Rosewood-ish grain, running along the neck rather than across it.
-    board = np.zeros((height, width), np.uint8)
-    cv2.fillConvexPoly(board, quad, 255)
-    grain = cv2.GaussianBlur(rng.normal(0, 26, (height, width)).astype(np.float32), (1, 31), 0)
-    img = np.where(board > 0, np.clip(img.astype(np.float32) + grain, 30, 200), img).astype(np.uint8)
+    mask = np.zeros((height, width), np.uint8)
+    cv2.fillConvexPoly(mask, quad, 255, cv2.LINE_AA)
+    cv2.copyTo(texture, mask, img)
 
     for f in INLAY_FRETS:  # inlays sit mid-space, not on the wire
         umid = (fret_u(f - 1) + fret_u(f)) / 2
@@ -366,6 +416,12 @@ class SyntheticSource:
         return FramePacket(gray=gray, t=time.monotonic(), index=i, H=H, status=status,
                            u=chroma[0], v=chroma[1])
 
+    def reset(self) -> None:
+        pass  # the pose is a closed form of t; there is nothing to unstick
+
+    def summary(self) -> str:
+        return f"drew {self._i} synthetic frames"
+
     def close(self) -> None:
         pass
 
@@ -395,7 +451,7 @@ class CameraSource:
                                             max_fret=max_fret, min_conf=min_conf,
                                             smooth=smooth)
         self.max_fret = max_fret
-        self._i = 0
+        self._i = self._posed = 0
 
     def read(self) -> FramePacket | None:
         f = self.cam.read()
@@ -405,6 +461,7 @@ class CameraSource:
         # pose and the pixels are bound together before anything else can see either.
         p = self.model(f.gray, f.t)
         self._i += 1
+        self._posed += p.H is not None
         n_kp = 2 * (self.max_fret + 1)
         status = TrackerStatus(
             locked=p.H is not None, inliers=p.n_keypoints, spread=p.mean_conf,
@@ -415,6 +472,62 @@ class CameraSource:
         return FramePacket(gray=f.gray, t=f.t, index=f.index, H=p.H, status=status,
                            u=f.u, v=f.v,
                            debug_pts=p.pts[p.conf >= self.model.min_conf])
+
+    def reset(self) -> None:
+        self.model.reset()
+
+    def summary(self) -> str:
+        if not self._i:
+            return ""
+        return (f"posed {self._posed}/{self._i} frames "
+                f"({self._posed / self._i * 100:.0f}%)")
+
+    def close(self) -> None:
+        self.cam.close()
+
+
+class EnrollmentSource:
+    """Live capture posed by the older match-to-reference tracker.
+
+    Kept as the comparison baseline it was built to be: it needs no trained model, so it
+    still answers "is the model helping?" -- but it must be re-enrolled whenever the camera
+    moves or the light changes, which is the per-session ritual PRD-v2 V6 exists to
+    abolish. Not the recommended path.
+    """
+
+    def __init__(self, device: int | str = 0, width: int = 1920, height: int = 1080,
+                 enrollment: str = "enrollment.npz", match_width: int = 1280,
+                 rematch_ms: float = 150.0, smooth: bool = True,
+                 colour: bool = False) -> None:
+        from .capture import Camera
+        from .tracker import Enrollment, FretboardTracker, TrackerConfig
+
+        enr = Enrollment.load(enrollment)
+        self.cam = Camera(device, width, height, colour=colour)
+        self.width, self.height = self.cam.width, self.cam.height
+        self.max_fret = enr.max_fret
+        self.n_features = len(enr.kp_xy)
+        self._t = FretboardTracker(enr, TrackerConfig(
+            match_width=match_width, rematch_interval=rematch_ms / 1000.0, smooth=smooth))
+
+    def read(self) -> FramePacket | None:
+        f = self.cam.read()
+        if f is None:
+            return None
+        H, status = self._t.update(f.gray, f.t)
+        status.fields = dict(status.fields or {})
+        status.fields.update({"sift": f"{self._t.last_match_ms:.0f}ms",
+                              "lk": f"{self._t.last_lk_ms:.1f}ms"})
+        pts = self._t.last_inlier_pts
+        return FramePacket(gray=f.gray, t=f.t, index=f.index, H=H, status=status,
+                           u=f.u, v=f.v,
+                           debug_pts=pts if pts is not None else np.zeros((0, 2)))
+
+    def reset(self) -> None:
+        self._t.reset()
+
+    def summary(self) -> str:
+        return f"re-anchors {self._t.n_matches}, LK propagations {self._t.n_lk}"
 
     def close(self) -> None:
         self.cam.close()
@@ -433,7 +546,15 @@ def open_source(spec: str, **kw) -> FrameSource:
         return ReplaySource(**{k: v for k, v in kw.items()
                                if k in ("frames_dir", "labels_path", "max_fret", "fps",
                                         "loop")})
-    return CameraSource(device=spec, **{k: v for k, v in kw.items()
-                                        if k in ("width", "height", "model_path",
-                                                 "infer_device", "max_fret", "min_conf",
-                                                 "smooth", "colour")})
+    if spec == "enrollment":
+        return EnrollmentSource(**{k: v for k, v in kw.items()
+                                   if k in ("device", "width", "height", "enrollment",
+                                            "match_width", "rematch_ms", "smooth",
+                                            "colour")})
+    # Anything else is a camera device: "model", or a bare device number so that
+    # `--source 4` keeps working.
+    device = kw.get("device", 0) if spec == "model" else spec
+    return CameraSource(device=device, **{k: v for k, v in kw.items()
+                                          if k in ("width", "height", "model_path",
+                                                   "infer_device", "max_fret", "min_conf",
+                                                   "smooth", "colour")})

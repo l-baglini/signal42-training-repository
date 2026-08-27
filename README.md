@@ -12,8 +12,15 @@ Runs entirely on a laptop. No network calls, no accounts, no cloud, no
 telemetry. Inference is on the Intel iGPU via OpenVINO.
 
 ```bash
-.venv/bin/python tools/run_app.py -d 4
+.venv/bin/python tools/run_app.py -d 4     # your camera
+.venv/bin/python tools/run_app.py          # no camera? a synthetic neck, same app
 ```
+
+The second command is not a demo mode. It is the whole app — chords, scales, the
+grid, the trust gate — driven by a fretboard drawn from a known matrix instead of
+a camera. Nothing to install, nothing to train, nothing to plug in. Because the
+pose is exact by construction, a dot in the wrong place there is the renderer's
+fault and nothing else's.
 
 Full setup and hotkeys: **[QUICKSTART.md](QUICKSTART.md)**.
 
@@ -102,7 +109,7 @@ per-module conventions.
 | [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 248 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 258 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -122,7 +129,7 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-248 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
+258 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.

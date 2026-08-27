@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 248 tests
+.venv/bin/python -m pytest tests/ -q      # 258 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -89,7 +89,7 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 |---|---|
 | `fretguide/` | The package. Flat layout on purpose — see the comment in `pyproject.toml`. |
 | `tools/` | CLI entry points. They `sys.path.insert` the repo root deliberately, so they run inside the Windows training bundle where nothing is pip-installed. Don't "clean that up". |
-| `fretguide/source.py` | Frame sources. `SyntheticSource` needs no camera, no model and no dataset — it is how the overlay and the shell get developed and tested here. |
+| `fretguide/source.py` | Frame sources — the one abstraction both apps consume. `SyntheticSource` needs no camera, no model and no dataset; it is how the overlay gets developed and tested here. Its backdrop is cached per size, so don't reintroduce per-frame full-resolution numpy: that cost 74 ms/frame and capped the mode at 13 fps. |
 | `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
 | `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |
 | `tools/probe_gl.py` | The GL gate. Anything touching the shader, the textures or the viewport: run this, it exits non-zero. It is not in pytest because that would mean a test that skips itself without a GL context. |
@@ -121,7 +121,8 @@ it consumes the selected target plus an audio stream and touches neither the
 tracker nor the renderer.
 
 The UI is still an OpenCV window with keyboard hotkeys — `tools/run_app.py` is
-what you use. The native PySide6 shell replacing it is planned in
+what you use, and it now runs with **no camera at all** (`--source synthetic`),
+which is the fastest way to see any overlay change. The native PySide6 shell replacing it is planned in
 [docs/PLAN-shell.md](docs/PLAN-shell.md): **P0–P2 are done** (GL gate, frame
 sources and the render parity harness, and the colour video surface), P3 onward
 is not. `tools/run_shell.py` runs, but draws no overlay yet — porting

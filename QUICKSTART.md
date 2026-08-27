@@ -52,7 +52,21 @@ It reports real resolution, measured framerate, sharpness and exposure, with a v
 each. Known-good numbers from this rig: **30.0 fps, jitter 1.12, sharpness 260,
 brightness 96/255**.
 
-## Run
+## Run without any hardware
+
+```bash
+.venv/bin/python tools/run_app.py
+```
+
+The full app against a synthetic fretboard: no camera, no trained model, no
+dataset, no scrcpy. Every key below works. The pose is exact by construction, so
+this is also the right place to judge the overlay itself — if a dot looks wrong
+here, it *is* wrong, and the tracker is not involved.
+
+Add `--refuse-every 40` to watch the `NO LOCK` state, or `--source replay` to
+play back the labelled dataset instead.
+
+## Run on the camera
 
 ```bash
 .venv/bin/python tools/run_app.py -d 4
@@ -71,6 +85,7 @@ down and pick it up again — there is no lock to lose. Needs `models/fretnet.xm
 | `g` | toggle the fret/string grid |
 | `f` | toggle finger numbers |
 | `m` | mirror the view |
+| `c` | toggle colour |
 | `d` | debug: predicted keypoints and board outline |
 | `SPACE` | freeze / unfreeze |
 | `r` | reset temporal smoothing |
@@ -82,7 +97,7 @@ Still there, and still needs a reference photo and four clicks:
 
 ```bash
 .venv/bin/python tools/enroll.py -d 4 --out enrollment.npz
-.venv/bin/python tools/run_app.py -d 4 --backend enrollment
+.venv/bin/python tools/run_app.py -d 4 --source enrollment
 ```
 
 Enrolment matches each frame against that one photo, so it must be redone whenever the
@@ -135,7 +150,7 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 248 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 258 tests, no camera or GPU needed
 ```
 
 ## Layout
