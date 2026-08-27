@@ -12,10 +12,10 @@ it.
 
 ## Why it was abandoned
 
-The overlay slid off the fretboard as soon as the guitar moved, and the last
-commits here ([`v1: last attempt at rescuing marker
-tracking`](../../../)) are instrumentation trying to see why. Panel telemetry
-was the wrong tool; the failure was in the approach.
+The overlay slid off the fretboard as soon as the guitar moved. The last commit
+against this code — *"v1: last attempt at rescuing marker tracking"* — is
+instrumentation trying to see why. Panel telemetry was the wrong tool; the
+failure was in the approach.
 
 [`docs/research/00-diagnosis.md`](../../research/00-diagnosis.md) reproduced it
 in simulation and named the cause: **four coplanar marker corners are the worst
