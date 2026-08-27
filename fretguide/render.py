@@ -180,3 +180,66 @@ def draw_debug(img: np.ndarray, H: np.ndarray, max_fret: int,
     if inlier_pts is not None:
         for p in inlier_pts.astype(int):
             cv2.circle(img, tuple(p), 2, (120, 255, 120), -1, cv2.LINE_AA)
+
+
+# --------------------------------------------------------------------------- #
+# The practice menu
+# --------------------------------------------------------------------------- #
+
+COL_PANEL = (26, 22, 20)
+#: Amber. Deliberately not COL_NOTE or COL_ROOT: a highlight the same colour as the dots
+#: on the fretboard reads as content rather than as chrome, and the first version of this
+#: menu picked a blue indistinguishable from the notes it was selecting.
+COL_ROW_ACTIVE = (50, 165, 245)
+COL_ROW_CURRENT = (70, 62, 52)
+COL_HEADING = (140, 140, 140)
+COL_TEXT = (235, 235, 235)
+
+
+def draw_menu(img: np.ndarray, menu, layout) -> None:
+    """Draw the two-column practice menu over the video.
+
+    Everything about *what* is on screen comes from ``menu``; this only paints it. The
+    same object drives the native shell, which is why none of the structure lives here.
+
+    The panel is drawn translucent rather than solid: it covers part of the fretboard, and
+    being able to see the neck through it is worth more than a crisp background — you are
+    choosing what to play on the instrument you are looking at.
+    """
+    bx, by, bw, bh = layout.panel_rect(menu)
+    h, w = img.shape[:2]
+    bx, by = max(0, bx), max(0, by)
+    bw, bh = min(bw, w - bx), min(bh, h - by)
+    if bw <= 0 or bh <= 0:
+        return
+
+    panel = img[by:by + bh, bx:bx + bw]
+    # 0.62 rather than something solid. The neck is a long diagonal and the panel is tall,
+    # so on a 16:9 frame it will cover part of the board whichever side it takes -- being
+    # able to read the notes through it is worth more than a crisp background. The text
+    # carries its own halo (see _halo_text), so legibility does not depend on this.
+    cv2.addWeighted(np.full_like(panel, COL_PANEL, dtype=np.uint8), 0.62, panel, 0.38, 0,
+                    dst=panel)
+    cv2.rectangle(img, (bx, by), (bx + bw - 1, by + bh - 1), (90, 80, 70), 1, cv2.LINE_AA)
+
+    scale = max(0.4, layout.row_h / 30 * 0.52)
+    for column, rows in ((0, menu.left), (1, menu.right)):
+        for index, row in enumerate(rows):
+            x, y, rw, rh = layout.row_rect(column, index)
+            if y + rh > by + bh:
+                break
+            focused = menu.column == column
+            at = index == (menu.left_index if column == 0 else menu.right_index)
+            if at and row.selection is not None or (column == 0 and at):
+                # Solid where the focus is, dimmer where it is not: with two columns you
+                # must be able to see which one the arrow keys are about to move.
+                colour = COL_ROW_ACTIVE if focused else COL_ROW_CURRENT
+                cv2.rectangle(img, (x, y), (x + rw - 2, y + rh - 2), colour, -1)
+
+            if row.heading:
+                _halo_text(img, row.label.upper(), (x + 10, y + int(rh * 0.7)),
+                           scale=scale * 0.8, colour=COL_HEADING)
+            else:
+                on = at and (row.selection is not None or column == 0)
+                _halo_text(img, row.label, (x + 10, y + int(rh * 0.7)), scale=scale,
+                           colour=COL_OUTLINE if (on and focused) else COL_TEXT)

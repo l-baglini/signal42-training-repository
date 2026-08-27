@@ -33,8 +33,11 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root
 
+
 from fretguide import render
 from fretguide.content import CHORD_IDS, SCALE_IDS, resolve_selection
+from fretguide.geometry import grid_lines
+from fretguide.menu import Layout, Menu, preferred_anchor
 from fretguide.source import open_source
 from fretguide.types import Selection
 
@@ -52,6 +55,8 @@ def main() -> int:
     ap.add_argument("--size", default="1280x720", help="synthetic source only")
     ap.add_argument("--out", default="diagnostics/overlay.png")
     ap.add_argument("--no-grid", action="store_true")
+    ap.add_argument("--menu", action="store_true",
+                    help="draw the practice menu too, opened on the current selection")
     ap.add_argument("--refuse-every", type=int, default=0,
                     help="synthetic: periodically refuse the pose, to see the NO LOCK state")
     args = ap.parse_args()
@@ -76,6 +81,13 @@ def main() -> int:
         print(f"unknown selection {sel.id!r}")
         return 2
 
+    menu = Menu()
+    if args.menu:
+        menu.open = True
+        menu.focus(1)
+        if not menu.sync_to(sel):
+            print(f"note: {sel.id!r} is not in the menu catalogue; showing it from the top")
+
     for _ in range(args.skip):
         if src.read() is None:
             print("source exhausted while skipping")
@@ -97,6 +109,14 @@ def main() -> int:
             render.dim(view, 0.5)
         render.draw_hud(view, packet.status, resolved.name, 0.0,
                         extra=f"#{packet.index} {args.source}")
+        if args.menu:
+            pts = None
+            if packet.H is not None:
+                pts = np.array([[q.x, q.y]
+                                for line in grid_lines(packet.H, 12) for q in line])
+            h, w = packet.gray.shape[:2]
+            render.draw_menu(view, menu,
+                             Layout.for_frame(w, h, preferred_anchor(pts, w, h, menu)))
         strip.append(view)
     src.close()
 

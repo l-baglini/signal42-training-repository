@@ -25,6 +25,7 @@ Sources (``--source``, default ``auto``):
               does, else synthetic -- so this always starts, whatever the machine has.
 
 Keys
+  TAB       open/close the practice menu (arrows or mouse; Esc or Tab to close)
   1..7      chords: G Am Bm C D Em F#dim
   s         cycle curated scale boxes
   a         cycle generated scales (any root, whole neck)
@@ -58,8 +59,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root, so
 
 from fretguide import render
 from fretguide.content import CHORD_IDS, SCALE_IDS, resolve_selection
+from fretguide.geometry import grid_lines
+from fretguide.menu import Layout, Menu, preferred_anchor
 from fretguide.source import open_source
 from fretguide.types import Selection
+
+# X11 keysyms, which is what cv2.waitKeyEx reports on the Qt backend this ships with.
+# waitKey (no Ex) collapses all four to 0, so arrow keys are unusable without it.
+ARROWS = {65361: "left", 65362: "up", 65363: "right", 65364: "down",
+          2424832: "left", 2490368: "up", 2555904: "right", 2621440: "down"}
 
 GENERATED = [
     "G major", "E minor", "A minor pentatonic", "E minor pentatonic",
@@ -160,6 +168,30 @@ def main() -> int:
         cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
         cv2.resizeWindow(win, args.display_width,
                          int(args.display_width * src.height / src.width))
+    menu = Menu()
+    menu.sync_to(sel)
+    layout = Layout.for_frame(src.width, src.height)
+    click: list[tuple[int, int]] = []
+
+    def place_menu(H) -> Layout:
+        """Anchor the panel to whichever side hides less of the neck."""
+        points = None
+        if H is not None:
+            # The whole fret grid, not just the four corners: the panel can clear every
+            # corner and still sit over the middle of the neck.
+            points = np.array([[p.x, p.y] for line in grid_lines(H, max_fret) for p in line])
+        return Layout.for_frame(src.width, src.height,
+                                preferred_anchor(points, src.width, src.height, menu))
+
+    def on_mouse(event, x, y, flags, _param) -> None:
+        # Only record the click here. Acting on it from the callback would mutate the
+        # menu from OpenCV's UI thread while the draw loop is reading it.
+        if event == cv2.EVENT_LBUTTONDOWN:
+            click.append((x, y))
+
+    if not args.headless:
+        cv2.setMouseCallback(win, on_mouse)
+
     shown = 0
     try:
         while True:
@@ -198,6 +230,8 @@ def main() -> int:
             if abs(dot_scale - 1.0) > 1e-6:
                 tail += f"  dots x{dot_scale:.1f}"
             render.draw_hud(view, packet.status, name, fps, extra=tail)
+            if menu.open:
+                render.draw_menu(view, menu, layout)
             if mirror:
                 view = cv2.flip(view, 1)
 
@@ -207,8 +241,38 @@ def main() -> int:
             if args.headless:
                 continue
             cv2.imshow(win, view)
-            k = cv2.waitKey(1) & 0xFF
-            if k in (27, ord("q")):
+
+            while click:
+                cx, cy = click.pop(0)
+                if mirror:
+                    cx = src.width - cx  # the frame was flipped after the menu was drawn
+                if not menu.open:
+                    continue
+                spot = layout.hit(cx, cy, menu)
+                if spot is None:
+                    menu.open = False  # clicking the video dismisses the menu
+                elif menu.click(*spot) and (chosen := menu.selection()):
+                    sel = chosen
+
+            key = cv2.waitKeyEx(1)
+            if (arrow := ARROWS.get(key)) and menu.open:
+                if arrow in ("up", "down"):
+                    menu.move(-1 if arrow == "up" else 1)
+                else:
+                    menu.focus(0 if arrow == "left" else 1)
+                if (chosen := menu.selection()):
+                    sel = chosen
+                continue
+
+            k = key & 0xFF if key != -1 else 255
+            if k == 9:  # Tab
+                menu.toggle()
+                if menu.open:
+                    menu.sync_to(sel)  # open showing where you already are
+                    layout = place_menu(packet.H)
+            elif k == 27 and menu.open:
+                menu.open = False
+            elif k in (27, ord("q")):
                 break
             elif ord("1") <= k <= ord("7"):
                 sel = Selection("chord", CHORD_IDS[k - ord("1")])
@@ -236,6 +300,8 @@ def main() -> int:
                 frozen = not frozen
             elif k == ord("r"):
                 src.reset()
+            if menu.open:
+                menu.sync_to(sel)  # a hotkey may have moved the selection behind its back
     except KeyboardInterrupt:
         # Ctrl-C is a normal way to stop this, especially when it is driving a synthetic
         # source from a terminal. Without this the summary below is skipped and the user

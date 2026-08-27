@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 258 tests
+.venv/bin/python -m pytest tests/ -q      # 281 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -91,6 +91,7 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 | `tools/` | CLI entry points. They `sys.path.insert` the repo root deliberately, so they run inside the Windows training bundle where nothing is pip-installed. Don't "clean that up". |
 | `fretguide/source.py` | Frame sources — the one abstraction both apps consume. `SyntheticSource` needs no camera, no model and no dataset; it is how the overlay gets developed and tested here. Its backdrop is cached per size, so don't reintroduce per-frame full-resolution numpy: that cost 74 ms/frame and capped the mode at 13 fps. |
 | `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
+| `fretguide/menu.py` | The practice catalogue and cursor state. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. |
 | `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |
 | `tools/probe_gl.py` | The GL gate. Anything touching the shader, the textures or the viewport: run this, it exits non-zero. It is not in pytest because that would mean a test that skips itself without a GL context. |
 | `dataset/labels.json` | **Hand-clicked and irreplaceable.** `dataset/frames/` is gitignored and regenerable; the labels are not. Never rewrite this programmatically without being asked. |

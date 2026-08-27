@@ -79,6 +79,7 @@ down and pick it up again — there is no lock to lose. Needs `models/fretnet.xm
 
 | Key | Action |
 |---|---|
+| `TAB` | open/close the practice menu |
 | `1`–`7` | chords: G, Am, Bm, C, D, Em, F#dim |
 | `s` | cycle curated scale boxes |
 | `a` | cycle generated scales (any root, whole neck) |
@@ -90,6 +91,23 @@ down and pick it up again — there is no lock to lose. Needs `models/fretnet.xm
 | `SPACE` | freeze / unfreeze |
 | `r` | reset temporal smoothing |
 | `q` / `ESC` | quit |
+
+### Choosing what to practise
+
+Press `TAB`. Two columns: **Chords** and the twelve keys on the left, and on the
+right whatever that choice holds — the seven modes, both pentatonics, blues and
+harmonic minor, grouped and labelled. 139 things to practise, from 7 curated
+chord voicings and every scale type in every key.
+
+Arrow keys move, ←/→ switch column, mouse works throughout, `Esc` or `TAB`
+closes, and clicking the video dismisses it. **The selection applies as you
+move**, so the neck in front of you updates while you scroll — there is nothing
+to confirm. The panel takes whichever side of the frame hides less of the
+fretboard.
+
+The modes are listed in derivation order (Ionian → Locrian), not alphabetically:
+that order *is* the relationship between them, and Ionian and Aeolian are
+labelled "(major)" and "(minor)" because they are the two you already know.
 
 ### The older enrolment backend
 
