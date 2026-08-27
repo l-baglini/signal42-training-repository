@@ -82,12 +82,43 @@ There are no pixels below the renderer. Fields carry their unit in the name
   room scan actually finds the chair is unverified and belongs to a human with a
   real room and a real key.
 
-## State
+## State — resume here
 
-Done: types, boundary validator, the visibility solver, five reject reasons, the
-level generator with typed refusal, and invariants I1–I6, I8, I9 under test.
+`npm test` is green at 200 tests and `npx tsc --noEmit` is clean. Commits are
+small and each one leaves the suite green, so `git log --oneline` is a reliable
+account of what exists.
 
-Not done: I7 (the dodge solver and its latency guard), I10 (the renderer and the
-off-axis projection — a working prototype exists, see DEVLOG), head tracking,
-the live depth scan, the semantic scan, the playable loop. SPEC §14 has the
-order, and the cut order is bottom-up.
+**Done, under test:** types; the boundary validator; the visibility solver
+(`V(t)`, footprints, five reject reasons, level generation with typed refusal);
+the dodge solver and its spawn gate; the off-axis projection. **All ten
+invariants of SPEC §6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
+and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
+`tests/projection.test.ts`.
+
+**Next, in order — this is SPEC §14 and the cut order is bottom-up:**
+
+1. **The WebGL renderer.** `src/render/projection.ts` is done and tested; what is
+   missing is the GL layer that draws billboards through it. Port it from
+   `prototype/headtracked-parallax.html`, which already does exactly this in
+   plain WebGL2 — the shaders, the relief mesh and the debug toggle are all
+   there and validated on real hardware. Keep the toggle.
+2. **Head tracking** (`src/perceive/`). Also in the prototype: MediaPipe iris
+   landmarks, the inter-pupillary metric estimate, EMA plus forward prediction.
+   What the prototype does *not* do and the game needs: the ten-second
+   calibration that produces an `Envelope` — the sample cloud, `rest`, the 95th
+   percentile of speed, the jitter and the measured latency. Pin
+   `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM fileset to the same
+   version (SPEC §7.6).
+3. **The playable loop** — waves, score, ninety seconds, the refusal screen. The
+   engine already returns everything this needs.
+   *Everything above this line is the minimum defensible build.*
+4. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
+   of it: there are three non-obvious constraints there, and two of them are
+   corrections to an earlier draft that told the implementation to do the wrong
+   thing.
+5. **The semantic scan** — one vision call per room, plus the cost panel.
+6. *(optional, first to cut)* the director.
+
+**Not started:** REVIEW.md. It has to be written by the author, not by a model —
+the brief says so explicitly. DEVLOG.md lists what the tests cannot check, and
+that list is the raw material for it.

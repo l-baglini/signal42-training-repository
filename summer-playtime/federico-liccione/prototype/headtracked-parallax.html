@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Head-tracked parallax — spike</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:#000; color:#dfe6f2;
+    font:13px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; }
+  #gl { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #panel { position:fixed; top:10px; left:10px; width:290px; max-height:calc(100% - 20px);
+    overflow:auto; padding:12px 14px; border-radius:10px;
+    background:rgba(8,10,18,.82); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.12); z-index:10; }
+  #panel.hidden > *:not(h2) { display:none; }
+  h2 { margin:0 0 8px; font-size:13px; letter-spacing:.02em; font-weight:600; }
+  h2 span { float:right; font-weight:400; opacity:.55; font-size:11px; }
+  .row { display:flex; align-items:center; gap:8px; margin:7px 0; }
+  .row label { flex:0 0 118px; opacity:.75; font-size:11.5px; }
+  .row input[type=range] { flex:1; min-width:0; }
+  .row .val { flex:0 0 46px; text-align:right; font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,monospace; font-size:11px; opacity:.9; }
+  button { width:100%; margin:4px 0; padding:7px 9px; border-radius:7px; cursor:pointer;
+    background:#1d2740; color:#e7edf8; border:1px solid rgba(255,255,255,.16); font-size:12px; }
+  button:hover { background:#26334f; }
+  button.on { background:#2f6f4f; border-color:#49a678; }
+  hr { border:0; border-top:1px solid rgba(255,255,255,.1); margin:11px 0; }
+  #hud { font-family:ui-monospace,monospace; font-size:11px; line-height:1.6; opacity:.85;
+    white-space:pre; }
+  #status { margin-top:8px; font-size:11px; opacity:.8; }
+  #status.err { color:#ff9c9c; }
+  #cam { position:fixed; bottom:10px; right:10px; width:180px; border-radius:8px;
+    border:1px solid rgba(255,255,255,.15); transform:scaleX(-1); display:none; z-index:10; }
+  #ruler { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); display:none;
+    z-index:10; text-align:center; }
+  #ruler .bar { height:16px; border-left:2px solid #ffd479; border-right:2px solid #ffd479;
+    border-bottom:2px solid #ffd479; }
+  #ruler .lbl { color:#ffd479; font-size:11px; margin-top:3px; }
+  kbd { background:rgba(255,255,255,.1); border-radius:3px; padding:0 4px; font-size:10.5px; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<video id="cam" playsinline muted></video>
+<div id="ruler"><div class="bar"></div><div class="lbl">10 cm</div></div>
+
+<div id="panel">
+  <h2>Head-tracked parallax <span><kbd>h</kbd> nascondi</span></h2>
+  <div id="hud"></div>
+  <div id="status">Modalità mouse. Muovi il cursore = muovi la testa.</div>
+  <hr>
+  <button id="btnCam">Attiva webcam tracking <kbd>m</kbd></button>
+  <button id="btnAxis" class="on">Proiezione off-axis: ON <kbd>o</kbd></button>
+  <button id="btnDepth">Mostra depth map <kbd>d</kbd></button>
+  <button id="btnRuler">Righello 10 cm <kbd>r</kbd></button>
+  <hr>
+  <div class="row"><label>Largh. finestra</label><input id="sW" type="range" min="12" max="80" step="0.5" value="34"><span class="val" id="vW"></span></div>
+  <div class="row"><label>Profondità scena</label><input id="sDepth" type="range" min="2" max="120" step="1" value="45"><span class="val" id="vDepth"></span></div>
+  <div class="row"><label>Stacco dal vetro</label><input id="sNear" type="range" min="0" max="30" step="0.5" value="4"><span class="val" id="vNear"></span></div>
+  <div class="row"><label>Scala scena</label><input id="sScale" type="range" min="1" max="4" step="0.05" value="2.2"><span class="val" id="vScale"></span></div>
+  <hr>
+  <div class="row"><label>Distanza (mouse)</label><input id="sZ" type="range" min="25" max="120" step="1" value="60"><span class="val" id="vZ"></span></div>
+  <div class="row"><label>FOV webcam</label><input id="sFov" type="range" min="40" max="90" step="1" value="60"><span class="val" id="vFov"></span></div>
+  <div class="row"><label>Camera sopra il centro</label><input id="sCamY" type="range" min="-20" max="30" step="0.5" value="12"><span class="val" id="vCamY"></span></div>
+  <div class="row"><label>Smoothing</label><input id="sSmooth" type="range" min="0.05" max="1" step="0.01" value="0.45"><span class="val" id="vSmooth"></span></div>
+  <div class="row"><label>Predizione</label><input id="sPred" type="range" min="0" max="120" step="5" value="40"><span class="val" id="vPred"></span></div>
+  <div class="row"><label>Inverti X</label><input id="cFlipX" type="checkbox"><span class="val"></span></div>
+</div>
+
+<script type="module">
+'use strict';
+
+/* ---------- 1. contenuto procedurale: RGB + depth perfettamente allineate ---------- */
+
+const TW = 1280, TH = 800;
+
+function lcg(seed) { let s = seed >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
+const grey = d => { const g = Math.round(Math.max(0, Math.min(1, d)) * 255); return `rgb(${g},${g},${g})`; };
+
+// depth: 0 = vicino all'osservatore, 1 = lontano
+function drawScene(ctx, mode, W, H) {
+  const rnd = lcg(20260827);
+  const isRGB = mode === 'rgb';
+  const F = (style, depth) => { ctx.fillStyle = isRGB ? style : grey(depth); };
+  const horizon = H * 0.52;
+
+  // --- fondo, alla massima distanza
+  if (isRGB) {
+    const g = ctx.createLinearGradient(0, 0, 0, horizon);
+    g.addColorStop(0, '#080c1c'); g.addColorStop(0.7, '#152a4a'); g.addColorStop(1, '#2b4a6e');
+    ctx.fillStyle = g;
+  } else ctx.fillStyle = grey(1.0);
+  ctx.fillRect(0, 0, W, H);
+
+  // stelle: solo nel pass RGB, restano sul piano di fondo
+  if (isRGB) {
+    for (let i = 0; i < 260; i++) {
+      const x = rnd() * W, y = rnd() * horizon * 0.92, r = rnd() * 1.5 + 0.35;
+      ctx.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.7})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  // --- creste lontane
+  const ridge = (yBase, amp, depth, style, seed) => {
+    const r2 = lcg(seed);
+    ctx.beginPath(); ctx.moveTo(0, H);
+    ctx.lineTo(0, yBase);
+    for (let x = 0; x <= W; x += 24) {
+      const y = yBase - amp * (0.45 + 0.55 * Math.sin(x * 0.004 + seed) * Math.cos(x * 0.0013)) - r2() * amp * 0.25;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.closePath();
+    F(style, depth); ctx.fill();
+  };
+  ridge(horizon + 4, 90, 0.88, '#1b3352', 3);
+  ridge(horizon + 14, 62, 0.76, '#14263e', 9);
+
+  // --- pavimento: depth CONTINUA, non a strati. È il cue più leggibile.
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, H); ctx.lineTo(W, horizon); ctx.lineTo(0, horizon); ctx.closePath();
+  ctx.clip();
+  if (isRGB) {
+    const g = ctx.createLinearGradient(0, horizon, 0, H);
+    g.addColorStop(0, '#0d1a2c'); g.addColorStop(1, '#1d2f45');
+    ctx.fillStyle = g;
+  } else {
+    const g = ctx.createLinearGradient(0, horizon, 0, H);
+    g.addColorStop(0, grey(0.95)); g.addColorStop(1, grey(0.10));
+    ctx.fillStyle = g;
+  }
+  ctx.fillRect(0, horizon, W, H - horizon);
+  // griglia in prospettiva, così la deformazione si vede a occhio
+  ctx.lineWidth = 1.6;
+  const vpx = W / 2;
+  for (let i = -14; i <= 14; i++) {
+    const xb = vpx + i * (W / 9);
+    if (isRGB) ctx.strokeStyle = 'rgba(120,200,255,.30)';
+    else continue; // nel pass depth la griglia non deve incidere
+    ctx.beginPath(); ctx.moveTo(vpx, horizon); ctx.lineTo(xb, H); ctx.stroke();
+  }
+  if (isRGB) {
+    for (let k = 1; k <= 16; k++) {
+      const t = k / 16, y = horizon + (H - horizon) * (t * t);
+      ctx.strokeStyle = `rgba(120,200,255,${0.10 + 0.22 * t})`;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // --- torri a media distanza
+  const towers = [[0.17, 0.30, 0.60], [0.29, 0.19, 0.55], [0.70, 0.24, 0.58], [0.81, 0.34, 0.63]];
+  for (const [cx, hh, dep] of towers) {
+    const w = W * 0.075, x = cx * W - w / 2, top = horizon - H * hh;
+    F(isRGB ? '#0a1526' : null, dep); ctx.fillRect(x, top, w, horizon + 20 - top);
+    if (isRGB) {
+      for (let wy = top + 12; wy < horizon; wy += 22)
+        for (let wx = x + 7; wx < x + w - 7; wx += 16) {
+          ctx.fillStyle = `rgba(255,214,140,${rnd() > 0.45 ? 0.75 : 0.06})`;
+          ctx.fillRect(wx, wy, 7, 10);
+        }
+    }
+  }
+
+  // --- arco luminoso, distanza intermedia
+  F(isRGB ? 'rgba(255,150,90,.9)' : null, 0.40);
+  ctx.beginPath(); ctx.arc(W * 0.5, horizon - 30, W * 0.085, Math.PI, 0); ctx.fill();
+  ctx.fillRect(W * 0.5 - W * 0.085, horizon - 30, W * 0.085 * 2, 46);
+
+  // --- dischi sospesi, due profondità distinte
+  const disks = [[0.36, 0.30, 34, 0.30, '#7ce0c0'], [0.63, 0.24, 26, 0.22, '#e8d07a'], [0.47, 0.40, 18, 0.26, '#c39ce8']];
+  for (const [cx, cy, r, dep, col] of disks) {
+    F(col, dep);
+    ctx.beginPath(); ctx.arc(cx * W, cy * H, r, 0, 6.2832); ctx.fill();
+  }
+
+  // --- ringhiera in primissimo piano: è questa che fa urlare la parallasse
+  for (const cx of [0.155, 0.845]) {
+    F(isRGB ? '#3b2a1c' : null, 0.06);
+    ctx.fillRect(cx * W - W * 0.016, 0, W * 0.032, H);
+  }
+  F(isRGB ? '#4a3524' : null, 0.045);
+  ctx.fillRect(0, H * 0.80, W, H * 0.035);
+
+  if (isRGB) { // bordo per capire dove finisce la texture
+    ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+  }
+}
+
+function buildTextures() {
+  const out = {};
+  for (const mode of ['rgb', 'depth']) {
+    const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+    drawScene(c.getContext('2d'), mode, TW, TH);
+    out[mode] = c;
+  }
+  return out;
+}
+
+/* ---------- 2. WebGL: rilievo 2.5D dal depth ---------- */
+
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+if (!gl) { document.getElementById('status').textContent = 'WebGL2 non disponibile.'; throw new Error('no webgl2'); }
+
+const VS = `#version 300 es
+in vec2 aPos;      // cm, nel piano dello schermo
+in vec2 aUv;
+in float aDepth;   // 0 = vicino, 1 = lontano
+uniform mat4 uMVP;
+uniform float uNear, uFar;
+out vec2 vUv;
+out float vDepth;
+void main() {
+  float z = -mix(uNear, uFar, aDepth);
+  vUv = aUv; vDepth = aDepth;
+  gl_Position = uMVP * vec4(aPos, z, 1.0);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec2 vUv; in float vDepth;
+uniform sampler2D uTex;
+uniform float uShowDepth;
+out vec4 frag;
+void main() {
+  vec3 c = texture(uTex, vUv).rgb;
+  vec3 d = vec3(1.0 - vDepth);
+  frag = vec4(mix(c, d, uShowDepth), 1.0);
+}`;
+
+function sh(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U = n => gl.getUniformLocation(prog, n);
+const uMVP = U('uMVP'), uNear = U('uNear'), uFar = U('uFar'), uShowDepth = U('uShowDepth');
+
+const tex = buildTextures();
+const glTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, glTex);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tex.rgb);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.generateMipmap(gl.TEXTURE_2D);
+gl.uniform1i(U('uTex'), 0);
+
+// depth map letta su CPU: il rilievo è statico, la scala resta un uniform
+const dctx = tex.depth.getContext('2d');
+const dpix = dctx.getImageData(0, 0, TW, TH).data;
+const depthAt = (u, v) => {
+  const x = Math.min(TW - 1, Math.max(0, Math.round(u * (TW - 1))));
+  const y = Math.min(TH - 1, Math.max(0, Math.round(v * (TH - 1))));
+  return dpix[(y * TW + x) * 4] / 255;
+};
+
+const GRID = 220;
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+let idxCount = 0;
+
+function buildMesh(planeW) {
+  const planeH = planeW * TH / TW;
+  const pos = new Float32Array(GRID * GRID * 2);
+  const uv = new Float32Array(GRID * GRID * 2);
+  const dep = new Float32Array(GRID * GRID);
+  let p = 0, q = 0, r = 0;
+  for (let j = 0; j < GRID; j++) {
+    const v = j / (GRID - 1);
+    for (let i = 0; i < GRID; i++) {
+      const u = i / (GRID - 1);
+      pos[p++] = (u - 0.5) * planeW;
+      pos[p++] = (0.5 - v) * planeH;
+      uv[q++] = u; uv[q++] = v;
+      dep[r++] = depthAt(u, v);
+    }
+  }
+  const idx = new Uint32Array((GRID - 1) * (GRID - 1) * 6);
+  let k = 0;
+  for (let j = 0; j < GRID - 1; j++) for (let i = 0; i < GRID - 1; i++) {
+    const a = j * GRID + i, b = a + 1, c = a + GRID, d = c + 1;
+    idx[k++] = a; idx[k++] = c; idx[k++] = b;
+    idx[k++] = b; idx[k++] = c; idx[k++] = d;
+  }
+  idxCount = k;
+  const bind = (data, loc, size) => {
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    const l = gl.getAttribLocation(prog, loc);
+    gl.enableVertexAttribArray(l);
+    gl.vertexAttribPointer(l, size, gl.FLOAT, false, 0, 0);
+  };
+  bind(pos, 'aPos', 2); bind(uv, 'aUv', 2); bind(dep, 'aDepth', 1);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+}
+
+/* ---------- 3. proiezione off-axis (Kooima, schermo allineato agli assi) ---------- */
+
+function frustum(l, r, b, t, n, f) { // column-major
+  return new Float32Array([
+    2 * n / (r - l), 0, 0, 0,
+    0, 2 * n / (t - b), 0, 0,
+    (r + l) / (r - l), (t + b) / (t - b), -(f + n) / (f - n), -1,
+    0, 0, -2 * f * n / (f - n), 0,
+  ]);
+}
+function mul(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+    o[c * 4 + r] = s;
+  }
+  return o;
+}
+// Il punto chiave: gli angoli fisici dello schermo sono inchiodati nel mondo,
+// l'occhio si muove, e il frustum (occhio -> 4 angoli) diventa asimmetrico.
+function mvp(ex, ey, ez, Wcm, Hcm, offAxis) {
+  const n = 1, f = 4000, d = Math.max(ez, 5);
+  let l, r, b, t;
+  if (offAxis) {
+    l = (-Wcm / 2 - ex) * n / d; r = (Wcm / 2 - ex) * n / d;
+    b = (-Hcm / 2 - ey) * n / d; t = (Hcm / 2 - ey) * n / d;
+  } else { // stesso movimento di camera, frustum simmetrico: è un carrello, non una finestra
+    l = -Wcm / 2 * n / d; r = Wcm / 2 * n / d;
+    b = -Hcm / 2 * n / d; t = Hcm / 2 * n / d;
+  }
+  const view = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, -ex,-ey,-ez,1]);
+  return mul(frustum(l, r, b, t, n, f), view);
+}
+
+/* ---------- 4. dov'è la testa ---------- */
+
+const S = {
+  Wcm: 34, depth: 45, near: 4, scale: 2.2, zMouse: 60,
+  fov: 60, camY: 12, smooth: 0.45, pred: 40, flipX: false,
+  offAxis: true, showDepth: false, mode: 'mouse',
+};
+const eye = { x: 0, y: 0, z: 60 };
+const vel = { x: 0, y: 0, z: 0 };
+let raw = { x: 0, y: 0, z: 60 }, haveFace = false, trackMs = 0, lastRawT = 0;
+
+addEventListener('pointermove', e => {
+  if (S.mode !== 'mouse') return;
+  raw.x = (e.clientX / innerWidth - 0.5) * S.Wcm * 1.4;
+  raw.y = -(e.clientY / innerHeight - 0.5) * S.Wcm * 0.8;
+  raw.z = S.zMouse;
+});
+
+const video = document.getElementById('cam');
+const status = document.getElementById('status');
+let landmarker = null;
+
+async function startCam() {
+  status.className = ''; status.textContent = 'Carico il modello MediaPipe…';
+  try {
+    const { FaceLandmarker, FilesetResolver } =
+      await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const fs = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    landmarker = await FaceLandmarker.createFromOptions(fs, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU',
+      },
+      runningMode: 'VIDEO', numFaces: 1,
+    });
+    status.textContent = 'Chiedo la webcam…';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+    });
+    video.srcObject = stream; await video.play();
+    video.style.display = 'block';
+    S.mode = 'cam';
+    btnCam.textContent = 'Torna al mouse'; btnCam.classList.add('on');
+    status.textContent = 'Tracking attivo. Muovi la testa, non gli occhi.';
+  } catch (err) {
+    status.className = 'err';
+    status.textContent = 'Tracking non partito: ' + (err && err.message ? err.message : err) +
+      (location.protocol === 'file:' ? ' — la webcam richiede http://localhost, non file://' : '');
+  }
+}
+function stopCam() {
+  S.mode = 'mouse';
+  const s = video.srcObject; if (s) s.getTracks().forEach(t => t.stop());
+  video.srcObject = null; video.style.display = 'none';
+  btnCam.textContent = 'Attiva webcam tracking'; btnCam.classList.remove('on');
+  status.className = ''; status.textContent = 'Modalità mouse.';
+}
+
+function trackFace() {
+  if (!landmarker || video.readyState < 2) return;
+  const t0 = performance.now();
+  let res;
+  try { res = landmarker.detectForVideo(video, t0); } catch { return; }
+  trackMs = performance.now() - t0;
+  const lms = res && res.faceLandmarks && res.faceLandmarks[0];
+  haveFace = !!lms;
+  if (!lms) return;
+
+  // iride se disponibile (478 landmark), altrimenti angoli esterni degli occhi
+  let a, b, sep;
+  if (lms.length >= 478) { a = lms[468]; b = lms[473]; sep = 6.3; }   // IPD adulto ~63 mm
+  else { a = lms[33]; b = lms[263]; sep = 9.0; }
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const ax = a.x * vw, ay = a.y * vh, bx = b.x * vw, by = b.y * vh;
+  const dpx = Math.hypot(bx - ax, by - ay);
+  if (dpx < 4) return;
+  const fpx = (vw / 2) / Math.tan(S.fov * Math.PI / 360);
+  const Z = fpx * sep / dpx;                       // <- la distanza esce da qui
+  const um = (ax + bx) / 2, vm = (ay + by) / 2;
+  const Xc = (um - vw / 2) * Z / fpx;
+  const Yc = (vm - vh / 2) * Z / fpx;
+  raw.x = (S.flipX ? 1 : -1) * Xc;
+  raw.y = -Yc + S.camY;
+  raw.z = Z;
+}
+
+/* ---------- 5. loop ---------- */
+
+let lastT = performance.now(), fps = 0, meshW = -1;
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+gl.enable(gl.DEPTH_TEST);
+gl.clearColor(0, 0, 0, 1);
+
+function frame() {
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  fps += ((1 / Math.max(dt, 1e-4)) - fps) * 0.1;
+
+  if (S.mode === 'cam') trackFace(); else raw.z = S.zMouse;
+
+  // EMA + piccola predizione in avanti: è così che si nasconde la latenza
+  const a = S.smooth;
+  for (const k of ['x', 'y', 'z']) {
+    const prev = eye[k];
+    eye[k] += (raw[k] - eye[k]) * a;
+    vel[k] += (((eye[k] - prev) / Math.max(dt, 1e-4)) - vel[k]) * 0.3;
+  }
+  const p = S.pred / 1000;
+  const ex = eye.x + vel.x * p, ey = eye.y + vel.y * p, ez = eye.z + vel.z * p;
+
+  resize();
+  const Hcm = S.Wcm * canvas.height / canvas.width;
+  const planeW = S.Wcm * S.scale;
+  if (Math.abs(planeW - meshW) > 1e-3) { buildMesh(planeW); meshW = planeW; }
+
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.uniformMatrix4fv(uMVP, false, mvp(ex, ey, ez, S.Wcm, Hcm, S.offAxis));
+  gl.uniform1f(uNear, S.near);
+  gl.uniform1f(uFar, S.near + S.depth);
+  gl.uniform1f(uShowDepth, S.showDepth ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, glTex);
+  gl.bindVertexArray(vao);
+  gl.drawElements(gl.TRIANGLES, idxCount, gl.UNSIGNED_INT, 0);
+
+  hud.textContent =
+    `occhio   x ${ex.toFixed(1).padStart(6)}  y ${ey.toFixed(1).padStart(6)}  z ${ez.toFixed(1).padStart(6)} cm\n` +
+    `finestra ${S.Wcm.toFixed(1)} x ${Hcm.toFixed(1)} cm\n` +
+    `rilievo  da ${S.near.toFixed(0)} a ${(S.near + S.depth).toFixed(0)} cm dietro il vetro\n` +
+    `render   ${fps.toFixed(0)} fps` +
+    (S.mode === 'cam' ? `   tracker ${trackMs.toFixed(0)} ms  ${haveFace ? 'volto OK' : 'NESSUN VOLTO'}` : '   (mouse)');
+
+  requestAnimationFrame(frame);
+}
+
+/* ---------- 6. UI ---------- */
+
+const hud = document.getElementById('hud');
+const btnCam = document.getElementById('btnCam');
+const btnAxis = document.getElementById('btnAxis');
+const btnDepth = document.getElementById('btnDepth');
+const btnRuler = document.getElementById('btnRuler');
+const panel = document.getElementById('panel');
+const rulerEl = document.getElementById('ruler');
+
+const link = (id, key, unit, fmt = v => v.toFixed(1)) => {
+  const el = document.getElementById(id), out = document.getElementById('v' + id.slice(1));
+  const sync = () => { S[key] = parseFloat(el.value); if (out) out.textContent = fmt(S[key]) + unit; updateRuler(); };
+  el.addEventListener('input', sync); sync();
+};
+link('sW', 'Wcm', 'cm'); link('sDepth', 'depth', 'cm', v => v.toFixed(0));
+link('sNear', 'near', 'cm'); link('sScale', 'scale', '×', v => v.toFixed(2));
+link('sZ', 'zMouse', 'cm', v => v.toFixed(0)); link('sFov', 'fov', '°', v => v.toFixed(0));
+link('sCamY', 'camY', 'cm'); link('sSmooth', 'smooth', '', v => v.toFixed(2));
+link('sPred', 'pred', 'ms', v => v.toFixed(0));
+document.getElementById('cFlipX').addEventListener('change', e => { S.flipX = e.target.checked; });
+
+function updateRuler() { // per calibrare "largh. finestra" con un metro vero
+  rulerEl.querySelector('.bar').style.width = (10 / S.Wcm * innerWidth) + 'px';
+}
+const toggleAxis = () => { S.offAxis = !S.offAxis; btnAxis.classList.toggle('on', S.offAxis);
+  btnAxis.innerHTML = `Proiezione off-axis: ${S.offAxis ? 'ON' : 'OFF (carrello)'} <kbd>o</kbd>`; };
+const toggleDepth = () => { S.showDepth = !S.showDepth; btnDepth.classList.toggle('on', S.showDepth); };
+const toggleRuler = () => { const on = rulerEl.style.display !== 'block';
+  rulerEl.style.display = on ? 'block' : 'none'; btnRuler.classList.toggle('on', on); updateRuler(); };
+
+btnCam.addEventListener('click', () => S.mode === 'cam' ? stopCam() : startCam());
+btnAxis.addEventListener('click', toggleAxis);
+btnDepth.addEventListener('click', toggleDepth);
+btnRuler.addEventListener('click', toggleRuler);
+addEventListener('resize', updateRuler);
+addEventListener('keydown', e => {
+  if (e.key === 'o') toggleAxis();
+  else if (e.key === 'd') toggleDepth();
+  else if (e.key === 'r') toggleRuler();
+  else if (e.key === 'h') panel.classList.toggle('hidden');
+  else if (e.key === 'm') S.mode === 'cam' ? stopCam() : startCam();
+});
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -86,15 +86,51 @@ bug.
 `windowCm`. The unit belongs in the name in a codebase whose whole discipline is
 that there is exactly one unit system.
 
+## The dodge solver
+
+Two of my own test expectations were wrong, and both taught me something about
+the model rather than about the code.
+
+**A threat aimed at you hits you where you stand, whatever its radius.** `to` is
+the impact centre, so if `to` is the rest position then the player at rest is
+inside the impact for any radius at all, including zero. A test asserting "a tiny
+threat needs no dodging" was wrong on its own terms.
+
+**The offline check is not always stricter than the check from rest.** I assumed
+quantifying over the whole envelope would find harder positions than the middle.
+It does not, when the threat is aimed at the middle: `needCm` is the distance to
+the nearest *safe* cell, and a player near the edge of their envelope is often
+already outside the impact and has nothing to do. The hardest place to be is the
+centre of the impact. The offline check is only stricter for off-centre threats,
+and there is now a test for each half of that.
+
+## The projection
+
+**I10 came out stronger than the spec claimed.** The invariant said the four
+screen corners map to the four viewport corners. Deriving it showed that the
+corners are a special case of something better: for a point at `z = 0`,
+`x_ndc` works out independent of the eye position entirely, so the **whole screen
+plane is invariant** under head motion. That is the precise sense in which the
+screen is a hole in the wall rather than a camera, and it is what the test
+asserts — over every eye position in the envelope, not a sample.
+
+The parallax sign is asserted alongside it, because it is the one fact here that
+is easy to get backwards: relative to the frame, a distant point slides *more*
+than a near one, in the *same* direction as the head, and a point on the glass
+does not slide at all. Working out `x_ndc = 2·ex·d / (W·(d + ez))` makes all
+three obvious and none of them are obvious without it.
+
 ## The renderer prototype
 
 The off-axis projection and the head tracking were prototyped and validated on
-real hardware before the spec was written: MediaPipe iris landmarks to a metric
-eye position via the inter-pupillary estimate, and a Kooima generalised
-perspective frustum over a depth-displaced relief, with a debug toggle that
+real hardware before the spec was written, and the prototype is checked in at
+`prototype/` rather than left in a scratch directory. MediaPipe iris landmarks to
+a metric eye position via the inter-pupillary estimate, and a Kooima generalised
+perspective frustum over a depth-displaced relief, with the debug toggle that
 swaps the off-axis frustum for a symmetric one at the same camera position. The
 toggle is the fastest way to show someone what the mechanic is — the window
-becomes a dolly and the illusion dies on the spot. It ships (SPEC §8).
+becomes a dolly and the illusion dies on the spot. It ships (SPEC §8) and its
+behaviour is now asserted.
 
 Not yet measured, and deliberately absent from the spec: the wall-clock of the
 depth model in the browser, WebGPU versus WASM. Every published figure found
@@ -103,8 +139,10 @@ false release date. It gets measured on the target machine and recorded here.
 
 ## Open
 
-- I7 and I10 have no tests yet because the dodge solver and the renderer are not
-  ported. They are the next two items.
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
   WASM path is a supported path, not a courtesy.
-- Vision accuracy is unverified by construction: no test touches a network.
+- Vision accuracy is unverified by construction: no test touches a network. The
+  suite proves containment — a wrong model answer stays harmless — and not
+  correctness.
+- Nothing has been playtested, so the design bet that peeking is a good verb and
+  the literature's caution that dodging is a bad one are both still theory.

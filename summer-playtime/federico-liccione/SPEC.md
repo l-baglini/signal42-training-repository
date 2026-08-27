@@ -373,11 +373,16 @@ of synthetic envelopes (including degenerate ones).
   the reason and the counts, never an empty-but-valid level.
 - **I9 — degenerate body.** An envelope the size of a 2 cm ball yields a refusal
   or an explicitly reduced mode. Never an unfair level.
-- **I10 — the window is a window.** For any eye position in `E`, the off-axis
-  projection maps the four physical screen corners to the four viewport corners
-  exactly. This is the defining property of head-coupled perspective and a
-  one-line numeric assertion; it catches precisely the class of bug that makes
-  the illusion fail without looking broken.
+- **I10 — the window is a window.** For any eye position in `E`, the **entire
+  screen plane is invariant** under eye motion: a point at `z = 0` projects to
+  the same place whatever the player does, and the four corners land on the four
+  viewport corners as a special case. The first draft of this invariant claimed
+  only the corners; deriving it gave the stronger statement, which is what the
+  test asserts. It catches precisely the class of bug that makes the illusion
+  fail without looking broken. The parallax sign and ordering are asserted
+  alongside it — relative to the frame, distant points slide *more* than near
+  ones and in the *same* direction as the head — because that is the fact
+  easiest to get backwards in code.
 
 ---
 
