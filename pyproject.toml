@@ -28,6 +28,12 @@ train = [
     "torch>=2.9",
     "onnx>=1.17",
 ]
+# The native shell (docs/PLAN-shell.md). Deliberately NOT a runtime dependency:
+# the training path and CI must never start needing Qt, and tools/run_app.py --
+# the OpenCV diagnostic app -- must keep starting on a machine without it.
+gui = [
+    "PySide6>=6.8",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.9",
