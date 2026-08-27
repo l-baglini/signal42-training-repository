@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blind Spot</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #04060b; color: #dfe6f2; overflow: hidden;
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .panel { position: fixed; z-index: 10; padding: 12px 14px; border-radius: 10px;
+    background: rgba(6, 9, 16, .84); border: 1px solid rgba(255,255,255,.12);
+    backdrop-filter: blur(8px); }
+  #hud { top: 12px; left: 12px; width: 430px; max-height: calc(100% - 24px); overflow: auto; }
+  #hud h1 { margin: 0 0 2px; font-size: 14px; letter-spacing: .01em; }
+  #hud .sub { opacity: .55; font-size: 11px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 11px; }
+  th { text-align: right; opacity: .5; font-weight: 500; padding: 3px 5px; }
+  th:first-child { text-align: left; }
+  td { text-align: right; padding: 3px 5px; border-top: 1px solid rgba(255,255,255,.07);
+    font-variant-numeric: tabular-nums; }
+  td:first-child { text-align: left; }
+  tr.fair td { color: #7ce0c0; }
+  tr.on td { color: #ffdb5c; font-weight: 600; }
+  tr.rejected td { opacity: .42; }
+  #stats { margin-top: 10px; font-family: ui-monospace, monospace; font-size: 11px; opacity: .8;
+    white-space: pre-line; }
+  #keys { margin-top: 10px; font-size: 11px; opacity: .55; }
+  kbd { background: rgba(255,255,255,.1); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
+  #score { top: 12px; right: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  #score .big { font-size: 26px; font-weight: 600; line-height: 1.1; }
+  #score .lbl { font-size: 11px; opacity: .55; }
+  #refusal { left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 560px;
+    display: none; border-color: rgba(255,140,140,.4); }
+  #refusal h2 { margin: 0 0 8px; font-size: 15px; color: #ff9c9c; }
+  #refusal p { margin: 0 0 10px; }
+  #refusal .counts { font-family: ui-monospace, monospace; font-size: 11px; opacity: .75;
+    white-space: pre-line; }
+  #ruler { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10;
+    display: none; text-align: center; }
+  #ruler .bar { height: 14px; border: 2px solid #ffd479; border-top: 0; }
+  #ruler .lbl { color: #ffd479; font-size: 11px; margin-top: 3px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .row label { flex: 0 0 130px; opacity: .7; font-size: 11px; }
+  .row input { flex: 1; min-width: 0; }
+  .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
+  #fatal { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 520px;
+    border-color: rgba(255,140,140,.4); }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <div class="panel" id="hud">
+    <h1>Blind Spot</h1>
+    <div class="sub">You lean to see. Move the cursor as if moving your head.</div>
+    <table>
+      <thead><tr><th>target</th><th>lean</th><th>window</th><th>seen</th><th>verdict</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="stats"></div>
+    <div class="row">
+      <label>Screen width</label>
+      <input id="width" type="range" min="12" max="80" step="0.5" value="34">
+      <span class="val" id="widthVal"></span>
+    </div>
+    <div id="keys">
+      <kbd>o</kbd> window / dolly &nbsp; <kbd>w</kbd> blank the wall &nbsp;
+      <kbd>r</kbd> ruler &nbsp; <kbd>wheel</kbd> lean in and out
+    </div>
+  </div>
+
+  <div class="panel" id="score">
+    <div class="big" id="scoreValue">0/0</div>
+    <div class="lbl">revealed</div>
+  </div>
+
+  <div class="panel" id="refusal">
+    <h2>This room will not make a fair level</h2>
+    <p id="refusalReason"></p>
+    <div class="counts" id="refusalCounts"></div>
+  </div>
+
+  <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
+
+  <div id="ruler"><div class="bar"></div><div class="lbl">10 cm</div></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

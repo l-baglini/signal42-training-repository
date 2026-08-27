@@ -46,6 +46,8 @@ Determinism is allowed to be random — `mulberry32` in `level.ts` is seeded, an
 ## Commands
 
 ```
+npm run dev     the app, on localhost. Move the cursor as if moving your head.
+npm run build   tsc then vite. The bundle is ~18 kB; keep it that way.
 npm test        the invariants and the guards. No network, no clock, no RNG.
 npm run probe   what the solver thinks of each fixture room, per envelope.
 npm run sweep   which candidate positions are fair. Use this to author fixtures.
@@ -84,41 +86,49 @@ There are no pixels below the renderer. Fields carry their unit in the name
 
 ## State — resume here
 
-`npm test` is green at 212 tests and `npx tsc --noEmit` is clean. Commits are
+`npm test` is green at 225 tests and `npx tsc --noEmit` is clean. Commits are
 small and each one leaves the suite green, so `git log --oneline` is a reliable
 account of what exists.
 
 **Done, under test:** types; the boundary validator; the visibility solver
 (`V(t)`, footprints, five reject reasons, level generation with typed refusal);
 the dodge solver and its spawn gate; the off-axis projection; the calibration
-that turns a stream of tracked positions into an `Envelope`. **All ten
-invariants of SPEC §6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
+that turns a stream of tracked positions into an `Envelope`; the scene geometry;
+and the WebGL2 renderer with a runnable app. **All ten invariants of SPEC §6.7
+have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
 and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
 `tests/projection.test.ts`.
 
+**The app runs.** `npm run dev` gives the fixture room drawn through the
+off-axis projection, driven by the mouse standing in for a head. Targets light up
+the moment the sightline clears, the HUD shows the engine's verdict for every
+candidate, `o` swaps the window for a dolly and `w` blanks the wall to trigger the
+refusal screen. **The GL layer itself is not unit tested** — it cannot be,
+headlessly — which is why all the arithmetic lives in `render/geometry.ts` and
+`render/projection.ts`, which are. If the picture looks wrong, suspect the GL
+wrapper last.
+
 **Next, in order — this is SPEC §14 and the cut order is bottom-up:**
 
-1. **The WebGL renderer.** `src/render/projection.ts` is done and tested; what is
-   missing is the GL layer that draws billboards through it. Port it from
-   `prototype/headtracked-parallax.html`, which already does exactly this in
-   plain WebGL2 — the shaders, the relief mesh and the debug toggle are all
-   there and validated on real hardware. Keep the toggle.
-2. **Head tracking** (`src/perceive/`). `calibrate.ts` is done and tested — it
-   takes timestamped positions and returns an `Envelope` plus a quality report,
-   and it is pure, so it needs no camera. What is missing is only the *tracker*
-   that feeds it: MediaPipe iris landmarks, the inter-pupillary metric estimate,
-   EMA plus forward prediction, and the latency measurement. All of that exists
-   in the prototype. Pin `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM
+1. **The camera tracker** (`src/perceive/camera.ts`). Implement the `Tracker`
+   interface in `src/perceive/tracker.ts` and the app takes it with a one-line
+   change — that is what the interface is for. Everything needed exists in
+   `prototype/headtracked-parallax.html`: MediaPipe iris landmarks (468 and 473),
+   the inter-pupillary metric estimate, EMA plus forward prediction. Add the
+   latency measurement, which the prototype does not do and the dodge guarantee
+   spends. Then wire `calibrate.ts`, which is already done and tested, to a
+   ten-second prompt. Pin `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM
    fileset to the same version (SPEC §7.6).
-3. **The playable loop** — waves, score, ninety seconds, the refusal screen. The
-   engine already returns everything this needs.
+2. **The playable loop** — waves, ninety seconds, threats through the dodge
+   solver's spawn gate. The engine already returns everything this needs, and
+   `src/main.ts` already has the frame loop and the reveal detection.
    *Everything above this line is the minimum defensible build.*
-4. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
+3. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
    of it: there are three non-obvious constraints there, and two of them are
    corrections to an earlier draft that told the implementation to do the wrong
    thing.
-5. **The semantic scan** — one vision call per room, plus the cost panel.
-6. *(optional, first to cut)* the director.
+4. **The semantic scan** — one vision call per room, plus the cost panel.
+5. *(optional, first to cut)* the director.
 
 **Not started:** REVIEW.md. It has to be written by the author, not by a model —
 the brief says so explicitly. DEVLOG.md lists what the tests cannot check, and
