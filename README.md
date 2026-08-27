@@ -109,6 +109,7 @@ per-module conventions.
 | [`QUICKSTART.md`](QUICKSTART.md) | How do I run it, and what do I do when tracking is poor? |
 | [`docs/PRD-v2.md`](docs/PRD-v2.md) | What are we building, and how will we know it works? |
 | [`docs/TRAINING.md`](docs/TRAINING.md) | How do I capture, label, train and export a model? |
+| [`docs/PLAN-shell.md`](docs/PLAN-shell.md) | What replaces the OpenCV window, and in what order? |
 | [`docs/research/`](docs/research/) | Why this stack, this approach, this budget. Ten documents; start with [`10-recommended-stack.md`](docs/research/10-recommended-stack.md). |
 | [`docs/archive/v1/`](docs/archive/v1/) | What the first attempt was and why it was abandoned. |
 | [`CLAUDE.md`](CLAUDE.md) | The contract for AI agents working in this repo. |
@@ -138,6 +139,10 @@ researched ([`05-audio-stack.md`](docs/research/05-audio-stack.md)) and
 deliberately parked. Nothing in the current design forecloses it — the
 verification layer consumes the selected target and an audio stream, and
 touches neither the tracker nor the renderer.
+
+The interface is still an OpenCV window driven by keyboard hotkeys. The native
+PySide6 shell that replaces it is planned in
+[`docs/PLAN-shell.md`](docs/PLAN-shell.md) and not yet built.
 
 Single user, one guitar, one room, offline. Every design decision is allowed to
 exploit that.
