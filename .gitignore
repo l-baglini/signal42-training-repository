@@ -1,6 +1,50 @@
-node_modules
-dist
-coverage
+# What is tracked here is what a fresh clone cannot regenerate. Everything below
+# is either derivable from tracked inputs, specific to one machine, or too large
+# to belong in git -- and each entry says which.
+
+# --- Python ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+
+# --- Data ---
+# 317 MB of captured frames, regenerable with tools/collect.py. The LABELS are
+# the valuable artefact -- hand-clicked, small, and irreplaceable -- so
+# dataset/labels.json stays tracked.
+dataset/frames/
+!dataset/labels.json
+
+# --- Trained artefacts ---
+# Reproducible from dataset/ + tools/train.py, then tools/export.py.
+# See docs/TRAINING.md.
+models/
+models_v2/
+models_train.log
+models_v2.log
+
+# Debug renders written by tools/preview_aug.py and the -d debug overlay.
+diagnostics/
+
+# --- Machine-specific ---
+# Per-guitar, per-lighting enrolment for the legacy backend. Not portable
+# between setups; regenerate with tools/enroll.py.
+enrollment*.npz
+
+# Training bundles for the Windows/CUDA box. Rebuild with tools/make_bundle.py.
+fretguide-train-*.zip
+models.zip
+
+# --- Archived v1 web app (docs/archive/v1/web) ---
+node_modules/
+docs/archive/v1/web/dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# --- Misc ---
 *.local
 .DS_Store
-.vite
