@@ -63,6 +63,14 @@ dataset, no scrcpy. Every key below works. The pose is exact by construction, so
 this is also the right place to judge the overlay itself — if a dot looks wrong
 here, it *is* wrong, and the tracker is not involved.
 
+The synthetic neck is a **full 21-fret Stratocaster** — inlays at 3, 5, 7, 9,
+12, 15, 17, 19 and 21, doubled at the octave. Use `--max-fret 22` for a modern
+Strat, or `--max-fret 24`.
+
+That matters for the modes: Misolidio ends at fret 13 and Eolio at 15, so on the
+twelve frets the camera can pose they are cut short. On the synthetic neck all
+seven boxes fit whole, which makes it the better place to learn them.
+
 Add `--refuse-every 40` to watch the `NO LOCK` state, or `--source replay` to
 play back the labelled dataset instead.
 
@@ -71,6 +79,11 @@ play back the labelled dataset instead.
 ```bash
 .venv/bin/python tools/run_app.py -d 4
 ```
+
+The camera is pinned to **12 frets** whatever `--max-fret` says: the model
+predicts 26 keypoints, two per fret wire from the nut to the twelfth, and there
+is nothing beyond that to pose from. Only the synthetic neck shows the rest of
+the instrument.
 
 Nothing to enrol, nothing to click, nothing stuck to the guitar. The trained model finds
 the fretboard in every frame from its own pixels, so you can move the instrument, put it

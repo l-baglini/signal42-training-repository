@@ -38,7 +38,7 @@ from fretguide import render
 from fretguide.content import CHORD_IDS, SCALE_IDS, resolve_selection
 from fretguide.geometry import grid_lines
 from fretguide.menu import Layout, Menu, preferred_anchor
-from fretguide.source import open_source
+from fretguide.source import STRAT_FRETS, open_source
 from fretguide.types import Selection
 
 
@@ -53,6 +53,9 @@ def main() -> int:
     ap.add_argument("-n", "--skip", type=int, default=0,
                     help="drop this many frames first, to reach an interesting pose")
     ap.add_argument("--size", default="1280x720", help="synthetic source only")
+    ap.add_argument("--max-fret", type=int, default=None,
+                    help="neck length; defaults to a Stratocaster's 21 for the synthetic "
+                         "source and 12 (all the model poses) for the others")
     ap.add_argument("--out", default="diagnostics/overlay.png")
     ap.add_argument("--no-grid", action="store_true")
     ap.add_argument("--menu", action="store_true",
@@ -69,14 +72,15 @@ def main() -> int:
            else Selection("chord", "G"))
 
     w, h = (int(x) for x in args.size.lower().split("x"))
+    max_fret = args.max_fret or (STRAT_FRETS if args.source == "synthetic" else 12)
     try:
-        src = open_source(args.source, width=w, height=h, fps=None,
+        src = open_source(args.source, width=w, height=h, fps=None, max_fret=max_fret,
                           refuse_every=args.refuse_every)
     except (FileNotFoundError, OSError, ValueError) as e:
         print(e)
         return 1
 
-    resolved = resolve_selection(sel, max_fret=12)
+    resolved = resolve_selection(sel, max_fret=max_fret)
     if resolved is None:
         print(f"unknown selection {sel.id!r}")
         return 2
@@ -101,7 +105,7 @@ def main() -> int:
         view = cv2.cvtColor(packet.gray, cv2.COLOR_GRAY2BGR)
         if packet.H is not None:
             if not args.no_grid:
-                render.draw_grid(view, packet.H, 12)
+                render.draw_grid(view, packet.H, max_fret)
             render.draw_selection(view, packet.H, resolved)
             posed += 1
         else:
@@ -113,7 +117,7 @@ def main() -> int:
             pts = None
             if packet.H is not None:
                 pts = np.array([[q.x, q.y]
-                                for line in grid_lines(packet.H, 12) for q in line])
+                                for line in grid_lines(packet.H, max_fret) for q in line])
             h, w = packet.gray.shape[:2]
             render.draw_menu(view, menu,
                              Layout.for_frame(w, h, preferred_anchor(pts, w, h, menu)))

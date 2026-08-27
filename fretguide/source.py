@@ -42,7 +42,18 @@ from .geometry import corners_uv, fret_u, grid_lines, solve_homography
 from .types import UV, Point, TrackerStatus
 
 #: Frets carrying inlay markers on a standard neck. Single dot except the double at 12.
-INLAY_FRETS = (3, 5, 7, 9, 12)
+INLAY_FRETS = (3, 5, 7, 9, 12, 15, 17, 19, 21, 24)
+
+#: Frets carrying the doubled inlay: the octaves.
+DOUBLE_INLAY_FRETS = (12, 24)
+
+#: Frets on a Fender Stratocaster. Vintage-spec necks have 21; most current models
+#: (Player, American Professional) have 22, which is ``--max-fret 22``.
+#:
+#: Only the synthetic backdrop can go this far. The trained model predicts the nut through
+#: the twelfth fret and nothing beyond -- 26 keypoints, two per fret wire -- so a camera
+#: source is pinned at 12 whatever this says.
+STRAT_FRETS = 21
 
 #: Which way the synthetic neck lies, as the angle of the nut -> fret 12 axis in image
 #: coordinates (y increases downwards). 163 degrees puts fret 12 on the left and the nut on
@@ -244,7 +255,12 @@ def synthetic_pose(t: float, width: int, height: int, max_fret: int = 12) -> np.
     # yields a neck that lies correctly with its strings upside down.
     ey = -np.array([-math.sin(ang), math.cos(ang)])
     length = width * 0.74 * (1.0 + 0.03 * math.sin(t * 0.62))
-    w_nut = length / 8.6
+    # Width is set from the *drawn* length so the neck keeps a guitar's proportions
+    # whatever it shows. A neck is about 15.4 times as long as it is wide over its full
+    # scale, so the span from the nut to fret n is 15.4 * u(n) widths -- 7.7 at fret 12,
+    # 10.8 at fret 21. Holding a fixed ratio instead would draw a 21-fret neck as wide as
+    # a plank, and dots sized from that spacing would be wrong with it.
+    w_nut = length / (8.6 * fret_u(max_fret) / fret_u(12))
     # Only a mild taper. The neck really is wider at fret 12 and the camera really does
     # sit nearer the body, but at 1.34x those two together very nearly cancelled the fret
     # law -- on-screen gaps went from 1.89:1 (nut vs fret 12, the truth) to 1.10:1, which
@@ -314,17 +330,25 @@ def draw_synthetic_board(H: np.ndarray, width: int, height: int, max_fret: int =
     cv2.copyTo(texture, mask, img)
 
     for f in INLAY_FRETS:  # inlays sit mid-space, not on the wire
+        if f > max_fret:
+            break
         umid = (fret_u(f - 1) + fret_u(f)) / 2
-        offs = (0.5,) if f != 12 else (0.28, 0.72)
+        offs = (0.28, 0.72) if f in DOUBLE_INLAY_FRETS else (0.5,)
         for vv in offs:
             p = _pt(H, UV(umid, vv))
-            cv2.circle(img, (int(p.x), int(p.y)), max(3, width // 260), 205, -1, cv2.LINE_AA)
+            # Scaled to the fret space it sits in: a dot sized for fret 3 covers most of
+            # fret 21.
+            span = _pt(H, UV(fret_u(f), 0.5)), _pt(H, UV(fret_u(f - 1), 0.5))
+            gap = math.hypot(span[0].x - span[1].x, span[0].y - span[1].y)
+            cv2.circle(img, (int(p.x), int(p.y)), int(max(2, min(width // 260, gap * 0.22))),
+                       205, -1, cv2.LINE_AA)
 
     lines = grid_lines(H, max_fret)
+    fret_thick = max(1, int(width // 480 * min(1.0, 12 / max(1, max_fret))))
     for i, (a, b) in enumerate(lines):
         is_fret = i <= max_fret
         shade = 225 if is_fret else 190
-        thick = max(2, width // 480) if is_fret else max(1, width // 900)
+        thick = max(1, fret_thick) if is_fret else max(1, width // 900)
         if np.isfinite([a.x, a.y, b.x, b.y]).all():
             cv2.line(img, (int(a.x), int(a.y)), (int(b.x), int(b.y)), shade, thick, cv2.LINE_AA)
     return cv2.GaussianBlur(img, (3, 3), 0)

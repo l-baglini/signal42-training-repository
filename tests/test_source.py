@@ -342,3 +342,67 @@ def test_to_bgr_puts_the_colour_back_where_it_belongs():
 
     b, g, r = bgr[8, 8]  # a corner of the room, well clear of the neck
     assert int(b) > int(r), f"the room is not cool in BGR: rgb({r},{g},{b})"
+
+
+# --------------------------------------------------------------------------- #
+# A full-length neck
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("max_fret", [12, 21, 22])
+def test_the_neck_stays_in_frame_however_long_it_is(max_fret):
+    w, h = 640, 360
+    margin = min(
+        min(x, y, w - 1 - x, h - 1 - y)
+        for i in range(0, 600, 11)
+        for x, y in (apply_homography(synthetic_pose(i / 30, w, h, max_fret), uv)[0]
+                     for uv in corners_uv(max_fret))
+    )
+    assert margin > 0, f"a {max_fret}-fret neck leaves the frame (worst {margin:.0f} px)"
+
+
+def test_a_longer_neck_is_drawn_narrower():
+    """A neck is a fixed shape, not a rectangle that grows in one direction.
+
+    Holding the drawn length fixed and adding frets has to make the board *thinner*, or a
+    21-fret neck comes out looking like a plank -- and dot_radius, which sizes dots from
+    the local string spacing, would be wrong along with it.
+    """
+    def width_of(max_fret):
+        H = synthetic_pose(0.0, 1280, 720, max_fret)
+        a = apply_homography(H, UV(0.1, 0.0))[0]
+        b = apply_homography(H, UV(0.1, 1.0))[0]
+        return float(np.linalg.norm(a - b))
+
+    assert width_of(21) < width_of(12) * 0.8
+    assert width_of(24) < width_of(21)
+
+
+def test_the_fret_law_still_holds_over_a_full_neck():
+    """Fret 21's space is about a third of fret 1's — 2^(-20/12) of it, in fact."""
+    H = synthetic_pose(0.0, 1600, 900, 21)
+    xs = [apply_homography(H, UV(fret_u(n), 0.5))[0] for n in range(22)]
+    gaps = [float(np.linalg.norm(xs[n + 1] - xs[n])) for n in range(21)]
+    assert all(gaps[i] > gaps[i + 1] for i in range(20)), "gaps do not shrink up the neck"
+    assert 2.4 < gaps[0] / gaps[-1] < 4.0, f"nut:fret21 gap ratio is {gaps[0] / gaps[-1]:.2f}"
+
+
+def test_a_strat_neck_carries_the_inlays_a_strat_carries():
+    from fretguide.source import DOUBLE_INLAY_FRETS, INLAY_FRETS, STRAT_FRETS
+
+    assert STRAT_FRETS == 21, "vintage-spec Strat; modern ones are 22, via --max-fret"
+    on_neck = [f for f in INLAY_FRETS if f <= STRAT_FRETS]
+    assert on_neck == [3, 5, 7, 9, 12, 15, 17, 19, 21]
+    assert 12 in DOUBLE_INLAY_FRETS and 24 in DOUBLE_INLAY_FRETS
+
+
+def test_every_modal_box_fits_on_a_full_neck():
+    """The point of drawing more than twelve frets.
+
+    Misolidio ends at fret 13 and Eolio at 15, so on the twelve frets the model can pose
+    they are cut short. A Strat neck holds all seven boxes whole.
+    """
+    from fretguide.modes import key_modes
+
+    for key in ("G", "C", "E", "A#"):
+        assert all(m.clipped == 0 for m in key_modes(key, max_fret=21)), key

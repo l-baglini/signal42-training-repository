@@ -61,7 +61,7 @@ from fretguide import render
 from fretguide.content import CHORD_IDS, SCALE_IDS, resolve_selection
 from fretguide.geometry import grid_lines
 from fretguide.menu import Layout, Menu, preferred_anchor
-from fretguide.source import open_source
+from fretguide.source import STRAT_FRETS, open_source
 from fretguide.types import Selection
 
 # X11 keysyms, which is what cv2.waitKeyEx reports on the Qt backend this ships with.
@@ -100,7 +100,10 @@ def main() -> int:
     ap.add_argument("--model", default="models/fretnet.xml")
     ap.add_argument("--infer-device", default="AUTO",
                     help="OpenVINO device: AUTO, CPU, GPU, NPU (see tools/export.py)")
-    ap.add_argument("--max-fret", type=int, default=12)
+    ap.add_argument("--max-fret", type=int, default=None,
+                    help="how many frets the neck has. Defaults to 12 for a camera, which "
+                         "is all the model can pose, and to a Stratocaster's 21 for the "
+                         "synthetic neck. Use 22 for a modern Strat")
     ap.add_argument("--min-conf", type=float, default=0.15)
     ap.add_argument("--dot-scale", type=float, default=1.0,
                     help="dot size multiplier; also adjustable live with - and =")
@@ -127,6 +130,19 @@ def main() -> int:
     kind = resolve_auto(args) if args.source == "auto" else args.source
     if args.source == "auto":
         print(f"source: {kind} (auto)")
+
+    # The model predicts 26 keypoints -- two per fret wire, nut through fret 12 -- so a
+    # camera cannot be posed past 12 however long the real neck is. Only the synthetic
+    # backdrop is free to show the rest of the instrument.
+    tracked_max = 12
+    if args.max_fret is None:
+        max_fret = STRAT_FRETS if kind == "synthetic" else tracked_max
+    else:
+        max_fret = args.max_fret
+    if kind in ("model", "enrollment", "replay") and max_fret > tracked_max:
+        print(f"--max-fret {max_fret} is past fret {tracked_max}, which is as far as the "
+              f"model poses; using {tracked_max}")
+        max_fret = tracked_max
     if kind in ("model", "enrollment") and args.device is None:
         print(f"the {kind} source needs a camera:  --source {kind} -d 4")
         print("no camera to hand?  python tools/run_app.py --source synthetic")
@@ -135,7 +151,7 @@ def main() -> int:
     w, h = (int(x) for x in args.size.lower().split("x"))
     try:
         src = open_source(
-            kind, device=args.device, width=w, height=h, max_fret=args.max_fret,
+            kind, device=args.device, width=w, height=h, max_fret=max_fret,
             model_path=args.model, infer_device=args.infer_device, min_conf=args.min_conf,
             enrollment=args.enrollment, match_width=args.match_width,
             rematch_ms=args.rematch_ms, smooth=not args.no_smooth,
@@ -152,7 +168,7 @@ def main() -> int:
         print("  python tools/run_app.py --source synthetic")
         return 1
 
-    max_fret = getattr(src, "max_fret", args.max_fret)
+    max_fret = getattr(src, "max_fret", max_fret)
     sel = Selection("chord", "G")
     scale_i = gen_i = 0
     show_grid, show_fingers, mirror, frozen = True, True, False, False
