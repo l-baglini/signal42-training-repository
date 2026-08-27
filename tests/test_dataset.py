@@ -9,8 +9,6 @@ way the pipeline could silently corrupt labels.
 
 from __future__ import annotations
 
-import json
-
 import cv2
 import numpy as np
 import pytest
@@ -48,7 +46,6 @@ BUDGET_FRET_WIDTHS = 0.25  # docs/research/00-diagnosis.md
 
 def synth_H(w: int = 1920, h: int = 1080, angle_deg: float = 20.0) -> np.ndarray:
     """A plausible board pose: rotated, foreshortened, roughly where a real one sits."""
-    quad = np.float32([[0, 0], [1, 0], [1, 1], [0, 1]])
     a = np.deg2rad(angle_deg)
     c, s = np.cos(a), np.sin(a)
     dst = []
@@ -438,7 +435,7 @@ def test_photometric_leaves_geometry_untouched():
     img = (rng.normal(120, 25, (INPUT_H, INPUT_W))).clip(0, 255).astype(np.uint8)
     out = photometric(img, np.random.default_rng(4), AugConfig())
     assert out.shape == img.shape and out.dtype == np.uint8
-    assert 0 <= out.min() and out.max() <= 255
+    assert out.min() >= 0 and out.max() <= 255
 
 
 def test_perfect_heatmaps_meet_the_accuracy_budget():
@@ -498,7 +495,7 @@ def test_board_mask_follows_the_neck_not_a_bounding_box():
     H = letterbox_matrix(1920, 1080) @ synth_H()
     m = board_mask(H, 0.04, 0.5, 12, feather=2.0)
     assert m.shape == (INPUT_H, INPUT_W)
-    assert 0.0 <= m.min() and m.max() <= 1.0 + 1e-6
+    assert m.min() >= 0.0 and m.max() <= 1.0 + 1e-6
     # Every labelled keypoint must be inside the kept region.
     for x, y in apply_homography(H, canonical_uv(12)):
         if 0 <= int(y) < INPUT_H and 0 <= int(x) < INPUT_W:
@@ -636,7 +633,6 @@ def test_composite_contains_exactly_one_sharp_fretboard():
     rng = np.random.default_rng(0)
     for _ in range(8):
         out, _, H_in = make_sample(img_a, H_a, rng, cfg, bg_gray=bg, bg_H=H_b)
-        S = letterbox_matrix(1920, 1080)
         on_label = fretboard_energy(out, H_in)
         # Wherever the background's own board landed, it must be smooth by comparison.
         assert on_label > 1.0, "the labelled fretboard is not sharp in the composite"

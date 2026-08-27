@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from test_dataset import synth_H
 
 from fretguide.dataset import (
     INPUT_H,
@@ -21,11 +22,9 @@ from fretguide.dataset import (
     letterbox_matrix,
     render_heatmaps,
 )
-from fretguide.geometry import apply_homography, fret_u
-from fretguide.predict import FretboardModel, Pose
+from fretguide.geometry import apply_homography
+from fretguide.predict import FretboardModel
 from fretguide.types import UV
-
-from test_dataset import synth_H
 
 FULL_W, FULL_H = 1920, 1080
 

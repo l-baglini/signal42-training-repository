@@ -24,9 +24,9 @@ app never installs a training stack.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import cv2
 import numpy as np
@@ -114,7 +114,7 @@ class FretboardModel:
         self._src_shape: tuple[int, int] | None = None
 
     @classmethod
-    def from_ir(cls, model_path: str | Path, device: str = "AUTO", **kwargs) -> "FretboardModel":
+    def from_ir(cls, model_path: str | Path, device: str = "AUTO", **kwargs) -> FretboardModel:
         """Load an exported model. ``device`` is OpenVINO's: AUTO, CPU, GPU, NPU.
 
         Run ``tools/export.py`` to see measured latency per device rather than guessing.

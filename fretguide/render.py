@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 from .geometry import apply_homography, dot_uv, fret_u, grid_lines, string_v
-from .types import ResolvedSelection, TrackerStatus, UV
+from .types import UV, ResolvedSelection, TrackerStatus
 
 # BGR
 COL_ROOT = (60, 60, 245)  # red-ish: root notes

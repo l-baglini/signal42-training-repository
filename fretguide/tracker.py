@@ -39,7 +39,7 @@ from .geometry import (
     solve_homography,
     solve_is_trustworthy,
 )
-from .types import TrackerStatus, UV
+from .types import UV, TrackerStatus
 
 # --------------------------------------------------------------------------- #
 # Smoothing

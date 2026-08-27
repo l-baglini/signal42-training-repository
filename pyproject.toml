@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fretguide"
+version = "2.0.0"
+description = "Markerless guitar fretboard overlay — finger-placement dots drawn on live video of your own guitar"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+
+# Runtime: what `tools/run_app.py` needs and nothing more. Torch is NOT here --
+# the app runs inference through OpenVINO, so a torch install on the play machine
+# would be ~2 GB of dependency for code that never executes. It lives in [train].
+dependencies = [
+    "opencv-contrib-python==5.0.0.93",
+    "openvino==2026.2.1",
+    "numpy>=2.0",
+    "pillow>=11",
+]
+
+[project.optional-dependencies]
+# Training only, and only on a machine with a GPU worth using. On Windows/CUDA,
+# install torch from PyTorch's own index FIRST -- plain PyPI silently gives the
+# CPU-only build and trains ~15x slower. See packaging/windows/setup.bat.
+train = [
+    "torch>=2.9",
+    "onnx>=1.17",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.9",
+]
+
+[project.urls]
+Documentation = "https://github.com/sasero/fretguide/blob/main/README.md"
+
+[tool.setuptools]
+# Flat layout, deliberately. A src/ layout would be more conventional, but
+# tools/train.py must run inside the Windows training bundle, which unzips
+# `fretguide/` next to `tools/` and never installs a package. Moving the package
+# would break that path for no gain here.
+packages = ["fretguide"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Every test in this suite must pass with no camera, no GPU and no guitar
+# attached. Anything that needs hardware is a manual check, documented in
+# QUICKSTART.md, not a skipped test that quietly rots.
+# No -q here: the documented invocation is `pytest tests/ -q`, and a -q in both
+# places silently collapses to -qq, which hides the pass/fail summary line.
+addopts = "--strict-markers"
+filterwarnings = [
+    "error::DeprecationWarning:fretguide.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["docs/archive"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",  # pycodestyle + pyflakes
+    "I",            # import sorting
+    "UP",           # pyupgrade
+    "B",            # bugbear
+    "SIM",          # simplify
+    "NPY",          # numpy-specific correctness
+]
+ignore = [
+    "E501",    # line length is the formatter's business, not lint's
+    "B008",    # function call in default arg — used deliberately for config objects
+    # zip() without strict=. The correct fix changes behaviour: strict=True
+    # raises where these sites currently truncate, and every one of them zips
+    # arrays whose lengths are already established by the caller (keypoints with
+    # their confidences, corners with their filters). Enabling it would trade
+    # silent truncation for a crash in the render loop, which is worse.
+    "B905",
+    "E702",    # `c, s = cos(a), sin(a)`-style pairs read better on one line here
+    "SIM105",  # contextlib.suppress is not clearer than a two-line try/except
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tools prepend the repo root to sys.path before importing fretguide, so their
+# imports work inside the Windows training bundle, where nothing is
+# pip-installed. That is an E402 by construction and is intentional.
+"tools/*.py" = ["E402", "E731"]
+
+# `l` is the homogeneous line vector in the standard projective-geometry
+# notation this file is written in: points p and q, line l = p × q. Renaming it
+# would make the code harder to check against the maths, not easier.
+"fretguide/detect.py" = ["E741"]
+
+# pytest.importorskip("torch") must run BEFORE importing modules that need
+# torch, so that the suite still passes on a machine with no training deps
+# installed. That ordering is the whole point and cannot be hoisted.
+"tests/test_model.py" = ["E402"]
+
+# Mutable defaults in test fixtures are read-only builders, never mutated.
+"tests/test_predict.py" = ["B006"]

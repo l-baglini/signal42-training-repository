@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .types import Point, StringNumber, UV
+from .types import UV, Point, StringNumber
 
 # --------------------------------------------------------------------------- #
 # Stage 1: the fret rule

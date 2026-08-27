@@ -22,9 +22,8 @@ import argparse
 import json
 import sys
 import time
-from pathlib import Path
-
 import tkinter as tk
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -550,14 +549,14 @@ def main() -> int:
     c.add_argument("--min-sharp", type=float, default=60.0)
     c.set_defaults(func=cmd_capture)
 
-    l = sub.add_parser("label", help="click 4 corners per frame")
-    l.add_argument("--redo", action="store_true", help="re-label frames already done")
-    l.add_argument("--no-carry", action="store_true",
+    lab = sub.add_parser("label", help="click 4 corners per frame")
+    lab.add_argument("--redo", action="store_true", help="re-label frames already done")
+    lab.add_argument("--no-carry", action="store_true",
                    help="do not seed each frame from the previous one")
-    l.add_argument("--view-width", type=int, default=1500, help="window width in px")
-    l.add_argument("--far-fret", type=int, default=12,
+    lab.add_argument("--view-width", type=int, default=1500, help="window width in px")
+    lab.add_argument("--far-fret", type=int, default=12,
                    help="which fret points 3/4 sit on (adjustable live with [ and ])")
-    l.set_defaults(func=cmd_label)
+    lab.set_defaults(func=cmd_label)
 
     args = ap.parse_args()
     return args.func(args)

@@ -42,16 +42,16 @@ from torch.utils.data import DataLoader, Dataset
 
 from fretguide.dataset import (
     DEFAULT_MAX_FRET,
-    canonical_uv,
     INPUT_H,
     INPUT_W,
     STRIDE,
     AugConfig,
     LabelledFrame,
+    canonical_uv,
     decode_heatmaps,
-    letterbox_matrix,
     fret_width_error,
     homography_from_keypoints,
+    letterbox_matrix,
     load_dataset,
     make_sample,
     n_keypoints,

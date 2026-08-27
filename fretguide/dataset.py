@@ -320,7 +320,7 @@ class AugConfig:
     #: :func:`composite_background`.
     decoy_seams: tuple[int, int] = (1, 3)
 
-    def still(self) -> "AugConfig":
+    def still(self) -> AugConfig:
         """A no-op configuration, for validation."""
         return AugConfig(
             rotate_deg=0.0,

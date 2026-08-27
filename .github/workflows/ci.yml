@@ -1,0 +1,56 @@
+name: CI
+
+# The whole suite is designed to run with no camera, no GPU and no guitar, which
+# is what makes CI possible for a computer-vision project at all. What CI cannot
+# check -- whether a dot lands on your actual fret -- is a manual check, and it
+# is written down in QUICKSTART.md rather than pretended at here.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install runtime and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install torch (CPU build)
+        # From PyTorch's CPU index deliberately: the default PyPI wheel drags in
+        # the full CUDA stack (~2 GB) that a GitHub runner has no GPU for. Torch
+        # is needed only so the FretNet tests actually run instead of skipping
+        # past pytest.importorskip.
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Confirm the optional deps really installed
+        # tests/test_model.py guards its imports with pytest.importorskip, so a
+        # failed torch install would turn the FretNet tests green-by-skipping
+        # instead of red. Assert the dependency here, where it cannot be missed.
+        run: python -c "import torch, openvino, cv2; print(torch.__version__, openvino.__version__, cv2.__version__)"
+
+      - name: Tests
+        # -rs reports the reason for any skip in the log, so a suite that shrinks
+        # is visible rather than silent.
+        run: pytest tests/ -q -rs
