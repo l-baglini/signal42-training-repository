@@ -1,0 +1,19 @@
+{
+  "name": "blindspot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "You lean to see. A head-tracked peek-and-dodge game whose level is the room you are sitting in.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "probe": "vitest run --config vitest.tools.config.ts tools/probe.test.ts --reporter=basic",
+    "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "~5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
