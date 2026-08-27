@@ -25,12 +25,15 @@ export interface LiveHomography {
   H: number[][] | null;
   /** Epoch ms of the last successful solve (for staleness checks). */
   updatedAt: number;
+  /** Latest markers the camera saw, normalized — drawn as a debug overlay. */
+  markers: import('../core/types').DetectedMarker[];
 }
 
 const DICTIONARY = 'ARUCO_MIP_36h12';
 const DETECT_INTERVAL_MS = 66; // ~15 Hz
 const STATUS_INTERVAL_MS = 300; // ~3 Hz status updates
-const DETECT_WIDTH = 640; // downscale target for detection speed
+// Detection resolution. Bigger = small/distant markers read better, at more CPU.
+const DETECT_WIDTH = 960;
 
 export function useMarkerTracking(
   videoRef: RefObject<HTMLVideoElement>,
@@ -81,22 +84,30 @@ export function useMarkerTracking(
     const id = window.setInterval(() => {
       const st = useStore.getState();
       const anchors = st.calibration?.markerAnchors;
-      if (!st.tracking || !anchors) {
-        if (liveHRef.current) liveHRef.current.H = null;
-        return;
-      }
+
+      // Always detect so the user can see what the camera reads (debug overlay
+      // + "camera sees N" status), even before calibration / tracking.
       const detected = detectNow();
-      const H = solveTrackingHomography(anchors, detected);
       if (liveHRef.current) {
-        liveHRef.current.H = H;
-        if (H) liveHRef.current.updatedAt = Date.now();
+        liveHRef.current.markers = detected;
+        // Re-solve H only when tracking with registered anchors; otherwise the
+        // overlay falls back to the fixed calibration H.
+        if (st.tracking && anchors) {
+          const H = solveTrackingHomography(anchors, detected);
+          liveHRef.current.H = H;
+          if (H) liveHRef.current.updatedAt = Date.now();
+        } else {
+          liveHRef.current.H = null;
+        }
       }
+
       const now = Date.now();
       if (now - lastStatusRef.current >= STATUS_INTERVAL_MS) {
         lastStatusRef.current = now;
         setMarkerStatus({
+          detected: detected.length,
           visible: countVisible(anchors, detected),
-          registered: Object.keys(anchors).length,
+          registered: anchors ? Object.keys(anchors).length : 0,
         });
       }
     }, DETECT_INTERVAL_MS);

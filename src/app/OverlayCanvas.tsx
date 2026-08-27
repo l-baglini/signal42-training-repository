@@ -22,7 +22,7 @@ import {
   getPerspectiveTransform,
   gridLines,
 } from '../core/geometry';
-import type { Point, StringNumber, UV } from '../core/types';
+import type { DetectedMarker, Point, StringNumber, UV } from '../core/types';
 import type { LiveHomography } from './useMarkerTracking';
 
 const COLORS = {
@@ -126,6 +126,11 @@ function draw(
 ) {
   const st = useStore.getState();
 
+  // Debug: outline every marker the camera currently sees, in any mode. Makes it
+  // obvious whether detection is working (green = registered, amber = unknown id).
+  const liveMarkers = liveHRef.current?.markers ?? [];
+  drawDetectedMarkers(ctx, cssW, cssH, liveMarkers, st.calibration?.markerAnchors);
+
   if (st.calibrating) {
     drawCalibrationDraft(
       ctx,
@@ -157,6 +162,47 @@ function draw(
   if (resolved) {
     drawSelection(ctx, H, cssW, cssH, resolved);
   }
+}
+
+/** Outline detected markers so detection is visible. Green = registered id. */
+function drawDetectedMarkers(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  markers: readonly DetectedMarker[],
+  anchors: Record<number, UV[]> | undefined,
+) {
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.font = 'bold 14px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const m of markers) {
+    if (m.corners.length < 4) continue;
+    const registered = !!anchors?.[m.id];
+    const color = registered
+      ? 'rgba(60, 220, 130, 0.95)'
+      : 'rgba(255, 170, 40, 0.95)';
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    let cx = 0;
+    let cy = 0;
+    m.corners.forEach((c, i) => {
+      const x = c.x * cssW;
+      const y = c.y * cssH;
+      cx += x;
+      cy += y;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    cx /= m.corners.length;
+    cy /= m.corners.length;
+    ctx.fillStyle = color;
+    ctx.fillText(`id ${m.id}`, cx, cy);
+  }
+  ctx.restore();
 }
 
 function drawGrid(

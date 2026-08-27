@@ -19,7 +19,11 @@ import { useStore } from './store';
 export function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const liveHRef = useRef<LiveHomography>({ H: null, updatedAt: 0 });
+  const liveHRef = useRef<LiveHomography>({
+    H: null,
+    updatedAt: 0,
+    markers: [],
+  });
   const [aspect, setAspect] = useState(16 / 9);
   const [error, setError] = useState<string | null>(null);
 

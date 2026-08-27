@@ -71,6 +71,12 @@ export function MarkersPanel() {
         <span>Follow the guitar (marker tracking)</span>
       </label>
 
+      <p className={status && status.detected > 0 ? 'marker-ok' : 'marker-warn'}>
+        {status && status.detected > 0
+          ? `Camera sees ${status.detected} marker(s) right now.`
+          : 'Camera sees no markers — they must be in view and large enough to read.'}
+      </p>
+
       <p className="muted">
         {!canTrack ? (
           'No markers registered yet. Attach markers, then calibrate — Accept registers them.'

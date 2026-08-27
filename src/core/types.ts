@@ -85,6 +85,8 @@ export interface DetectedMarker {
 
 /** Live tracking status surfaced to the UI. */
 export interface TrackingStatus {
+  /** Total markers the camera currently sees (registered or not). */
+  detected: number;
   /** Number of registered markers currently visible (0 = lost). */
   visible: number;
   /** Total markers registered at calibration. */
