@@ -14,19 +14,28 @@ What distinguishes them is the three things a teacher supplies and a note-set do
   the position     each is played as a four-fret box at its own place on the neck, so
                    seven modes become seven distinct shapes in seven distinct places
 
-**Fingerings are transcribed, not derived, and that was a correction.** The first version
-of this module computed them as ``fret - position + 1`` -- one finger per fret, straight
-across. That reproduces the Ionian box exactly, which looked like proof and was not:
-Ionian is simply the case where the hand does not move. The Dorian box, read off the
-sheet, plays fret 5 with the index finger on the outer four strings and fret 4 with it on
-the G and D strings. The hand *shifts between strings*, and no offset formula produces
-that. Validating a rule against the one shape that could not disprove it is how this went
-wrong; shapes are now stored as given.
+**Fingerings are transcribed, not derived**, and the reason is worth stating because it
+looks at first as though they should be derivable.
 
-What is still derived, safely, is which notes a box contains -- whichever belong to the
-parent key inside its fret span -- and every stored note is checked against the key by the
-tests. Transposing to another key moves the whole shape up the neck, which is exact,
-because a box is a shape.
+The *notes* are derivable, completely: all seven modes of a key are one scale, so a box is
+just a window on it, and given the window the notes follow. The *fingering* is not, and
+the sheet says exactly why:
+
+    4-fret boxes  Ionico, Frigio, Lidio, Locrio   one hand position, finger = fret - lo + 1
+    5-fret boxes  Dorico, Misolidio, Eolio        two hand positions; the hand shifts
+
+Four fingers cannot cover five frets, so in three of the seven boxes the hand moves, and
+*which strings it moves on* is a playing decision rather than a consequence of the notes.
+Dorico plays fret 5 with the index finger on the outer four strings and fret 4 with it on
+the G and D strings. No offset formula expresses that.
+
+The first version of this module computed fingerings and checked the result against Ionico
+-- which is a 4-fret box, so it agreed, and proved nothing about the other three. All
+seven shapes are now read from the sheet and stored.
+
+Two boxes are the same box. Frigio and Lidio share frets 7-10 and differ only in the low
+E: Frigio's root B is fret 7, Lidio's root C is fret 8, so Lidio does not play that first
+note. Locrio and Ionico are the same pair one degree round, at frets 2-5.
 """
 
 from __future__ import annotations
@@ -70,7 +79,7 @@ BOX_FRETS = 5
 #: without fingerings rather than inventing them -- a wrong fingering is worse than none,
 #: because it is the part a learner copies without questioning it.
 SHAPES_IN_G: dict[int, tuple[tuple[int, int, int], ...]] = {
-    1: (  # Ionico - frets 2-5, hand does not shift
+    1: (  # Ionico - G - II - frets 2-5
         (1, 2, 1), (1, 3, 2), (1, 5, 4),
         (2, 3, 2), (2, 5, 4),
         (3, 2, 1), (3, 4, 3), (3, 5, 4),
@@ -78,13 +87,56 @@ SHAPES_IN_G: dict[int, tuple[tuple[int, int, int], ...]] = {
         (5, 2, 1), (5, 3, 2), (5, 5, 4),
         (6, 3, 2), (6, 5, 4),
     ),
-    2: (  # Dorico - frets 4-8. Index at fret 5 on the outer strings, at fret 4 on G and D.
+    2: (  # Dorico - Am - IV - frets 4-8. Index at 5 on the outer strings, at 4 on G and D.
         (1, 5, 1), (1, 7, 3), (1, 8, 4),
         (2, 5, 1), (2, 7, 3), (2, 8, 4),
         (3, 4, 1), (3, 5, 2), (3, 7, 4),
         (4, 4, 1), (4, 5, 2), (4, 7, 4),
         (5, 5, 1), (5, 7, 3),
         (6, 5, 1), (6, 7, 3), (6, 8, 4),
+    ),
+    3: (  # Frigio - Bm - VII - frets 7-10
+        (1, 7, 1), (1, 8, 2), (1, 10, 4),
+        (2, 7, 1), (2, 8, 2), (2, 10, 4),
+        (3, 7, 1), (3, 9, 3),
+        (4, 7, 1), (4, 9, 3), (4, 10, 4),
+        (5, 7, 1), (5, 9, 3), (5, 10, 4),
+        (6, 7, 1), (6, 8, 2), (6, 10, 4),
+    ),
+    4: (  # Lidio - C - VII - frets 7-10. Frigio's box exactly, minus the low E's fret 7:
+        # that note is B, which is Frigio's root but sits below Lidio's, so Lidio starts
+        # on the C at fret 8 instead.
+        (1, 7, 1), (1, 8, 2), (1, 10, 4),
+        (2, 7, 1), (2, 8, 2), (2, 10, 4),
+        (3, 7, 1), (3, 9, 3),
+        (4, 7, 1), (4, 9, 3), (4, 10, 4),
+        (5, 7, 1), (5, 9, 3), (5, 10, 4),
+        (6, 8, 2), (6, 10, 4),
+    ),
+    5: (  # Misolidio - D7 - IX - frets 9-13
+        (1, 10, 1), (1, 12, 3),
+        (2, 10, 1), (2, 12, 3), (2, 13, 4),
+        (3, 9, 1), (3, 11, 3), (3, 12, 4),
+        (4, 9, 1), (4, 10, 2), (4, 12, 4),
+        (5, 9, 1), (5, 10, 2), (5, 12, 4),
+        (6, 10, 2), (6, 12, 4),
+    ),
+    6: (  # Eolio - Em - XI - frets 11-15
+        (1, 12, 1), (1, 14, 3), (1, 15, 4),
+        (2, 12, 1), (2, 13, 2), (2, 15, 4),
+        (3, 11, 1), (3, 12, 2), (3, 14, 4),
+        (4, 12, 2), (4, 14, 4),
+        (5, 12, 1), (5, 14, 3), (5, 15, 4),
+        (6, 12, 1), (6, 14, 3), (6, 15, 4),
+    ),
+    7: (  # Locrio - F#m7b5 - II - frets 2-5. Ionico's box exactly, plus the low E's fret
+        # 2: that note is F#, which is Locrio's root, so here the box starts a fret lower.
+        (1, 2, 1), (1, 3, 2), (1, 5, 4),
+        (2, 3, 2), (2, 5, 4),
+        (3, 2, 1), (3, 4, 3), (3, 5, 4),
+        (4, 2, 1), (4, 4, 3), (4, 5, 4),
+        (5, 2, 1), (5, 3, 2), (5, 5, 4),
+        (6, 2, 1), (6, 3, 2), (6, 5, 4),
     ),
 }
 

@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 316 tests
+.venv/bin/python -m pytest tests/ -q      # 321 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -91,7 +91,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 | `tools/` | CLI entry points. They `sys.path.insert` the repo root deliberately, so they run inside the Windows training bundle where nothing is pip-installed. Don't "clean that up". |
 | `fretguide/source.py` | Frame sources — the one abstraction both apps consume. `SyntheticSource` needs no camera, no model and no dataset; it is how the overlay gets developed and tested here. Its backdrop is cached per size, so don't reintroduce per-frame full-resolution numpy: that cost 74 ms/frame and capped the mode at 13 fps. |
 | `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
-| `fretguide/modes.py` | Modes as degrees of a key, not as roots. **Every mode of a key is the same note set** — asked for whole-neck, all seven return identical positions. What differs is the root, the chord it sits over, and the box. Box fingerings are **transcribed** into `SHAPES_IN_G` and confirmed one at a time, never computed: the hand shifts between strings inside a box, so no offset formula fits. A degree missing from that table renders its notes with no fingers rather than inventing them. |
+| `fretguide/modes.py` | Modes as degrees of a key, not as roots. **Every mode of a key is the same note set** — asked for whole-neck, all seven return identical positions. What differs is the root, the chord it sits over, and the box. All seven box shapes are **transcribed** into `SHAPES_IN_G`, never computed: four span four frets and use one hand position, three span five and the hand shifts between strings, which no offset formula expresses. Positions are not stored — they fall out of the notes and reproduce the source sheet's roman numerals, which is the transcription's own check. |
+
 
 | `fretguide/menu.py` | The practice catalogue and cursor state. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. |
 | `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |

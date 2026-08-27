@@ -157,18 +157,53 @@ def test_transpose_wraps_the_octave():
 
 
 def test_boxes_past_the_twelfth_fret_are_reported_not_hidden():
-    """The tracker poses frets 0–12 and no further, so Aeolian's position XI box runs two
-    frets off the end. Saying so beats drawing two-thirds of a shape silently."""
-    aeolian = key_modes("G")[5]
-    assert aeolian.position == 11
-    assert aeolian.clipped == 3
-    assert "off the neck" in aeolian.detail
-    # Both transcribed boxes sit entirely on the tracked neck. Misolidio also clips now,
-    # at one fret, but only because an unconfirmed box is assumed five frets wide from a
-    # position read off the scan -- that number may well move when it is transcribed.
-    assert all(m.clipped == 0 for m in key_modes("G") if m.verified)
-    assert key_modes("G")[4].clipped == 1
+    """The tracker poses frets 0-12 and no further, because the model predicts the nut
+    through the twelfth fret and nothing beyond.
 
+    Two of the seven boxes run past it in the key of G, and both are real: Misolidio ends
+    at fret 13 and Eolio at 15. Saying so beats drawing part of a shape and letting
+    somebody learn it that way.
+    """
+    modes = key_modes("G")
+    assert [m.clipped for m in modes] == [0, 0, 0, 0, 1, 3, 0]
+    assert "off the neck" in modes[5].detail
+    assert all(not m.clipped for m in modes[:4]), "the first four boxes fit on the neck"
+
+
+def test_every_box_position_matches_the_roman_numeral_on_the_sheet():
+    """Independent check on the transcription.
+
+    The fret each box starts at is not stored: it falls out of the notes that were typed
+    in. That it reproduces the sheet's own roman numerals -- II, IV, VII, VII, IX, XI, II
+    -- means a mis-keyed fret would have to move a whole box to go unnoticed.
+    """
+    assert [m.position for m in key_modes("G", max_fret=24)] == [2, 4, 7, 7, 9, 11, 2]
+    assert [m.roman_position for m in key_modes("G", max_fret=24)] == [
+        "II", "IV", "VII", "VII", "IX", "XI", "II"]
+
+
+def test_lidio_is_frigio_without_the_low_e_below_its_root():
+    """The pair that explains the system.
+
+    Frigio and Lidio share one box. What separates them is where it starts: Frigio's root
+    B is the low E's fret 7, Lidio's root C is fret 8, so Lidio simply does not play that
+    first note. Same shape, different tonic, different chord underneath.
+    """
+    frigio, lidio = key_modes("G")[2], key_modes("G")[3]
+    f = {(p.string, p.fret) for p in mode_box(frigio)}
+    ll = {(p.string, p.fret) for p in mode_box(lidio)}
+    assert f - ll == {(6, 7)}, "Frigio should have exactly one note Lidio lacks"
+    assert not ll - f, "Lidio should have no note Frigio lacks"
+
+
+def test_locrio_is_ionico_plus_the_low_e_below_ionicos_root():
+    """The same relationship one degree round: Locrio's root F# is the low E's fret 2,
+    which sits below Ionico's root G at fret 3, so Locrio reaches down for it."""
+    ionico, locrio = key_modes("G")[0], key_modes("G")[6]
+    i = {(p.string, p.fret) for p in mode_box(ionico)}
+    lo = {(p.string, p.fret) for p in mode_box(locrio)}
+    assert lo - i == {(6, 2)}
+    assert not i - lo
 
 def test_a_wider_neck_needs_no_clipping():
     assert all(m.clipped == 0 for m in key_modes("G", max_fret=24))
@@ -190,3 +225,35 @@ def test_malformed_mode_ids_resolve_to_nothing_rather_than_raising(bad):
 def test_the_mode_table_is_internally_consistent():
     assert len(MODES) == 7
     assert [d for d, *_ in MODES] == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_only_the_five_fret_boxes_need_the_hand_to_move():
+    """Why the fingerings had to be transcribed rather than computed.
+
+    Four fingers cannot cover five frets, so the three wider boxes shift the hand between
+    strings and the four narrower ones do not. The narrow ones are exactly the boxes a
+    `finger = fret - lo + 1` rule fits — which is why checking that rule against Ionico
+    looked like proof and was not.
+    """
+    for m in key_modes("G", max_fret=24):
+        box = mode_box(m, max_fret=24)
+        lo = min(p.fret for p in box)
+        span = max(p.fret for p in box) - lo + 1
+        anchors = {p.fret - p.finger + 1 for p in box}
+        if span == 4:
+            assert anchors == {lo}, f"{m.italian} is 4 frets but shifts the hand"
+        else:
+            assert span == 5, f"{m.italian} spans {span} frets"
+            assert anchors == {lo, lo + 1}, f"{m.italian} shifts oddly: {sorted(anchors)}"
+
+
+def test_every_note_of_every_box_belongs_to_the_key():
+    """The transcription's own guard: a mis-keyed fret almost always leaves the key."""
+    from fretguide.theory import chroma_at, scale_chromas
+
+    for key in ("G", "C", "E"):
+        allowed = scale_chromas(key, "major")
+        for m in key_modes(key, max_fret=24):
+            for p in mode_box(m, max_fret=24):
+                assert chroma_at(p.string, p.fret) in allowed, (
+                    f"{key} {m.italian}: string {p.string} fret {p.fret} is outside {key}")

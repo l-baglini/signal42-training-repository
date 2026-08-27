@@ -136,14 +136,21 @@ To print the boxes for a music stand, or to check them against your own material
 .venv/bin/python tools/print_boxes.py --key G       # -> diagnostics/boxes.png
 ```
 
-The shapes are **transcribed from a teaching sheet**, one box at a time, and read
-back for confirmation. They are not computed: in Dorico the index finger plays
-fret 5 on the outer four strings and fret 4 on the G and D strings, so the hand
-shifts *within* the box and no formula produces that.
+All seven shapes are **transcribed from a teaching sheet** and cross-checked
+three ways: every note belongs to the key, every box starts on its own root, and
+the fret each box begins at reproduces the sheet's own roman numeral (II, IV,
+VII, VII, IX, XI, II) without that number being stored anywhere.
 
-A box whose fingering has not been confirmed yet shows its notes as plain dots
-with no finger numbers, and says "fingering unconfirmed". A wrong finger number
-is worse than none — it is the part you would copy without questioning it.
+The notes of a box are derivable; the fingering is not, and the sheet shows why.
+Four of the boxes span four frets and use one hand position. Three span five —
+and four fingers cannot cover five frets, so the hand shifts, and which strings
+it shifts on is a playing decision rather than a consequence of the notes.
+Dorico plays fret 5 with the index finger on the outer four strings and fret 4
+with it on the G and D strings.
+
+Two pairs are the same box. Frigio and Lidio share frets 7–10, differing only in
+the low E: Frigio's root B is fret 7, Lidio's root C is fret 8, so Lidio doesn't
+play that first note. Locrio and Ionico are the same pair one degree round.
 
 ### The older enrolment backend
 
