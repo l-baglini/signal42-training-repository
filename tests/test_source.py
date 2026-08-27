@@ -181,3 +181,57 @@ def test_replay_says_what_to_do_when_the_frames_are_missing(tmp_path):
     """dataset/frames/ is absent in a fresh clone; the error has to be actionable."""
     with pytest.raises(FileNotFoundError, match="SyntheticSource"):
         ReplaySource(tmp_path / "nope", tmp_path / "nope.json")
+
+
+# --------------------------------------------------------------------------- #
+# Colour (docs/PLAN-shell.md P2)
+# --------------------------------------------------------------------------- #
+
+
+def test_chroma_is_absent_unless_asked_for():
+    """Colour is display-only. The tracking path must keep seeing exactly Y and nothing
+    else, and the OpenCV app must not start paying for planes it never draws."""
+    packet = SyntheticSource(width=320, height=180, fps=None).read()
+    assert packet.u is None and packet.v is None
+    assert not packet.colour
+
+
+def test_chroma_planes_are_half_resolution():
+    """4:2:0. Full-resolution chroma would be four times the upload for no visible gain —
+    and would not match what the camera actually delivers."""
+    packet = SyntheticSource(width=320, height=180, fps=None, colour=True).read()
+    assert packet.colour
+    assert packet.u.shape == (90, 160) == packet.v.shape
+    assert packet.u.dtype == np.uint8
+
+
+def test_the_board_is_warm_and_the_room_is_not():
+    """The sign of the chroma, checked in the only way that survives a global swap.
+
+    Testing the board alone would pass with U and V crossed, because both regions would
+    flip together. Asserting the board is warm *and* the room is cool pins the sign.
+    """
+    from fretguide.source import CHROMA_BOARD, CHROMA_ROOM
+
+    assert CHROMA_BOARD[0] < 128 < CHROMA_BOARD[1], "board chroma is not warm"
+    assert CHROMA_ROOM[0] > 128 > CHROMA_ROOM[1], "room chroma is not cool"
+
+    packet = SyntheticSource(width=640, height=360, fps=None, colour=True).read()
+    assert packet.u.min() == CHROMA_BOARD[0] and packet.v.max() == CHROMA_BOARD[1]
+    assert packet.u.max() == CHROMA_ROOM[0] and packet.v.min() == CHROMA_ROOM[1]
+
+
+def test_chroma_follows_the_board_as_it_moves():
+    """A static chroma plane would look right in a screenshot and wrong in motion."""
+    src = SyntheticSource(width=320, height=180, fps=None, colour=True)
+    first = src.read().u
+    for _ in range(30):
+        last = src.read().u
+    assert not np.array_equal(first, last), "chroma did not move with the board"
+
+
+def test_greyscale_and_colour_agree_on_luminance():
+    """Turning colour on must not disturb the plane the tracker reads."""
+    a = SyntheticSource(width=320, height=180, fps=None).read()
+    b = SyntheticSource(width=320, height=180, fps=None, colour=True).read()
+    assert np.array_equal(a.gray, b.gray)

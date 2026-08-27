@@ -261,6 +261,33 @@ def draw_synthetic_board(H: np.ndarray, width: int, height: int, max_fret: int =
     return cv2.GaussianBlur(img, (3, 3), 0)
 
 
+#: Chroma of the two regions, BT.601 limited range. Rosewood is warm (U below neutral,
+#: V above); the room behind it is left very slightly cool. Values derived from
+#: RGB(90, 60, 40) and RGB(70, 74, 82) through the same matrix the shader inverts, so a
+#: sign error anywhere in the colour path shows up as a board that has gone blue.
+CHROMA_BOARD = (114, 142)
+CHROMA_ROOM = (132, 124)
+
+
+def synthetic_chroma(H: np.ndarray, width: int, height: int,
+                     max_fret: int = 12) -> tuple[np.ndarray, np.ndarray]:
+    """Half-resolution U and V planes matching :func:`draw_synthetic_board`.
+
+    Exists so the colour path is visible and testable without a camera. Chroma is flat
+    per region rather than textured, which is realistic enough: 4:2:0 already throws away
+    three quarters of it, and on a real neck the colour genuinely is close to constant --
+    it is luminance that carries the grain, the frets and the light.
+    """
+    hh, hw = height // 2, width // 2
+    u = np.full((hh, hw), CHROMA_ROOM[0], np.uint8)
+    v = np.full((hh, hw), CHROMA_ROOM[1], np.uint8)
+    quad = np.array([[p.x / 2, p.y / 2] for p in
+                     [_pt(H, uv) for uv in corners_uv(max_fret)]], dtype=np.int32)
+    cv2.fillConvexPoly(u, quad, CHROMA_BOARD[0], cv2.LINE_AA)
+    cv2.fillConvexPoly(v, quad, CHROMA_BOARD[1], cv2.LINE_AA)
+    return u, v
+
+
 def _pt(H: np.ndarray, uv: UV) -> Point:
     """Project one board point to image pixels.
 
@@ -286,9 +313,10 @@ class SyntheticSource:
     """
 
     def __init__(self, width: int = 1920, height: int = 1080, max_fret: int = 12,
-                 fps: float | None = 30.0, refuse_every: int = 0) -> None:
+                 fps: float | None = 30.0, refuse_every: int = 0,
+                 colour: bool = False) -> None:
         self.width, self.height, self.max_fret = width, height, max_fret
-        self.fps, self.refuse_every = fps, refuse_every
+        self.fps, self.refuse_every, self.colour = fps, refuse_every, colour
         self._i = 0
         self._t0 = time.monotonic()
 
@@ -303,17 +331,21 @@ class SyntheticSource:
 
         H = synthetic_pose(t, self.width, self.height, self.max_fret)
         gray = draw_synthetic_board(H, self.width, self.height, self.max_fret)
+        chroma = (synthetic_chroma(H, self.width, self.height, self.max_fret)
+                  if self.colour else (None, None))
 
         if self.refuse_every and i and i % self.refuse_every < max(1, self.refuse_every // 6):
             status = TrackerStatus(locked=False, inliers=3, spread=0.04,
                                    reason="baseline too short (u-spread 0.040 < 0.12)",
                                    fields={"src": "synthetic"})
-            return FramePacket(gray=gray, t=time.monotonic(), index=i, H=None, status=status)
+            return FramePacket(gray=gray, t=time.monotonic(), index=i, H=None,
+                               status=status, u=chroma[0], v=chroma[1])
 
         status = TrackerStatus(locked=True, inliers=2 * (self.max_fret + 1),
                                spread=fret_u(self.max_fret),
                                fields={"src": "synthetic"})
-        return FramePacket(gray=gray, t=time.monotonic(), index=i, H=H, status=status)
+        return FramePacket(gray=gray, t=time.monotonic(), index=i, H=H, status=status,
+                           u=chroma[0], v=chroma[1])
 
     def close(self) -> None:
         pass
@@ -333,11 +365,12 @@ class CameraSource:
 
     def __init__(self, device: int | str = 0, width: int = 1920, height: int = 1080,
                  model_path: str = "models/fretnet.xml", infer_device: str = "AUTO",
-                 max_fret: int = 12, min_conf: float = 0.15, smooth: bool = True) -> None:
+                 max_fret: int = 12, min_conf: float = 0.15, smooth: bool = True,
+                 colour: bool = False) -> None:
         from .capture import Camera
         from .predict import FretboardModel
 
-        self.cam = Camera(device, width, height)
+        self.cam = Camera(device, width, height, colour=colour)
         self.width, self.height = self.cam.width, self.cam.height
         self.model = FretboardModel.from_ir(model_path, device=infer_device,
                                             max_fret=max_fret, min_conf=min_conf,
@@ -361,6 +394,7 @@ class CameraSource:
                     "net": f"{p.infer_ms:.0f}ms"},
         )
         return FramePacket(gray=f.gray, t=f.t, index=f.index, H=p.H, status=status,
+                           u=f.u, v=f.v,
                            debug_pts=p.pts[p.conf >= self.model.min_conf])
 
     def close(self) -> None:
@@ -375,7 +409,7 @@ def open_source(spec: str, **kw) -> FrameSource:
     if spec == "synthetic":
         return SyntheticSource(**{k: v for k, v in kw.items()
                                   if k in ("width", "height", "max_fret", "fps",
-                                           "refuse_every")})
+                                           "refuse_every", "colour")})
     if spec == "replay":
         return ReplaySource(**{k: v for k, v in kw.items()
                                if k in ("frames_dir", "labels_path", "max_fret", "fps",
@@ -383,4 +417,4 @@ def open_source(spec: str, **kw) -> FrameSource:
     return CameraSource(device=spec, **{k: v for k, v in kw.items()
                                         if k in ("width", "height", "model_path",
                                                  "infer_device", "max_fret", "min_conf",
-                                                 "smooth")})
+                                                 "smooth", "colour")})

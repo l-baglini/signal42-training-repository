@@ -99,9 +99,10 @@ per-module conventions.
 | [`fretguide/predict.py`](fretguide/predict.py) | Live OpenVINO inference, pose fit, smoothing |
 | [`fretguide/render.py`](fretguide/render.py) | The overlay |
 | [`fretguide/source.py`](fretguide/source.py) | Frame sources: live camera, dataset replay, or a synthetic board needing no hardware at all |
+| [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 212 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 248 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -121,7 +122,7 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-212 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
+248 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.
@@ -147,9 +148,19 @@ deliberately parked. Nothing in the current design forecloses it — the
 verification layer consumes the selected target and an audio stream, and
 touches neither the tracker nor the renderer.
 
-The interface is still an OpenCV window driven by keyboard hotkeys. The native
-PySide6 shell that replaces it is planned in
-[`docs/PLAN-shell.md`](docs/PLAN-shell.md) and not yet built.
+The native [PySide6 shell](docs/PLAN-shell.md) is part-built. Its video surface
+works — colour 1080p on the GPU at **1.2 ms/frame**, which is 28× the headroom
+needed for the 30 fps target — but the overlay has not been ported to it yet, so
+the app you actually use is still the OpenCV window:
+
+```bash
+.venv/bin/python tools/run_shell.py     # video only, no hardware needed
+```
+
+Colour is new, and was free: the camera always sent Y, U and V, and
+[`capture.py`](fretguide/capture.py) was keeping only Y. The conversion now
+happens in a fragment shader, so the CPU capture path is unchanged and inference
+still sees exactly the same grey plane.
 
 Single user, one guitar, one room, offline. Every design decision is allowed to
 exploit that.

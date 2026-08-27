@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-"""Go/no-go check for the native shell — does the YUV-in-a-shader path actually work here?
+"""Go/no-go for the native shell: does the real video path work on this machine?
 
     python tools/probe_gl.py            # verdict only
-    python tools/probe_gl.py --verbose  # + the GL strings
+    python tools/probe_gl.py --verbose  # + GL strings and per-check numbers
 
-docs/PLAN-shell.md P0. The plan's central claim is that colour video is free: the camera
-already hands us Y, U and V (capture.py keeps only Y), so we upload three single-channel
-textures and convert to RGB in a fragment shader, and the GPU does it inside a blit it is
-already performing.
+docs/PLAN-shell.md P0/P2. Two stages, both offscreen, so this runs over SSH and from a
+script and exits non-zero on failure.
 
-This does not merely check that a GL context can be created. It runs that exact mechanism
-end to end -- three R8 textures, the BT.601 conversion in GLSL, rendered to a real
-framebuffer and read back -- and checks the pixels came out the colour they should. A
-context that exists but cannot sample three textures or hit the colour would be a no-go
-discovered three days into P2 instead of here.
+  1. **Colour maths.** Three single-channel R8 textures uploaded as Y, U and V, converted
+     by ``fretguide.shell.shaders.FRAGMENT`` -- the shader that actually ships, not a copy
+     of it -- rendered and read back, checked against the colours that went in.
 
-Exit status is 0 for go, 1 for no-go, so CI or a script can gate on it.
+  2. **The real widget.** A ``VideoWidget`` is given a real ``FramePacket`` from the
+     synthetic source and asked to draw. Checks that the board comes out the colour of
+     wood, that the letterbox margins are where the arithmetic says, and that the picture
+     is not upside down.
+
+Stage 1 alone would pass while the widget was drawing nothing at all: a core-profile
+context refuses draw calls with no VAO bound, silently, leaving a window the colour of
+glClearColor. That is exactly the bug stage 2 exists to catch, because it did happen.
+
+This is not in the pytest suite because it needs the [gui] extra and a GL context, and
+CLAUDE.md would rather have an honest external gate than a test that skips itself.
 """
 
 from __future__ import annotations
@@ -28,8 +34,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root
 
-# Colours to round-trip. Chosen for spread: two primaries, a saturated secondary, and a
-# mid grey (which catches a swapped U/V, since neutral chroma must stay neutral).
+# Spread on purpose: two primaries, a saturated secondary, and a mid grey. Grey is the one
+# that catches swapped U and V -- neutral chroma must stay neutral, and every other colour
+# still looks plausible with those two crossed.
 PROBES = {
     "red": (220, 40, 40),
     "green": (40, 200, 90),
@@ -37,104 +44,50 @@ PROBES = {
     "grey": (128, 128, 128),
 }
 
-VERT = """
-#version 330 core
-const vec2 QUAD[4] = vec2[4](vec2(-1,-1), vec2(1,-1), vec2(-1,1), vec2(1,1));
-out vec2 uv;
-void main() {
-    vec2 p = QUAD[gl_VertexID];
-    uv = p * 0.5 + 0.5;
-    gl_Position = vec4(p, 0.0, 1.0);
-}
-"""
-
-# BT.601 limited range -- what V4L2 delivers for this capture format. If the shell ever
-# looks washed out or over-saturated, this matrix is the first suspect: full-range and
-# BT.709 both differ, and all three are visually plausible until compared side by side.
-FRAG = """
-#version 330 core
-in vec2 uv;
-out vec4 frag;
-uniform sampler2D texY;
-uniform sampler2D texU;
-uniform sampler2D texV;
-void main() {
-    float y = texture(texY, uv).r;
-    float u = texture(texU, uv).r - 0.5;
-    float v = texture(texV, uv).r - 0.5;
-    y = 1.164383 * (y - 0.0625);
-    frag = vec4(
-        y + 1.596027 * v,
-        y - 0.812968 * v - 0.391762 * u,
-        y + 2.017232 * u,
-        1.0);
-}
-"""
+GL_TRIANGLE_STRIP = 0x0005
+GL_VENDOR, GL_RENDERER, GL_VERSION = 0x1F00, 0x1F01, 0x1F02
 
 
 def rgb_to_yuv601(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
     """BT.601 limited-range forward transform — the inverse of what the shader does."""
     r, g, b = (c / 255.0 for c in rgb)
-    y = 0.0625 + 0.256788 * r + 0.504129 * g + 0.097906 * b
-    u = 0.5 - 0.148223 * r - 0.290993 * g + 0.439216 * b
-    v = 0.5 + 0.439216 * r - 0.367788 * g - 0.071427 * b
-    return y, u, v
+    return (0.0625 + 0.256788 * r + 0.504129 * g + 0.097906 * b,
+            0.5 - 0.148223 * r - 0.290993 * g + 0.439216 * b,
+            0.5 + 0.439216 * r - 0.367788 * g - 0.071427 * b)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--verbose", action="store_true", help="print the GL strings")
-    ap.add_argument("--tolerance", type=int, default=4,
-                    help="max per-channel deviation, 0-255 (default 4)")
-    args = ap.parse_args()
+def stage_colour(fmt, tol: int, verbose: bool) -> list[str]:
+    """Round-trip four colours through the shipped fragment shader."""
+    from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
+    from PySide6.QtOpenGL import (
+        QOpenGLFramebufferObject,
+        QOpenGLShader,
+        QOpenGLShaderProgram,
+        QOpenGLTexture,
+        QOpenGLVertexArrayObject,
+    )
 
-    try:
-        from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
-        from PySide6.QtOpenGL import (
-            QOpenGLFramebufferObject,
-            QOpenGLShader,
-            QOpenGLShaderProgram,
-            QOpenGLTexture,
-            QOpenGLVertexArrayObject,
-        )
-        from PySide6.QtWidgets import QApplication
-    except ImportError as e:
-        print(f"no-go: PySide6 not installed ({e})")
-        print("       .venv/bin/pip install -e '.[gui]'")
-        return 1
+    from fretguide.shell.shaders import FRAGMENT, VERTEX
 
-    fmt = QSurfaceFormat()
-    fmt.setVersion(3, 3)
-    fmt.setProfile(QSurfaceFormat.CoreProfile)
-    QSurfaceFormat.setDefaultFormat(fmt)
-
-    app = QApplication(sys.argv)  # noqa: F841  (must outlive the GL objects)
-
-    # Offscreen rather than a window: this must be runnable over SSH and from a script,
-    # and a window would prove nothing extra about the shader path.
     surface = QOffscreenSurface()
     surface.setFormat(fmt)
     surface.create()
     ctx = QOpenGLContext()
     ctx.setFormat(fmt)
     if not ctx.create() or not ctx.makeCurrent(surface):
-        print("no-go: could not create a GL 3.3 core context")
-        return 1
+        return ["could not create a GL 3.3 core context"]
 
     f = ctx.functions()
-    if args.verbose:
-        # GL_VENDOR / GL_RENDERER / GL_VERSION. Spelled as literals because
-        # PySide6 does not re-export the GL enums at module level.
-        for name, enum in (("vendor", 0x1F00), ("renderer", 0x1F01), ("version", 0x1F02)):
+    if verbose:
+        for name, enum in (("vendor", GL_VENDOR), ("renderer", GL_RENDERER),
+                           ("version", GL_VERSION)):
             print(f"  {name:9} {f.glGetString(enum)}")
 
     prog = QOpenGLShaderProgram()
-    prog.addShaderFromSourceCode(QOpenGLShader.Vertex, VERT)
-    prog.addShaderFromSourceCode(QOpenGLShader.Fragment, FRAG)
+    prog.addShaderFromSourceCode(QOpenGLShader.Vertex, VERTEX)
+    prog.addShaderFromSourceCode(QOpenGLShader.Fragment, FRAGMENT)
     if not prog.link():
-        print(f"no-go: shader link failed\n{prog.log()}")
-        return 1
+        return [f"the shipped shader does not link here:\n{prog.log()}"]
 
     size = 16
     fbo = QOpenGLFramebufferObject(size, size)
@@ -142,29 +95,29 @@ def main() -> int:
     vao.create()
 
     def plane(value: float) -> QOpenGLTexture:
-        """One uniform single-channel texture — the shape a real Y/U/V plane arrives in."""
         t = QOpenGLTexture(QOpenGLTexture.Target2D)
         t.setFormat(QOpenGLTexture.R8_UNorm)
         t.setSize(size, size)
         t.setMinMagFilters(QOpenGLTexture.Linear, QOpenGLTexture.Linear)
         t.allocateStorage()
-        buf = np.full((size, size), round(value * 255), dtype=np.uint8)
-        t.setData(QOpenGLTexture.Red, QOpenGLTexture.UInt8, buf.tobytes())
+        t.setData(QOpenGLTexture.Red, QOpenGLTexture.UInt8,
+                  np.full((size, size), round(value * 255), np.uint8).tobytes())
         return t
 
     failures = []
     for name, want in PROBES.items():
-        y, u, v = rgb_to_yuv601(want)
-        texs = [plane(y), plane(u), plane(v)]
+        texs = [plane(c) for c in rgb_to_yuv601(want)]
         for i, (t, uniform) in enumerate(zip(texs, ("texY", "texU", "texV"))):
             t.bind(i)
             prog.bind()
             prog.setUniformValue1i(uniform, i)
+        prog.setUniformValue1f("dim", 1.0)
+        prog.setUniformValue1i("mirror", 0)
 
         fbo.bind()
         f.glViewport(0, 0, size, size)
         vao.bind()
-        f.glDrawArrays(0x0005, 0, 4)  # GL_TRIANGLE_STRIP
+        f.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
         vao.release()
         img = fbo.toImage()
         fbo.release()
@@ -174,23 +127,137 @@ def main() -> int:
         px = img.pixelColor(size // 2, size // 2)
         got = (px.red(), px.green(), px.blue())
         err = max(abs(a - b) for a, b in zip(got, want))
-        ok = err <= args.tolerance
-        print(f"  {name:6} want rgb{want}  got rgb{got}  err {err:>3}  "
-              f"{'ok' if ok else 'FAIL'}")
-        if not ok:
-            failures.append(name)
-
+        if verbose or err > tol:
+            print(f"  {name:6} want rgb{want}  got rgb{got}  err {err:>3}  "
+                  f"{'ok' if err <= tol else 'FAIL'}")
+        if err > tol:
+            failures.append(f"{name} off by {err} (tolerance {tol}) — suspect the colour "
+                            f"matrix: BT.601 limited vs full range vs BT.709")
     ctx.doneCurrent()
+    return failures
 
-    if failures:
-        print(f"\nno-go: YUV->RGB wrong for {', '.join(failures)} "
-              f"(tolerance {args.tolerance})")
-        print("       A context exists but the conversion is off -- suspect the")
-        print("       colour matrix (BT.601 limited vs full range vs BT.709).")
+
+def stage_widget(verbose: bool) -> list[str]:
+    """Draw a real packet with the real widget, and check what came out."""
+    from PySide6.QtWidgets import QApplication
+
+    from fretguide.shell.layout import letterbox
+    from fretguide.shell.video import VideoWidget
+    from fretguide.source import SyntheticSource
+
+    app = QApplication.instance() or QApplication([])
+    src_w, src_h = 1280, 720
+    win_w, win_h = 1000, 700  # not 16:9, so the letterbox has to do something
+
+    widget = VideoWidget()
+    widget.resize(win_w, win_h)
+    widget.show()
+    app.processEvents()
+
+    source = SyntheticSource(width=src_w, height=src_h, fps=None, colour=True)
+    for _ in range(14):  # far enough in that the board has drifted off centre
+        packet = source.read()
+    widget.set_packet(packet)
+    app.processEvents()
+    widget.repaint()
+    app.processEvents()
+    img = widget.grabFramebuffer()
+
+    failures = []
+    box = letterbox(src_w, src_h, win_w, win_h)
+    scale = img.width() / win_w  # HiDPI: the grab is in device pixels
+
+    def rgb(x, y):
+        c = img.pixelColor(int(x * scale), int(y * scale))
+        return (c.red(), c.green(), c.blue())
+
+    centre = rgb(win_w / 2, win_h / 2)
+    if verbose:
+        print(f"  letterbox {box}   grab {img.width()}x{img.height()}   centre rgb{centre}")
+
+    if max(centre) < 25:
+        failures.append(f"nothing was drawn (centre rgb{centre} is the clear colour). "
+                        f"In a core profile this is usually a draw call with no VAO bound")
+    elif not (centre[0] > centre[1] > centre[2] and centre[0] - centre[2] > 20):
+        failures.append(f"the board is not the colour of wood: rgb{centre}. Expected R>G>B "
+                        f"— if it is blue-ish, U and V are swapped")
+
+    if box.y > 4:  # this window letterboxes top and bottom
+        bar = rgb(win_w / 2, box.y / 2)
+        if max(bar) > 25:
+            failures.append(f"the letterbox margin is not empty: rgb{bar} at y={box.y//2}")
+
+    # Orientation. Sample the middle of two fret spaces far apart on the neck: under a
+    # vertical flip the neck runs the other diagonal, so both land in the room instead of
+    # on the board. Fret *centres*, not fret positions, or these land on the wires, which
+    # are near-white and would pass a colour check without proving anything.
+    from fretguide.geometry import apply_homography, fret_centre_u
+    from fretguide.types import UV
+
+    for fret in (2, 11):
+        xy = apply_homography(packet.H, UV(fret_centre_u(fret), 0.5))[0]
+        c = rgb(box.x + xy[0] * box.w / src_w, box.y + xy[1] * box.h / src_h)
+        if verbose:
+            print(f"  fret {fret:>2} centre rgb{c} at {xy.round()}")
+        if not (c[0] > c[2] + 20):
+            failures.append(
+                f"fret {fret}'s centre is not on warm board: rgb{c}. The neck is not "
+                f"where the pose says it is — suspect a vertical flip or the viewport")
+
+    # And the room behind it must be cool, which is the same check in reverse: if U and V
+    # were swapped globally, both the board and the room would flip sign together and the
+    # board test above would still pass on its own.
+    room = rgb(win_w * 0.03, box.y + box.h * 0.06)
+    if verbose:
+        print(f"  room     rgb{room}")
+    if room[2] <= room[0]:
+        failures.append(f"the room behind the neck is not cool: rgb{room} — expected B>R, "
+                        f"so U and V are probably swapped")
+
+    widget.close()
+    app.processEvents()
+    return failures
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--tolerance", type=int, default=4,
+                    help="max per-channel deviation, 0-255 (default 4)")
+    args = ap.parse_args()
+
+    try:
+        from PySide6.QtGui import QSurfaceFormat
+        from PySide6.QtWidgets import QApplication
+    except ImportError as e:
+        print(f"no-go: PySide6 not installed ({e})")
+        print("       .venv/bin/pip install -e '.[gui]'")
         return 1
 
-    print("\ngo: GL 3.3 core context, three R8 planes sampled, BT.601 conversion correct.")
-    print("    docs/PLAN-shell.md P2 can proceed on this machine.")
+    from fretguide.shell.video import default_surface_format
+
+    fmt = default_surface_format()
+    QSurfaceFormat.setDefaultFormat(fmt)
+    app = QApplication.instance() or QApplication(sys.argv)  # noqa: F841
+
+    failures = stage_colour(fmt, args.tolerance, args.verbose)
+    if failures:
+        print("\nno-go (colour maths):")
+        for f in failures:
+            print(f"  - {f}")
+        return 1
+    print("  colour   4/4 probes round-trip through the shipped shader")
+
+    failures = stage_widget(args.verbose)
+    if failures:
+        print("\nno-go (video widget):")
+        for f in failures:
+            print(f"  - {f}")
+        return 1
+    print("  widget   board drawn in colour, letterboxed, right way up")
+
+    print("\ngo: the native video path works on this machine.")
     return 0
 
 

@@ -89,6 +89,22 @@ Enrolment matches each frame against that one photo, so it must be redone whenev
 camera moves or the light changes much. That rigidity is the whole reason the model backend
 exists; use this only to compare against it.
 
+## The native shell (in progress)
+
+```bash
+.venv/bin/pip install -e ".[gui]"
+.venv/bin/python tools/run_shell.py          # synthetic board, no hardware
+.venv/bin/python tools/run_shell.py --source 4   # your camera, in colour
+```
+
+Video only so far — the overlay is still OpenCV-only until P3 of
+[`docs/PLAN-shell.md`](docs/PLAN-shell.md). Keys: `M` mirror, `F11` fullscreen,
+`Q` quit. Check your machine can run it at all with:
+
+```bash
+.venv/bin/python tools/probe_gl.py --verbose
+```
+
 ## Reading the HUD
 
 Model backend: `LOCK  24/26 kp  0.71` — keypoints that survived the confidence gate and the
@@ -119,7 +135,7 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 212 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 248 tests, no camera or GPU needed
 ```
 
 ## Layout

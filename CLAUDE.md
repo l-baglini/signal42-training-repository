@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 212 tests
+.venv/bin/python -m pytest tests/ -q      # 248 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -91,6 +91,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 | `tools/` | CLI entry points. They `sys.path.insert` the repo root deliberately, so they run inside the Windows training bundle where nothing is pip-installed. Don't "clean that up". |
 | `fretguide/source.py` | Frame sources. `SyntheticSource` needs no camera, no model and no dataset — it is how the overlay and the shell get developed and tested here. |
 | `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
+| `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |
+| `tools/probe_gl.py` | The GL gate. Anything touching the shader, the textures or the viewport: run this, it exits non-zero. It is not in pytest because that would mean a test that skips itself without a GL context. |
 | `dataset/labels.json` | **Hand-clicked and irreplaceable.** `dataset/frames/` is gitignored and regenerable; the labels are not. Never rewrite this programmatically without being asked. |
 | `docs/research/` | Evidence. Read it before proposing an approach that was already measured and rejected. |
 | `docs/archive/v1/` | **Frozen. Do not edit, lint, test or "fix".** Excluded from ruff. It exists so the rebuild is legible. |
@@ -118,9 +120,13 @@ MVP is vision-only and works. Audio note-verification is researched
 it consumes the selected target plus an audio stream and touches neither the
 tracker nor the renderer.
 
-The UI is still an OpenCV window with keyboard hotkeys. The native PySide6 shell
-that replaces it is planned in [docs/PLAN-shell.md](docs/PLAN-shell.md); P0 (the
-GL/shader go-no-go, `tools/probe_gl.py`) and P1 (frame sources and the render
-parity harness) are done, P2 onward is not. `render.py` and `tools/run_app.py`
-are deliberately kept as the diagnostic path — do not delete them when the shell
-lands.
+The UI is still an OpenCV window with keyboard hotkeys — `tools/run_app.py` is
+what you use. The native PySide6 shell replacing it is planned in
+[docs/PLAN-shell.md](docs/PLAN-shell.md): **P0–P2 are done** (GL gate, frame
+sources and the render parity harness, and the colour video surface), P3 onward
+is not. `tools/run_shell.py` runs, but draws no overlay yet — porting
+`render.py` to QPainter is P3.
+
+`render.py` and `tools/run_app.py` are deliberately kept as the diagnostic path.
+Do not delete them when the shell lands: they are what the Qt renderer is
+bisected against, and `tests/test_render.py` asserts the two agree.

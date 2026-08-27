@@ -1,6 +1,6 @@
 # The PySide6 shell — plan
 
-**Status:** P0 and P1 done; P2 onward not built. **Date:** 2026-08-27.
+**Status:** P0–P2 done; P3 onward not built. **Date:** 2026-08-27.
 Implements PRD-v2 §6.1 (carried-forward decision 1) and
 [`research/10-recommended-stack.md` §4](research/10-recommended-stack.md).
 
@@ -209,7 +209,7 @@ from the drawing code's own arithmetic, so it is renderer-agnostic: the same
 assertions check the QPainter overlay at P3, and "the two renderers disagree"
 becomes a test failure rather than something noticed later on a video.
 
-### P2 — GL video widget, in colour (1–2 days)
+### P2 — GL video widget, in colour (1–2 days) — **done**
 
 `capture.py` grows a `colour=True` option returning the U and V planes
 alongside Y — additive, so the existing grey path is untouched. Three textures,
@@ -218,6 +218,26 @@ packet handoff from §2.1.
 
 **Stop and look at it.** Colour 1080p video of your own guitar, at frame rate,
 with no overlay, is already better than anything the project has shown.
+
+**Result:** [`fretguide/shell/`](../fretguide/shell/) and
+[`tools/run_shell.py`](../tools/run_shell.py). Upload, convert and draw for a
+1080p colour frame measures **1.20 ms**, i.e. 834 fps unthrottled — about 28×
+the headroom V3 asks for, so the display path will not be what limits frame
+rate. Inference will be.
+
+`capture.py` grew `colour=True` and a pure `split_yuv420`, which is pure because
+every 4:2:0 layout is the same number of bytes: I420, YV12 and NV12 differ only
+in plane order, so a wrong guess does not raise, does not change the shape, and
+does not disturb the grey plane the tracker uses — it silently swaps red and
+blue. The layout is read from the camera's FOURCC and refused rather than
+guessed if unrecognised.
+
+Two bugs found by building it. A core-profile context refuses draw calls while
+VAO 0 is bound, *silently* — no exception, no Qt warning, a window the colour of
+`glClearColor`; `tools/probe_gl.py` now renders through the real widget rather
+than a copy of the shader, so stage 1 can no longer pass while nothing is drawn.
+And GL's default 4-byte unpack alignment shears any plane whose width is not a
+multiple of 4 — invisible at 1920, spectacular at 1922.
 
 ### P3 — Overlay parity (2 days)
 
