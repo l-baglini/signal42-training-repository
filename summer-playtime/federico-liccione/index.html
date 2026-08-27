@@ -48,6 +48,15 @@
   .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
   #fatal { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 520px;
     border-color: rgba(255,140,140,.4); }
+  #cam { position: fixed; bottom: 12px; right: 12px; z-index: 10; }
+  #cam video { width: 168px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15);
+    transform: scaleX(-1); display: block; }
+  #tracker { margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px; opacity: .8; }
+  #calib { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 480px;
+    text-align: center; border-color: rgba(124,224,192,.35); }
+  #calib h2 { margin: 0 0 6px; font-size: 15px; color: #7ce0c0; }
+  #calib .count { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #calib .note { font-size: 11px; opacity: .6; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -61,6 +70,7 @@
       <tbody id="rows"></tbody>
     </table>
     <div id="stats"></div>
+    <div id="tracker"></div>
     <div class="row">
       <label>Screen width</label>
       <input id="width" type="range" min="12" max="80" step="0.5" value="34">
@@ -68,6 +78,7 @@
     </div>
     <div id="keys">
       <kbd>o</kbd> window / dolly &nbsp; <kbd>w</kbd> blank the wall &nbsp;
+      <kbd>c</kbd> webcam &nbsp; <kbd>k</kbd> calibrate &nbsp;
       <kbd>r</kbd> ruler &nbsp; <kbd>wheel</kbd> lean in and out
     </div>
   </div>
@@ -84,6 +95,15 @@
   </div>
 
   <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
+
+  <div id="cam"></div>
+
+  <div class="panel" id="calib">
+    <h2 id="calibTitle">Measuring your body</h2>
+    <p id="calibPrompt">Lean as far as is comfortable — left, right, up, and towards the screen.</p>
+    <div class="count" id="calibCount"></div>
+    <div class="note">Every guarantee the game makes is expressed against this measurement.</div>
+  </div>
 
   <div id="ruler"><div class="bar"></div><div class="lbl">10 cm</div></div>
 

@@ -46,7 +46,10 @@ Determinism is allowed to be random — `mulberry32` in `level.ts` is seeded, an
 ## Commands
 
 ```
-npm run dev     the app, on localhost. Move the cursor as if moving your head.
+npm run setup   copies the MediaPipe WASM out of the pinned package and downloads
+                the face model into public/. Run once; `npm run dev` does it too.
+npm run dev     the app, on localhost. Move the cursor as if moving your head,
+                or press `c` for the real webcam and `k` to calibrate.
 npm run build   tsc then vite. The bundle is ~18 kB; keep it that way.
 npm test        the invariants and the guards. No network, no clock, no RNG.
 npm run probe   what the solver thinks of each fixture room, per envelope.
@@ -94,8 +97,9 @@ account of what exists.
 (`V(t)`, footprints, five reject reasons, level generation with typed refusal);
 the dodge solver and its spawn gate; the off-axis projection; the calibration
 that turns a stream of tracked positions into an `Envelope`; the scene geometry;
-and the WebGL2 renderer with a runnable app. **All ten invariants of SPEC §6.7
-have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
+the scene geometry, the WebGL2 renderer, the webcam tracker, and a runnable app
+that calibrates a real body and plays against it. **All ten invariants of SPEC
+§6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
 and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
 `tests/projection.test.ts`.
 
@@ -108,27 +112,29 @@ headlessly — which is why all the arithmetic lives in `render/geometry.ts` and
 `render/projection.ts`, which are. If the picture looks wrong, suspect the GL
 wrapper last.
 
+**Perception assets are local, never a CDN.** `tools/setup-assets.mjs` copies the
+WASM out of the pinned npm package — so it cannot drift from the JS that loads
+it — and downloads the 3.8 MB face model into `public/`, which is gitignored. The
+app therefore runs with no network at all, which matters because the demo will be
+shown in a room whose wifi is unknown. MediaPipe itself is behind a dynamic
+import, so the mouse-only path stays a 23 kB bundle.
+
+**Not verified by anything automatic:** whether the picture is *right*. The
+geometry and the projection are tested; the GL wrapper and the tracker's real
+accuracy need eyes and a face. Nothing headless can check them.
+
 **Next, in order — this is SPEC §14 and the cut order is bottom-up:**
 
-1. **The camera tracker** (`src/perceive/camera.ts`). Implement the `Tracker`
-   interface in `src/perceive/tracker.ts` and the app takes it with a one-line
-   change — that is what the interface is for. Everything needed exists in
-   `prototype/headtracked-parallax.html`: MediaPipe iris landmarks (468 and 473),
-   the inter-pupillary metric estimate, EMA plus forward prediction. Add the
-   latency measurement, which the prototype does not do and the dodge guarantee
-   spends. Then wire `calibrate.ts`, which is already done and tested, to a
-   ten-second prompt. Pin `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM
-   fileset to the same version (SPEC §7.6).
-2. **The playable loop** — waves, ninety seconds, threats through the dodge
+1. **The playable loop** — waves, ninety seconds, threats through the dodge
    solver's spawn gate. The engine already returns everything this needs, and
    `src/main.ts` already has the frame loop and the reveal detection.
    *Everything above this line is the minimum defensible build.*
-3. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
+2. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
    of it: there are three non-obvious constraints there, and two of them are
    corrections to an earlier draft that told the implementation to do the wrong
    thing.
-4. **The semantic scan** — one vision call per room, plus the cost panel.
-5. *(optional, first to cut)* the director.
+3. **The semantic scan** — one vision call per room, plus the cost panel.
+4. *(optional, first to cut)* the director.
 
 **Not started:** REVIEW.md. It has to be written by the author, not by a model —
 the brief says so explicitly. DEVLOG.md lists what the tests cannot check, and

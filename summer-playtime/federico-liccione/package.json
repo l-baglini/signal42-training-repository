@@ -5,19 +5,23 @@
   "type": "module",
   "description": "You lean to see. A head-tracked peek-and-dodge game whose level is the room you are sitting in.",
   "scripts": {
-    "dev": "vite",
+    "dev": "node tools/setup-assets.mjs && vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "probe": "vitest run --config vitest.tools.config.ts tools/probe.test.ts --reporter=basic",
-    "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic"
+    "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic",
+    "setup": "node tools/setup-assets.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
     "typescript": "~5.6.3",
     "vite": "^5.4.21",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1"
   }
 }
