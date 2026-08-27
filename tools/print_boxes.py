@@ -32,52 +32,66 @@ ROOT = (40, 40, 210)
 GREY = (140, 140, 140)
 
 
-def draw_box(canvas, ox: int, oy: int, mode, cell: int = 46, untracked: int = 0) -> None:
+def draw_box(canvas, ox: int, oy: int, mode, fret_w: int = 74, untracked: int = 0) -> None:
     """One grid: six string lines, four fret columns, a finger number per note.
 
-    String 1 (high E) is drawn along the top, which is how guitar fingering grids are
-    conventionally laid out and how the source sheet has them.
-    """
-    w, h = cell * BOX_FRETS, cell * 5
-    title = f"Modo {mode.italian}"
-    cv2.putText(canvas, title, (ox, oy - 34), FONT, 0.72, INK, 2, cv2.LINE_AA)
-    # Clear of the top string line: descenders in "Phrygian" and "Mixolydian" were
-    # touching it and the words read as struck through.
-    cv2.putText(canvas, mode.name, (ox, oy - 16), FONT, 0.5, GREY, 1, cv2.LINE_AA)
-    cv2.putText(canvas, mode.chord, (ox + w - 10, oy - 34), FONT, 0.72, INK, 2, cv2.LINE_AA)
-    cv2.putText(canvas, mode.roman_position, (ox - 46, oy + 4), FONT, 0.66, INK, 2, cv2.LINE_AA)
+    **Wide, not tall.** Strings are drawn close together and frets far apart, which is
+    what a fretboard looks like from the side and what every sheet of this kind uses. The
+    first version of this diagram used square cells, so a four-fret box came out taller
+    than it was wide -- and a portrait grid reads as a *chord* diagram, where the strings
+    run vertically and the frets across. Anyone who read it that way would find every box
+    transposed into nonsense, which is precisely what happened.
 
-    for i in range(6):  # strings
-        y = oy + i * cell
+    String 1 (high E) is along the top, as in tablature and on the source sheet.
+    """
+    string_h = max(16, int(fret_w * 0.36))
+    w, h = fret_w * BOX_FRETS, string_h * 5
+    r = max(9, min(int(string_h * 0.46), int(fret_w * 0.22)))
+
+    cv2.putText(canvas, f"Modo {mode.italian}", (ox, oy - 40), FONT, 0.66, INK, 2, cv2.LINE_AA)
+    cv2.putText(canvas, mode.name, (ox, oy - 20), FONT, 0.46, GREY, 1, cv2.LINE_AA)
+    (cw, _), _ = cv2.getTextSize(mode.chord, FONT, 0.66, 2)
+    cv2.putText(canvas, mode.chord, (ox + w - cw, oy - 40), FONT, 0.66, INK, 2, cv2.LINE_AA)
+    cv2.putText(canvas, mode.roman_position, (ox - 44, oy + 6), FONT, 0.6, INK, 2, cv2.LINE_AA)
+
+    for i in range(6):  # strings, high E at the top
+        y = oy + i * string_h
         cv2.line(canvas, (ox, y), (ox + w, y), INK, 1, cv2.LINE_AA)
     for j in range(BOX_FRETS + 1):  # fret wires
-        x = ox + j * cell
+        x = ox + j * fret_w
         # A heavy line means the nut, and only the open position has one. Drawing it at
         # the left of every box would say each one starts at the nut, which is the single
         # most misleading thing a fingering diagram can claim.
         nut = j == 0 and mode.position == 0
         cv2.line(canvas, (x, oy), (x, oy + h), INK, 4 if nut else 1, cv2.LINE_AA)
 
-    # Notes sit in the fret *space* (where the finger presses) and on the string *line*.
-    # The line therefore runs straight through the digit, which is what mangled the first
-    # version of this diagram: every finger number had a rule struck through it. Knock the
-    # paper back out behind each one before drawing it.
+    # Fret numbers along the bottom, so the position is readable without counting.
+    for j in range(BOX_FRETS):
+        label = str(mode.position + j)
+        (tw, _), _ = cv2.getTextSize(label, FONT, 0.4, 1)
+        # Clear of the bottom string line by more than a root circle's radius: the low E
+        # very often carries one, and the fret number was landing inside it.
+        cv2.putText(canvas, label, (ox + int((j + 0.5) * fret_w) - tw // 2, oy + h + 32),
+                    FONT, 0.4, GREY, 1, cv2.LINE_AA)
+
+    # Notes sit in the fret *space* (where the finger presses) and on the string *line*,
+    # so the line runs straight through the digit. Knock the paper out behind each one.
     for p in mode_box(mode, max_fret=24):
         col = p.fret - mode.position
-        y = oy + (p.string - 1) * cell          # string 1 on top
-        x = ox + int((col + 0.5) * cell)
-        cv2.circle(canvas, (x, y), 13, PAPER, -1, cv2.LINE_AA)
+        y = oy + (p.string - 1) * string_h
+        x = ox + int((col + 0.5) * fret_w)
+        cv2.circle(canvas, (x, y), r, PAPER, -1, cv2.LINE_AA)
         if p.is_root:
-            cv2.circle(canvas, (x, y), 13, ROOT, 2, cv2.LINE_AA)
-        (tw, th), _ = cv2.getTextSize(str(p.finger), FONT, 0.62, 2)
-        cv2.putText(canvas, str(p.finger), (x - tw // 2, y + th // 2), FONT, 0.62,
+            cv2.circle(canvas, (x, y), r, ROOT, 2, cv2.LINE_AA)
+        (tw, th), _ = cv2.getTextSize(str(p.finger), FONT, 0.48, 2)
+        cv2.putText(canvas, str(p.finger), (x - tw // 2, y + th // 2), FONT, 0.48,
                     ROOT if p.is_root else INK, 2, cv2.LINE_AA)
 
     if untracked:
-        cv2.putText(canvas, f"last {untracked} frets are past fret 12 - the app",
-                    (ox, oy + h + 24), FONT, 0.42, (40, 40, 200), 1, cv2.LINE_AA)
-        cv2.putText(canvas, "cannot track them, but you can still play them",
-                    (ox, oy + h + 42), FONT, 0.42, (40, 40, 200), 1, cv2.LINE_AA)
+        cv2.putText(canvas, f"last {untracked} frets are past fret 12 - the app cannot",
+                    (ox, oy + h + 54), FONT, 0.4, (40, 40, 200), 1, cv2.LINE_AA)
+        cv2.putText(canvas, "track them, but you can still play them",
+                    (ox, oy + h + 70), FONT, 0.4, (40, 40, 200), 1, cv2.LINE_AA)
 
 
 def main() -> int:
@@ -85,7 +99,9 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--key", default="G")
     ap.add_argument("-o", "--out", default="diagnostics/boxes.png")
-    ap.add_argument("--cell", type=int, default=46)
+    ap.add_argument("--fret-width", type=int, default=74,
+                    help="pixels per fret. String spacing follows at ~0.36 of it, which "
+                         "is what keeps the grid wide rather than tall")
     args = ap.parse_args()
 
     try:
@@ -98,18 +114,22 @@ def main() -> int:
         print(e)
         return 1
 
-    cell = args.cell
-    bw, bh = cell * BOX_FRETS, cell * 5
-    cols, gap = 2, 110
+    fret_w = args.fret_width
+    bw, bh = fret_w * BOX_FRETS, int(fret_w * 0.36) * 5
+    cols = 2
+    gap_x, gap_y = 120, 150
     rows = (len(modes) + cols - 1) // cols
-    canvas = np.full((rows * (bh + gap) + 110, cols * (bw + gap) + 90, 3), PAPER, np.uint8)
+    canvas = np.full((rows * (bh + gap_y) + 130, cols * (bw + gap_x) + 100, 3), PAPER,
+                     np.uint8)
     cv2.putText(canvas, f"Modal boxes - key of {args.key}", (40, 48), FONT, 0.9, INK, 2,
                 cv2.LINE_AA)
+    cv2.putText(canvas, "strings: high E on top, low E at the bottom   |   red = root",
+                (40, 74), FONT, 0.44, GREY, 1, cv2.LINE_AA)
 
     for i, m in enumerate(modes):
-        ox = 90 + (i % cols) * (bw + gap)
-        oy = 130 + (i // cols) * (bh + gap)
-        draw_box(canvas, ox, oy, m, cell, untracked=tracked[i].clipped)
+        ox = 100 + (i % cols) * (bw + gap_x)
+        oy = 160 + (i // cols) * (bh + gap_y)
+        draw_box(canvas, ox, oy, m, fret_w, untracked=tracked[i].clipped)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
