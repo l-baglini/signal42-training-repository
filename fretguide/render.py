@@ -249,8 +249,8 @@ def draw_menu(img: np.ndarray, menu, layout) -> None:
                 cv2.rectangle(img, (x, y), (x + rw - 2, y + rh - 2), colour, -1)
 
             if row.heading:
-                _halo_text(img, row.label.upper(), (x + 10, y + int(rh * 0.7)),
-                           scale=scale * 0.8, colour=COL_HEADING, halo=1)
+                _halo_text(img, row.label.upper(), (x + 8, y + int(rh * 0.7)),
+                           scale=scale * 0.78, colour=COL_HEADING, halo=1)
             else:
                 on = at and (row.selection is not None or column == 0)
                 # No halo on the highlighted row: it is dark text on solid amber, which
@@ -259,3 +259,13 @@ def draw_menu(img: np.ndarray, menu, layout) -> None:
                 _halo_text(img, row.label, (x + 10, y + int(rh * 0.7)), scale=scale,
                            colour=COL_OUTLINE if (on and focused) else COL_TEXT,
                            halo=0 if (on and focused) else 1)
+
+    # What the highlighted row actually is: for a mode, its root, the chord it belongs
+    # over and where it is played. Shown once, for the current row, rather than under
+    # every label -- it is what you need while choosing, not a property of the list.
+    current = menu.right[menu.right_index] if menu.right else None
+    if current is not None and current.detail:
+        fx, fy, _fw, frh = layout.footer_rect(menu)
+        if fy + frh <= by + bh:
+            _halo_text(img, current.detail, (fx + 10, fy + int(frh * 0.66)),
+                       scale=scale * 0.86, colour=COL_ROW_ACTIVE, halo=1)

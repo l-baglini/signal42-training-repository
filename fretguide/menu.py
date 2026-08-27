@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .content import CHORD_IDS
+from .modes import key_modes
 from .theory import _SHARP_NAMES
 from .types import Selection
 
@@ -28,31 +29,15 @@ from .types import Selection
 #: it is the open fifth string, the reference pitch, and where every book starts.
 ROOTS: tuple[str, ...] = tuple(_SHARP_NAMES[9:] + _SHARP_NAMES[:9])
 
-#: Scale types offered per root, in labelled groups.
-#:
-#: The seven modes are listed in the order they are built (Ionian through Locrian) rather
-#: than alphabetically, because that order *is* the relationship between them -- each is
-#: the next degree of the same parent scale, and a menu that sorted them A-Z would hide
-#: the one fact that makes modes learnable.
-#:
-#: "Ionian (major)" and "Aeolian (minor)" carry both names on purpose: they are the same
-#: seven notes you already know, and not saying so makes modes look like seven new things
-#: to learn instead of five.
-SCALE_GROUPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
-    ("Modal", (
-        ("Ionian (major)", "ionian"),
-        ("Dorian", "dorian"),
-        ("Phrygian", "phrygian"),
-        ("Lydian", "lydian"),
-        ("Mixolydian", "mixolydian"),
-        ("Aeolian (minor)", "aeolian"),
-        ("Locrian", "locrian"),
-    )),
-    ("Pentatonic", (
+#: Scale types offered per key beyond the modes, in labelled groups. These are shown
+#: across the whole neck, because unlike the modes they really are different note sets and
+#: a full-neck map is the useful view of them.
+EXTRA_GROUPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    ("Pentatonic — whole neck", (
         ("Major pentatonic", "major pentatonic"),
         ("Minor pentatonic", "minor pentatonic"),
     )),
-    ("Other", (
+    ("Other — whole neck", (
         ("Blues", "blues"),
         ("Harmonic minor", "harmonic minor"),
     )),
@@ -63,11 +48,17 @@ CHORDS_GROUP = "Chords"
 
 @dataclass(frozen=True)
 class Row:
-    """One line in a column. ``selection`` is None for a group heading."""
+    """One line in a column. ``selection`` is None for a group heading.
+
+    ``detail`` is the second line a renderer may show under the label -- for a mode, the
+    root, the chord it belongs over and the position. That is not decoration: those three
+    facts are the entire difference between one mode of a key and another.
+    """
 
     label: str
     selection: Selection | None = None
     heading: bool = False
+    detail: str = ""
 
     @property
     def selectable(self) -> bool:
@@ -81,13 +72,24 @@ def left_rows() -> list[Row]:
     return rows
 
 
-def right_rows(left_label: str) -> list[Row]:
-    """The right column for a left-column choice: chord voicings, or that key's scales."""
+def right_rows(left_label: str, max_fret: int = 12) -> list[Row]:
+    """The right column: chord voicings, or everything inside one key.
+
+    The modes come first and come as boxes. Listing them as "A dorian, A lydian, ..." was
+    the earlier design and it could not work: every mode of a key is the same note set, so
+    on a whole-neck map all seven are the same picture. Shown as degrees of a key -- with
+    the chord each belongs over and the position each is played at -- they are seven
+    distinct shapes in seven distinct places, which is what a teacher draws and what makes
+    them learnable. See :mod:`fretguide.modes`.
+    """
     if left_label == CHORDS_GROUP:
         return [Row(cid, Selection("chord", cid)) for cid in CHORD_IDS]
 
-    rows: list[Row] = []
-    for group, entries in SCALE_GROUPS:
+    rows: list[Row] = [Row(f"Modes of {left_label}", heading=True)]
+    for m in key_modes(left_label, max_fret=max_fret):
+        rows.append(Row(m.label, Selection("mode_box", f"{left_label}:{m.degree}"),
+                        detail=m.detail))
+    for group, entries in EXTRA_GROUPS:
         rows.append(Row(group, heading=True))
         for label, scale_name in entries:
             rows.append(Row(label, Selection("scale_generated", f"{left_label} {scale_name}")))
@@ -251,10 +253,18 @@ class Layout:
                 self.column_w(column), self.row_h)
 
     def panel_rect(self, menu: Menu) -> tuple[int, int, int, int]:
-        rows = max(len(menu.left), len(menu.right))
+        # One extra row for the footer, which carries the current mode's root, its chord
+        # and its position. Those three facts are the whole difference between one mode of
+        # a key and another, so there has to be room for them.
+        rows = max(len(menu.left), len(menu.right)) + 1
         return (self.x, self.y,
                 self.left_w + self.right_w + self.pad * 2,
                 rows * self.row_h + self.pad * 2)
+
+    def footer_rect(self, menu: Menu) -> tuple[int, int, int, int]:
+        rows = max(len(menu.left), len(menu.right))
+        return (self.column_x(0), self.y + self.pad + rows * self.row_h,
+                self.left_w + self.right_w, self.row_h)
 
     def hit(self, px: float, py: float, menu: Menu) -> tuple[int, int] | None:
         """Which (column, row) a point falls in, or None for outside the panel.

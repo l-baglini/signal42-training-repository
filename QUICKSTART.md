@@ -94,20 +94,52 @@ down and pick it up again — there is no lock to lose. Needs `models/fretnet.xm
 
 ### Choosing what to practise
 
-Press `TAB`. Two columns: **Chords** and the twelve keys on the left, and on the
-right whatever that choice holds — the seven modes, both pentatonics, blues and
-harmonic minor, grouped and labelled. 139 things to practise, from 7 curated
-chord voicings and every scale type in every key.
+Press `TAB`. **Chords** and the twelve keys on the left; on the right, everything
+inside that key.
 
 Arrow keys move, ←/→ switch column, mouse works throughout, `Esc` or `TAB`
-closes, and clicking the video dismisses it. **The selection applies as you
-move**, so the neck in front of you updates while you scroll — there is nothing
-to confirm. The panel takes whichever side of the frame hides less of the
-fretboard.
+closes, clicking the video dismisses it. **The selection applies as you move** —
+the neck updates while you scroll, nothing to confirm. The panel takes whichever
+side of the frame hides less of the fretboard.
 
-The modes are listed in derivation order (Ionian → Locrian), not alphabetically:
-that order *is* the relationship between them, and Ionian and Aeolian are
-labelled "(major)" and "(minor)" because they are the two you already know.
+### Modes, and why they are shown by key
+
+Pick a key and you get its seven modes as degrees:
+
+```
+MODES OF G
+  I    Ionian       G  · over G       · pos II
+  II   Dorian       A  · over Am      · pos IV
+  III  Phrygian     B  · over Bm      · pos VII
+  IV   Lydian       C  · over C       · pos VII
+  V    Mixolydian   D  · over D7      · pos IX
+  VI   Aeolian      E  · over Em      · pos XI
+  VII  Locrian      F# · over F#m7♭5  · pos II
+```
+
+This is not a stylistic choice. **Every mode of a key is the same set of notes** —
+G ionian, A dorian, B phrygian, C lydian, D mixolydian, E aeolian and F# locrian
+are one scale, and across the whole neck all seven light up identically. Shown
+that way they are unlearnable, because on those terms nothing distinguishes them.
+
+What distinguishes them is the three things on each row: the **root**, the
+**chord it belongs over** (Dorian over Am, not over G — that is what makes it
+sound like Dorian), and the **position** of the four-fret box it is played in. So
+each mode is drawn as a box with finger numbers, not as the whole neck.
+
+Pentatonics, blues and harmonic minor stay whole-neck, because unlike the modes
+they really are different note sets.
+
+To print the boxes for a music stand, or to check them against your own material:
+
+```bash
+.venv/bin/python tools/print_boxes.py --key G       # -> diagnostics/boxes.png
+```
+
+Only the **positions** came from a teaching sheet. The notes and the fingerings
+are derived — `finger = fret − position + 1`, which is what "playing in position"
+means — and that derivation reproduces the hand-written G box in `content.py`
+exactly, note for note and finger for finger.
 
 ### The older enrolment backend
 

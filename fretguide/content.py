@@ -12,6 +12,7 @@ Scales, by contrast, are now generated for any root and any scale name.
 
 from __future__ import annotations
 
+from .modes import key_modes, mode_box
 from .theory import scale_positions
 from .types import ChordVoicing, FretPosition, ResolvedSelection, ScaleBox, Selection
 
@@ -166,6 +167,20 @@ def resolve_selection(sel: Selection, max_fret: int = 12) -> ResolvedSelection |
         if box is None:
             return None
         return ResolvedSelection(name=box.name, positions=box.positions)
+
+    if sel.mode == "mode_box":
+        key, _, degree = sel.id.partition(":")
+        if not key or not degree.isdigit() or not 1 <= int(degree) <= 7:
+            return None
+        try:
+            modes = key_modes(key, max_fret=max_fret)
+        except ValueError:
+            return None
+        m = modes[int(degree) - 1]
+        positions = mode_box(m, max_fret=max_fret)
+        if not positions:
+            return None
+        return ResolvedSelection(name=f"{m.name} — {m.detail}", positions=positions)
 
     if sel.mode == "scale_generated":
         root, _, scale_name = sel.id.partition(" ")

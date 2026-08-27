@@ -71,7 +71,11 @@ class Point:
 class Selection:
     """What the UI currently has selected."""
 
-    mode: Literal["scale", "chord", "scale_generated"]
+    #: ``mode_box`` is one mode of one key, played as a four-fret box: id is
+    #: ``"<key>:<degree>"``, e.g. ``"G:2"`` for Dorian in the key of G. See
+    #: :mod:`fretguide.modes` for why modes are addressed by key and degree rather than
+    #: by their own root.
+    mode: Literal["scale", "chord", "scale_generated", "mode_box"]
     id: str
 
 

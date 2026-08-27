@@ -12,7 +12,6 @@ from fretguide.content import resolve_selection
 from fretguide.menu import (
     CHORDS_GROUP,
     ROOTS,
-    SCALE_GROUPS,
     Layout,
     Menu,
     left_rows,
@@ -36,14 +35,25 @@ def test_roots_start_at_a():
     assert ROOTS == ("A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#")
 
 
-def test_modes_are_in_derivation_order_not_alphabetical():
+def test_the_modes_of_a_key_come_first_and_come_in_order():
     """That order *is* the relationship between the modes — each is the next degree of the
     same parent scale. Sorting them A–Z would hide the one fact that makes them learnable.
     """
-    modal = dict(SCALE_GROUPS)["Modal"]
-    assert [name for _, name in modal] == [
-        "ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian",
-    ]
+    rows = right_rows("G")
+    assert rows[0].heading and rows[0].label == "Modes of G"
+    names = [r.label.split()[-1] for r in rows[1:8]]
+    assert names == ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian",
+                     "Aeolian", "Locrian"]
+    assert [r.label.split()[0] for r in rows[1:8]] == ["I", "II", "III", "IV", "V",
+                                                       "VI", "VII"]
+
+
+def test_every_mode_row_says_what_it_sits_over_and_where():
+    """Root, chord and position. Without those three a mode row is indistinguishable from
+    the other six, because the notes are literally the same."""
+    for row in right_rows("G")[1:8]:
+        assert row.detail, f"{row.label} has no detail line"
+        assert "over" in row.detail and "pos" in row.detail
 
 
 def test_every_catalogue_entry_actually_resolves():
@@ -63,7 +73,7 @@ def test_every_catalogue_entry_actually_resolves():
             assert resolved is not None, f"{lrow.label} / {rrow.label} does not resolve"
             assert resolved.positions, f"{lrow.label} / {rrow.label} resolves to nothing"
             checked += 1
-    assert checked == 7 + 12 * 11, f"catalogue changed size: {checked}"
+    assert checked == 7 + 12 * (7 + 4), f"catalogue changed size: {checked}"
 
 
 def test_chords_are_reachable_and_are_chords():
@@ -74,10 +84,14 @@ def test_chords_are_reachable_and_are_chords():
 
 def test_a_key_offers_its_groups_with_headings():
     rows = right_rows("A")
-    headings = [r.label for r in rows if r.heading]
-    assert headings == ["Modal", "Pentatonic", "Other"]
+    assert [r.label for r in rows if r.heading] == [
+        "Modes of A", "Pentatonic — whole neck", "Other — whole neck"]
     assert all(r.selection is None for r in rows if r.heading)
-    assert all(r.selection.id.startswith("A ") for r in rows if r.selection)
+    modes = [r for r in rows if r.selection and r.selection.mode == "mode_box"]
+    assert len(modes) == 7
+    assert all(r.selection.id.startswith("A:") for r in modes)
+    whole = [r for r in rows if r.selection and r.selection.mode == "scale_generated"]
+    assert all(r.selection.id.startswith("A ") for r in whole)
 
 
 def test_the_cursor_never_lands_on_a_heading():
@@ -110,7 +124,7 @@ def test_moving_the_left_column_changes_the_key_but_keeps_your_place():
     m.move(1)              # A#
     assert m.left_label == "A#"
     assert m.right[m.right_index].label == label
-    assert m.selection().id.startswith("A# ")
+    assert m.selection().id.split(":")[0] == "A#"
 
 
 def test_clicking_a_heading_does_nothing():
@@ -144,10 +158,14 @@ def test_selection_is_live_rather_than_committed():
 def test_sync_to_finds_what_is_already_on_screen():
     """Opening the menu should show you where you are, not reset you to the top."""
     m = Menu()
-    assert m.sync_to(Selection("scale_generated", "D# lydian"))
+    assert m.sync_to(Selection("mode_box", "D#:4"))
     assert m.left_label == "D#"
-    assert m.right[m.right_index].label == "Lydian"
-    assert m.selection() == Selection("scale_generated", "D# lydian")
+    assert m.right[m.right_index].label.endswith("Lydian")
+    assert m.selection() == Selection("mode_box", "D#:4")
+
+    assert m.sync_to(Selection("scale_generated", "D# blues"))
+    assert m.left_label == "D#"
+    assert m.right[m.right_index].label == "Blues"
 
     assert m.sync_to(Selection("chord", "Em"))
     assert m.left_label == CHORDS_GROUP
