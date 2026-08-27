@@ -136,10 +136,14 @@ To print the boxes for a music stand, or to check them against your own material
 .venv/bin/python tools/print_boxes.py --key G       # -> diagnostics/boxes.png
 ```
 
-Only the **positions** came from a teaching sheet. The notes and the fingerings
-are derived — `finger = fret − position + 1`, which is what "playing in position"
-means — and that derivation reproduces the hand-written G box in `content.py`
-exactly, note for note and finger for finger.
+The shapes are **transcribed from a teaching sheet**, one box at a time, and read
+back for confirmation. They are not computed: in Dorico the index finger plays
+fret 5 on the outer four strings and fret 4 on the G and D strings, so the hand
+shifts *within* the box and no formula produces that.
+
+A box whose fingering has not been confirmed yet shows its notes as plain dots
+with no finger numbers, and says "fingering unconfirmed". A wrong finger number
+is worse than none — it is the part you would copy without questioning it.
 
 ### The older enrolment backend
 

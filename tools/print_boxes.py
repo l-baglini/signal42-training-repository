@@ -44,8 +44,12 @@ def draw_box(canvas, ox: int, oy: int, mode, fret_w: int = 74, untracked: int = 
 
     String 1 (high E) is along the top, as in tablature and on the source sheet.
     """
+    notes = mode_box(mode, max_fret=24)
+    lo = min(p.fret for p in notes) if notes else mode.position
+    hi = max(p.fret for p in notes) if notes else mode.position + BOX_FRETS - 1
+    span = hi - lo + 1
     string_h = max(16, int(fret_w * 0.36))
-    w, h = fret_w * BOX_FRETS, string_h * 5
+    w, h = fret_w * span, string_h * 5
     r = max(9, min(int(string_h * 0.46), int(fret_w * 0.22)))
 
     cv2.putText(canvas, f"Modo {mode.italian}", (ox, oy - 40), FONT, 0.66, INK, 2, cv2.LINE_AA)
@@ -57,17 +61,17 @@ def draw_box(canvas, ox: int, oy: int, mode, fret_w: int = 74, untracked: int = 
     for i in range(6):  # strings, high E at the top
         y = oy + i * string_h
         cv2.line(canvas, (ox, y), (ox + w, y), INK, 1, cv2.LINE_AA)
-    for j in range(BOX_FRETS + 1):  # fret wires
+    for j in range(span + 1):  # fret wires
         x = ox + j * fret_w
         # A heavy line means the nut, and only the open position has one. Drawing it at
         # the left of every box would say each one starts at the nut, which is the single
         # most misleading thing a fingering diagram can claim.
-        nut = j == 0 and mode.position == 0
+        nut = j == 0 and lo == 0
         cv2.line(canvas, (x, oy), (x, oy + h), INK, 4 if nut else 1, cv2.LINE_AA)
 
     # Fret numbers along the bottom, so the position is readable without counting.
-    for j in range(BOX_FRETS):
-        label = str(mode.position + j)
+    for j in range(span):
+        label = str(lo + j)
         (tw, _), _ = cv2.getTextSize(label, FONT, 0.4, 1)
         # Clear of the bottom string line by more than a root circle's radius: the low E
         # very often carries one, and the fret number was landing inside it.
@@ -76,17 +80,26 @@ def draw_box(canvas, ox: int, oy: int, mode, fret_w: int = 74, untracked: int = 
 
     # Notes sit in the fret *space* (where the finger presses) and on the string *line*,
     # so the line runs straight through the digit. Knock the paper out behind each one.
-    for p in mode_box(mode, max_fret=24):
-        col = p.fret - mode.position
+    for p in notes:
+        col = p.fret - lo
         y = oy + (p.string - 1) * string_h
         x = ox + int((col + 0.5) * fret_w)
         cv2.circle(canvas, (x, y), r, PAPER, -1, cv2.LINE_AA)
         if p.is_root:
             cv2.circle(canvas, (x, y), r, ROOT, 2, cv2.LINE_AA)
-        (tw, th), _ = cv2.getTextSize(str(p.finger), FONT, 0.48, 2)
-        cv2.putText(canvas, str(p.finger), (x - tw // 2, y + th // 2), FONT, 0.48,
-                    ROOT if p.is_root else INK, 2, cv2.LINE_AA)
+        colour = ROOT if p.is_root else INK
+        if p.finger is None:
+            # Unconfirmed shape: the note is right, which finger plays it is not. A filled
+            # dot says "this note" without claiming anything about the hand.
+            cv2.circle(canvas, (x, y), max(4, r // 3), colour, -1, cv2.LINE_AA)
+        else:
+            (tw, th), _ = cv2.getTextSize(str(p.finger), FONT, 0.48, 2)
+            cv2.putText(canvas, str(p.finger), (x - tw // 2, y + th // 2), FONT, 0.48,
+                        colour, 2, cv2.LINE_AA)
 
+    if not mode.verified:
+        cv2.putText(canvas, "fingering not confirmed against the sheet - notes only",
+                    (ox, oy - 4), FONT, 0.4, (150, 110, 40), 1, cv2.LINE_AA)
     if untracked:
         cv2.putText(canvas, f"last {untracked} frets are past fret 12 - the app cannot",
                     (ox, oy + h + 54), FONT, 0.4, (40, 40, 200), 1, cv2.LINE_AA)
@@ -115,7 +128,10 @@ def main() -> int:
         return 1
 
     fret_w = args.fret_width
-    bw, bh = fret_w * BOX_FRETS, int(fret_w * 0.36) * 5
+    widest = max((max(p.fret for p in mode_box(m, max_fret=24))
+                  - min(p.fret for p in mode_box(m, max_fret=24)) + 1)
+                 for m in modes if mode_box(m, max_fret=24))
+    bw, bh = fret_w * widest, int(fret_w * 0.36) * 5
     cols = 2
     gap_x, gap_y = 120, 150
     rows = (len(modes) + cols - 1) // cols

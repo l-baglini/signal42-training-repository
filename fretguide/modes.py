@@ -14,11 +14,19 @@ What distinguishes them is the three things a teacher supplies and a note-set do
   the position     each is played as a four-fret box at its own place on the neck, so
                    seven modes become seven distinct shapes in seven distinct places
 
-Boxes are derived, not transcribed. Given the position, everything else follows: the notes
-are whichever belong to the key inside that four-fret window, and the finger is
-``fret - position + 1``, which is what "playing in position" means. That derivation
-reproduces the curated G_MAJOR_BOX in content.py exactly, so the rule is the one that box
-was built by.
+**Fingerings are transcribed, not derived, and that was a correction.** The first version
+of this module computed them as ``fret - position + 1`` -- one finger per fret, straight
+across. That reproduces the Ionian box exactly, which looked like proof and was not:
+Ionian is simply the case where the hand does not move. The Dorian box, read off the
+sheet, plays fret 5 with the index finger on the outer four strings and fret 4 with it on
+the G and D strings. The hand *shifts between strings*, and no offset formula produces
+that. Validating a rule against the one shape that could not disprove it is how this went
+wrong; shapes are now stored as given.
+
+What is still derived, safely, is which notes a box contains -- whichever belong to the
+parent key inside its fret span -- and every stored note is checked against the key by the
+tests. Transposing to another key moves the whole shape up the neck, which is exact,
+because a box is a shape.
 """
 
 from __future__ import annotations
@@ -46,16 +54,39 @@ MODES: tuple[tuple[int, str, str, str, str], ...] = (
 #: Semitones from the parent key's tonic to each mode's root — the major scale.
 DEGREE_SEMITONES: tuple[int, ...] = (0, 2, 4, 5, 7, 9, 11)
 
-#: The fret each mode's box starts at, in the key of G, taken from the roman numerals on
-#: the source sheet: II, IV, VII, VII, IX, XI, II.
-#:
-#: Only the positions come from the sheet. The notes and fingerings are derived, because
-#: reading finger numbers off a scan is exactly the way to teach somebody a wrong shape.
+#: The fret each mode's box starts at in the key of G, read from the roman numerals on the
+#: source sheet: II, IV, VII, VII, IX, XI, II. Used only for boxes not yet transcribed --
+#: where a shape exists in SHAPES_IN_G, its own frets are the authority.
 POSITIONS_IN_G: tuple[int, ...] = (2, 4, 7, 7, 9, 11, 2)
 
-#: How wide a box is. Four frets, one per finger — "position II" means the index finger
-#: is at fret 2 and the little finger at fret 5.
-BOX_FRETS = 4
+#: How wide an untranscribed box is assumed to be. Five, not four: the Dorian box spans
+#: frets 4-8, and a four-fret assumption dropped its top note on three strings.
+BOX_FRETS = 5
+
+#: Transcribed shapes, in the key of G: ``degree -> ((string, fret, finger), ...)``.
+#:
+#: These come from the teaching sheet and were read back and confirmed one box at a time.
+#: A degree absent from here has not been confirmed, and :func:`mode_box` returns its notes
+#: without fingerings rather than inventing them -- a wrong fingering is worse than none,
+#: because it is the part a learner copies without questioning it.
+SHAPES_IN_G: dict[int, tuple[tuple[int, int, int], ...]] = {
+    1: (  # Ionico - frets 2-5, hand does not shift
+        (1, 2, 1), (1, 3, 2), (1, 5, 4),
+        (2, 3, 2), (2, 5, 4),
+        (3, 2, 1), (3, 4, 3), (3, 5, 4),
+        (4, 2, 1), (4, 4, 3), (4, 5, 4),
+        (5, 2, 1), (5, 3, 2), (5, 5, 4),
+        (6, 3, 2), (6, 5, 4),
+    ),
+    2: (  # Dorico - frets 4-8. Index at fret 5 on the outer strings, at fret 4 on G and D.
+        (1, 5, 1), (1, 7, 3), (1, 8, 4),
+        (2, 5, 1), (2, 7, 3), (2, 8, 4),
+        (3, 4, 1), (3, 5, 2), (3, 7, 4),
+        (4, 4, 1), (4, 5, 2), (4, 7, 4),
+        (5, 5, 1), (5, 7, 3),
+        (6, 5, 1), (6, 7, 3), (6, 8, 4),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -69,7 +100,11 @@ class Mode:
     root: str  #: the mode's own tonic, e.g. "A"
     chord: str  #: the chord it belongs over, e.g. "Am"
     quality: str  #: "minor", "dominant", …
-    position: int  #: fret the box starts at; the index finger's fret
+    position: int  #: fret the box starts at
+    #: True when this box's fingering was transcribed from the sheet and read back.
+    #: False means the notes are right but nobody has confirmed which finger plays
+    #: them, so none are shown rather than guessed.
+    verified: bool = False
     #: Frets of the box that fall past the end of the tracked neck, so cannot be drawn.
     #: Non-zero is a real limitation, not a rounding error — see :func:`key_modes`.
     clipped: int = 0
@@ -89,8 +124,12 @@ class Mode:
 
     @property
     def detail(self) -> str:
-        tail = f"  ({self.clipped} frets off the neck)" if self.clipped else ""
-        return f"{self.root} · over {self.chord} · pos {_roman(self.position)}{tail}"
+        bits = [self.root, f"over {self.chord}", f"pos {_roman(self.position)}"]
+        if not self.verified:
+            bits.append("fingering unconfirmed")
+        if self.clipped:
+            bits.append(f"{self.clipped} frets off the neck")
+        return " · ".join(bits)
 
 
 def _roman(n: int) -> str:
@@ -115,56 +154,62 @@ def transpose(note: str, semitones: int) -> str:
 
 
 def key_modes(key: str, max_fret: int = 12) -> list[Mode]:
-    """The seven modes of ``key``, each with its root, its chord and its box position.
+    """The seven modes of ``key``, each with its root, its chord and its box.
 
-    Positions are the sheet's G positions moved by the interval between G and ``key``, so
-    every key gets the same seven shapes in the same relative places — which is the point
-    of learning them as shapes. A box is dropped an octave when that brings it back onto
-    the neck.
+    A transcribed shape supplies its own fret span; the rest fall back on the position
+    read from the sheet. Either way the whole thing moves by the interval between G and
+    ``key``, because a box is a shape and transposing it is exact.
 
-    **Some boxes do not fit.** The tracker poses frets 0–12 and no further, because the
-    model predicts the nut through the twelfth fret and nothing beyond. Aeolian sits at
-    position XI even in the key of G, so its box runs to fret 14 and two of its four frets
-    are off the end. ``Mode.clipped`` says how many, and the app says so rather than
-    quietly drawing two-thirds of a shape and letting you learn it that way.
+    **Some boxes do not fit.** The tracker poses frets 0-12 and no further, because the
+    model predicts the nut through the twelfth fret and nothing beyond. ``Mode.clipped``
+    says how many frets fall off the end, and the app says so rather than quietly drawing
+    part of a shape and letting you learn it that way.
     """
     shift = (chroma(key) - chroma("G")) % 12
     out: list[Mode] = []
     for i, (degree, name, italian, suffix, quality) in enumerate(MODES):
         root = transpose(key, DEGREE_SEMITONES[i])
-        position = POSITIONS_IN_G[i] + shift
-        if position + BOX_FRETS - 1 > max_fret and position - 12 >= 0:
-            position -= 12  # the same shape an octave down, fully on the neck
-        clipped = max(0, position + BOX_FRETS - 1 - max_fret)
+        shape = SHAPES_IN_G.get(degree)
+        if shape:
+            lo, hi = min(f for _, f, _ in shape), max(f for _, f, _ in shape)
+        else:
+            lo, hi = POSITIONS_IN_G[i], POSITIONS_IN_G[i] + BOX_FRETS - 1
+        lo, hi = lo + shift, hi + shift
+        if hi > max_fret and lo - 12 >= 0:
+            lo, hi = lo - 12, hi - 12  # the same shape an octave down, fully on the neck
         out.append(Mode(key=key, degree=degree, name=name, italian=italian, root=root,
-                        chord=f"{root}{suffix}", quality=quality, position=position,
-                        clipped=clipped))
+                        chord=f"{root}{suffix}", quality=quality, position=lo,
+                        clipped=max(0, hi - max_fret), verified=shape is not None))
     return out
 
 
 def mode_box(mode: Mode, max_fret: int = 12,
              strings: tuple[StringNumber, ...] = (6, 5, 4, 3, 2, 1)) -> tuple[FretPosition, ...]:
-    """The notes of one mode's box, fingered.
+    """The notes of one mode's box.
 
-    Every note of the parent key that falls inside the four-fret window, with
-    ``finger = fret - position + 1`` — the definition of playing in position. Notes below
-    the mode's own root on the lowest string are left out, so the box *starts* on the
-    tonic and you hear the mode rather than the parent scale.
+    A transcribed shape is returned as given, moved to the key. Everything else falls back
+    to the notes of the parent key inside the box's span, **with no fingerings at all** --
+    those have not been confirmed for that mode, and a wrong finger number is worse than
+    no finger number, being the part a learner copies without questioning it.
     """
-    allowed = scale_chromas(mode.key, "major")
+    shift = (chroma(mode.key) - chroma("G")) % 12
     root_chroma = chroma(mode.root)
-    lo, hi = mode.position, min(mode.position + BOX_FRETS - 1, max_fret)
+    shape = SHAPES_IN_G.get(mode.degree)
 
-    lowest = strings[0]
-    floor_fret = next((f for f in range(lo, hi + 1) if chroma_at(lowest, f) == root_chroma), lo)
+    if shape:
+        lo = min(f for _, f, _ in shape)
+        drop = lo + shift - mode.position  # how far key_modes moved it, octave included
+        notes = [(s, f + shift - drop, finger) for s, f, finger in shape]
+    else:
+        allowed = scale_chromas(mode.key, "major")
+        notes = [(s, f, None)
+                 for s in strings
+                 for f in range(mode.position, mode.position + BOX_FRETS)
+                 if chroma_at(s, f) in allowed]
 
-    out: list[FretPosition] = []
-    for s in strings:
-        for f in range(lo, hi + 1):
-            if chroma_at(s, f) not in allowed:
-                continue
-            if s == lowest and f < floor_fret:
-                continue
-            out.append(FretPosition(string=s, fret=f, finger=f - mode.position + 1,
-                                    is_root=chroma_at(s, f) == root_chroma))
-    return tuple(out)
+    return tuple(
+        FretPosition(string=s, fret=f, finger=finger,
+                     is_root=chroma_at(s, f) == root_chroma)
+        for s, f, finger in notes
+        if 0 <= f <= max_fret
+    )
