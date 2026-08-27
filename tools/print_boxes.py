@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root
 from fretguide.modes import BOX_FRETS, key_modes, mode_box
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
+PAPER = (252, 252, 252)
 INK = (30, 30, 30)
 ROOT = (40, 40, 210)
 GREY = (140, 140, 140)
@@ -57,13 +58,19 @@ def draw_box(canvas, ox: int, oy: int, mode, cell: int = 46, untracked: int = 0)
         nut = j == 0 and mode.position == 0
         cv2.line(canvas, (x, oy), (x, oy + h), INK, 4 if nut else 1, cv2.LINE_AA)
 
+    # Notes sit in the fret *space* (where the finger presses) and on the string *line*.
+    # The line therefore runs straight through the digit, which is what mangled the first
+    # version of this diagram: every finger number had a rule struck through it. Knock the
+    # paper back out behind each one before drawing it.
     for p in mode_box(mode, max_fret=24):
         col = p.fret - mode.position
         y = oy + (p.string - 1) * cell          # string 1 on top
         x = ox + int((col + 0.5) * cell)
+        cv2.circle(canvas, (x, y), 13, PAPER, -1, cv2.LINE_AA)
         if p.is_root:
-            cv2.circle(canvas, (x, y), 15, ROOT, 2, cv2.LINE_AA)
-        cv2.putText(canvas, str(p.finger), (x - 7, y + 8), FONT, 0.62,
+            cv2.circle(canvas, (x, y), 13, ROOT, 2, cv2.LINE_AA)
+        (tw, th), _ = cv2.getTextSize(str(p.finger), FONT, 0.62, 2)
+        cv2.putText(canvas, str(p.finger), (x - tw // 2, y + th // 2), FONT, 0.62,
                     ROOT if p.is_root else INK, 2, cv2.LINE_AA)
 
     if untracked:
@@ -95,7 +102,7 @@ def main() -> int:
     bw, bh = cell * BOX_FRETS, cell * 5
     cols, gap = 2, 110
     rows = (len(modes) + cols - 1) // cols
-    canvas = np.full((rows * (bh + gap) + 110, cols * (bw + gap) + 90, 3), 252, np.uint8)
+    canvas = np.full((rows * (bh + gap) + 110, cols * (bw + gap) + 90, 3), PAPER, np.uint8)
     cv2.putText(canvas, f"Modal boxes - key of {args.key}", (40, 48), FONT, 0.9, INK, 2,
                 cv2.LINE_AA)
 
