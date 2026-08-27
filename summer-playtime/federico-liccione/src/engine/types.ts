@@ -72,6 +72,31 @@ export interface Target {
   readonly radius: number
 }
 
+/**
+ * Something arriving at the player. It travels from `from` to `to` between
+ * `tSpawn` and `tImpact`; `to` is where it lands, and an eye within `radius` of
+ * that point at impact has been hit. SPEC §6.5.
+ */
+export interface Threat {
+  readonly from: Point3
+  readonly to: Point3
+  readonly tSpawn: number
+  readonly tImpact: number
+  readonly radius: number
+}
+
+export interface DodgeVerdict {
+  readonly dodgeable: boolean
+  /** cm the player may travel in the time they actually have. */
+  readonly budgetCm: number
+  /** cm to the nearest safe position they can reach. Infinity if none exists. */
+  readonly needCm: number
+  /** How many cells of the envelope are outside the impact. */
+  readonly safeCells: number
+  /** Seconds left after reaction time and measured latency are subtracted. */
+  readonly usableS: number
+}
+
 /** Why a candidate was discarded. Counted, and shown on the refusal screen. */
 export type RejectReason =
   | 'no-spawn-zone'    // the scan marked this region unusable
