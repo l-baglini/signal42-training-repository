@@ -84,13 +84,14 @@ There are no pixels below the renderer. Fields carry their unit in the name
 
 ## State — resume here
 
-`npm test` is green at 200 tests and `npx tsc --noEmit` is clean. Commits are
+`npm test` is green at 212 tests and `npx tsc --noEmit` is clean. Commits are
 small and each one leaves the suite green, so `git log --oneline` is a reliable
 account of what exists.
 
 **Done, under test:** types; the boundary validator; the visibility solver
 (`V(t)`, footprints, five reject reasons, level generation with typed refusal);
-the dodge solver and its spawn gate; the off-axis projection. **All ten
+the dodge solver and its spawn gate; the off-axis projection; the calibration
+that turns a stream of tracked positions into an `Envelope`. **All ten
 invariants of SPEC §6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
 and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
 `tests/projection.test.ts`.
@@ -102,13 +103,13 @@ and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
    `prototype/headtracked-parallax.html`, which already does exactly this in
    plain WebGL2 — the shaders, the relief mesh and the debug toggle are all
    there and validated on real hardware. Keep the toggle.
-2. **Head tracking** (`src/perceive/`). Also in the prototype: MediaPipe iris
-   landmarks, the inter-pupillary metric estimate, EMA plus forward prediction.
-   What the prototype does *not* do and the game needs: the ten-second
-   calibration that produces an `Envelope` — the sample cloud, `rest`, the 95th
-   percentile of speed, the jitter and the measured latency. Pin
-   `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM fileset to the same
-   version (SPEC §7.6).
+2. **Head tracking** (`src/perceive/`). `calibrate.ts` is done and tested — it
+   takes timestamped positions and returns an `Envelope` plus a quality report,
+   and it is pure, so it needs no camera. What is missing is only the *tracker*
+   that feeds it: MediaPipe iris landmarks, the inter-pupillary metric estimate,
+   EMA plus forward prediction, and the latency measurement. All of that exists
+   in the prototype. Pin `@mediapipe/tasks-vision` to 1.0.1 and pin the WASM
+   fileset to the same version (SPEC §7.6).
 3. **The playable loop** — waves, score, ninety seconds, the refusal screen. The
    engine already returns everything this needs.
    *Everything above this line is the minimum defensible build.*
