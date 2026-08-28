@@ -15,6 +15,44 @@ function getQueryString(page) {
     return query.map(function (pair) { return pair[0] + '=' + pair[1] }).join('&');
 }
 
+function showLoader() {
+    var loader = document.querySelector('.loader');
+    loader.setAttribute('data-open', '');
+    loader.setAttribute('aria-hidden', 'false');
+}
+
+function hideLoader() {
+    var loader = document.querySelector('.loader');
+    loader.removeAttribute('data-open');
+    loader.setAttribute('aria-hidden', 'true');
+}
+
+// Navigate while showing the loading indicator. The loader stays visible until
+// the browser replaces the document with the freshly rendered page, which is
+// helpful when a large page size makes the request take a while to come back.
+//
+// If the navigation never completes -- the user presses Stop, the request
+// hangs, or the server never responds -- the document is not replaced and the
+// loader would otherwise stay up forever, locking the whole UI behind the
+// overlay. A safety timeout hides it so the page stays usable. On a successful
+// navigation the JS context is torn down before the timeout fires, so it never
+// interferes with a genuinely slow-but-completing request.
+var NAVIGATION_TIMEOUT_MS = 30000;
+
+function navigate(url) {
+    showLoader();
+    setTimeout(hideLoader, NAVIGATION_TIMEOUT_MS);
+    location.assign(url);
+}
+
+// Hide the loader when the page is restored from the back/forward cache,
+// otherwise it would stay visible after navigating back.
+window.addEventListener('pageshow', function(event) {
+    if (event.persisted) {
+        hideLoader();
+    }
+});
+
 function toggle(modal) {
     if (modal.hasAttribute('data-open')) {
         modal.removeAttribute('data-open');
@@ -35,7 +73,7 @@ function toggle(modal) {
 
 document.querySelector('form').addEventListener('submit', function(event) {
     event.preventDefault();
-    location.assign('/sellers?' + getQueryString(0));
+    navigate('/sellers?' + getQueryString(0));
 });
 
 document.querySelector('.filters-opener').addEventListener('click', function(event) {
@@ -66,12 +104,12 @@ document.querySelector('.clear-dates').addEventListener('click', function(event)
 
 document.querySelector('.pagination .prev').addEventListener('click', function(event) {
     event.preventDefault();
-    location.assign('/sellers?' + getQueryString(Math.max(page - 1, 0)));
+    navigate('/sellers?' + getQueryString(Math.max(page - 1, 0)));
 });
 
 document.querySelector('.pagination .next').addEventListener('click', function(event) {
     event.preventDefault();
-    location.assign('/sellers?' + getQueryString(page + 1));
+    navigate('/sellers?' + getQueryString(page + 1));
 });
 
 document.querySelectorAll('.results td:not(:first-child)').forEach(function(result) {
