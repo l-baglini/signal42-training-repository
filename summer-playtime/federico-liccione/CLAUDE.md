@@ -47,7 +47,9 @@ Determinism is allowed to be random — `mulberry32` in `level.ts` is seeded, an
 
 ```
 npm run setup   copies the MediaPipe WASM out of the pinned package and downloads
-                the face model into public/. Run once; `npm run dev` does it too.
+                the face model, the segmenter and 77 MB of depth weights into
+                public/. Run once; `npm run dev` does it too. Nothing the app
+                needs at runtime comes from a CDN.
 npm run dev     the app, on localhost. Move the cursor as if moving your head,
                 or press `c` for the real webcam and `k` to calibrate.
 npm run build   tsc then vite. The bundle is ~18 kB; keep it that way.
@@ -89,7 +91,7 @@ There are no pixels below the renderer. Fields carry their unit in the name
 
 ## State — resume here
 
-`npm test` is green at 243 tests and `npx tsc --noEmit` is clean. Commits are
+`npm test` is green at 294 tests and `npx tsc --noEmit` is clean. Commits are
 small and each one leaves the suite green, so `git log --oneline` is a reliable
 account of what exists.
 
@@ -98,8 +100,9 @@ account of what exists.
 the dodge solver and its spawn gate; the off-axis projection; the calibration
 that turns a stream of tracked positions into an `Envelope`; the scene geometry;
 the scene geometry, the WebGL2 renderer, the webcam tracker, the round — a pure
-state machine, tested like one — and a runnable app that calibrates a real body
-and plays ninety seconds against it. **All ten invariants of SPEC
+state machine, tested like one — the depth scan that turns the player's actual
+room into the level, and a runnable app that calibrates a real body and plays
+ninety seconds against it. **All ten invariants of SPEC
 §6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
 and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
 `tests/projection.test.ts`.
@@ -134,7 +137,16 @@ accuracy need eyes and a face. Nothing headless can check them.
 3. **The semantic scan** — one vision call per room, plus the cost panel.
 4. *(optional, first to cut)* the director.
 
-**Playtesting has not happened**, and it is now the highest-value thing anyone
+**Press `s` to scan the room.** Needs the webcam on (`c`) and a face in frame —
+the head is the only metric correspondence available, so without it the room has
+no scale. The far-wall prior is a slider, and it is the honest weak point: it
+moves difficulty, not fairness.
+
+**Playtesting has been happening**, and it has produced most of the recent
+commits: the One Euro filter, the lateral threat model, the landing marker, the
+axis mix, the warmth gradient, and hold-to-score all came from someone playing
+this and saying what was wrong. Read those commit messages before changing any
+of them — each one records the complaint it answers., and it is now the highest-value thing anyone
 can do to this project. The literature says peeking is the strong verb and
 dodging is the weak one (PRIOR-ART.md); the tuning knobs are all in
 `DEFAULT_CONFIG` in `src/game/round.ts` and `leanFraction` / `jitterK` in

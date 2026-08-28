@@ -32,6 +32,7 @@ import {
   threatPosition,
 } from './game/round'
 import type { RoundState, TargetSpec } from './game/round'
+import type { CameraModel } from './perceive/roomGeometry'
 import roomJson from '../fixtures/desk.room.json'
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -67,6 +68,9 @@ void tracker.start()
 let envelope: Envelope = referenceBody(tracker.latencyS())
 let bodySource = 'reference body'
 let room = fullRoom
+let roomSource = 'hand-authored fixture'
+let farWallCm = 320
+let scanning = false
 let level: Generated
 let targets: readonly Target[] = []
 let revealed: boolean[] = []
@@ -278,6 +282,7 @@ function renderHud(): void {
   const s = level.stats
   el('stats').textContent =
     `${s.fair} fair of ${s.candidates} candidates · ${s.latticeCells} reachable eye positions\n` +
+    `room (${roomSource}): ${room.occluders.length} occluders, ${room.anchors.length} candidates\n` +
     `body (${bodySource}): jitter ${envelope.jitter.toFixed(2)} cm · ` +
     `vmax ${envelope.vmax.toFixed(0)} cm/s · latency ${(envelope.latency * 1000).toFixed(0)} ms\n` +
     `projection: ${mode === 'window' ? 'off-axis (a window)' : 'symmetric (a dolly)'}` +
@@ -316,6 +321,85 @@ async function useCamera(): Promise<void> {
   }
   tracker.stop()
   tracker = cam
+}
+
+/* ---------------- scanning the room ---------------- */
+
+/**
+ * Turn the player's own room into the level. The one place two models run, and
+ * they run once — never in the game loop.
+ */
+async function runScan(): Promise<void> {
+  if (scanning) return
+  const cam = tracker as Tracker & { video?: HTMLVideoElement }
+  if (tracker.kind !== 'camera' || !cam.video) {
+    el('tracker').textContent = 'press c for the webcam first — the scan needs it'
+    return
+  }
+  const head = tracker.position()
+  if (!head) {
+    el('tracker').textContent = 'no face yet: the scan needs your head for the scale'
+    return
+  }
+
+  scanning = true
+  const panel = el('scan')
+  panel.style.display = 'block'
+  el('scanTitle').textContent = 'Scanning the room'
+  el('scanMeta').textContent = ''
+
+  const camera: CameraModel = {
+    fovDeg: 60,
+    playerZcm: head.z,
+    aboveCentreCm: 12,
+    flipX: false,
+  }
+
+  try {
+    // Loaded on demand. transformers.js plus the ONNX runtime is most of a
+    // megabyte of JavaScript, and someone who never scans a room should never
+    // pay for it — the same reason the camera tracker is a dynamic import.
+    const { scanRoom } = await import('./perceive/scanRoom')
+    const report = await scanRoom({
+      video: cam.video,
+      headZcm: head.z,
+      farWallCm,
+      camera,
+      onProgress: (stage) => {
+        el('scanStage').textContent = stage + '…'
+      },
+    })
+
+    const meta =
+      `backend  ${report.device} / ${report.dtype}\n` +
+      `scan     ${report.ms.toFixed(0)} ms` +
+      (report.loadMs > 0 ? `   (weights loaded in ${(report.loadMs / 1000).toFixed(1)} s)` : '') +
+      `\nhead     ${head.z.toFixed(0)} cm, measured   far wall ${farWallCm} cm, assumed`
+
+    if (!report.outcome.ok) {
+      el('scanTitle').textContent = 'The scan found nothing to play with'
+      el('scanStage').textContent = report.outcome.reason
+      el('scanMeta').textContent = meta
+    } else {
+      room = report.outcome.scan
+      roomSource = `your room, ${report.device}/${report.dtype}`
+      roundSeed++
+      regenerate()
+      el('scanTitle').textContent = 'Your room is the level'
+      el('scanStage').textContent =
+        `${room.occluders.length} pieces of cover, ${room.anchors.length} candidate positions ` +
+        `proposed — the engine decides which of them are playable.`
+      el('scanMeta').textContent = meta
+    }
+  } catch (err) {
+    el('scanTitle').textContent = 'The scan failed'
+    el('scanStage').textContent = err instanceof Error ? err.message : String(err)
+  } finally {
+    scanning = false
+    setTimeout(() => {
+      panel.style.display = 'none'
+    }, 6000)
+  }
 }
 
 /* ---------------- calibration ---------------- */
@@ -377,6 +461,13 @@ function updateRuler(): void {
   if (bar) bar.style.width = `${(10 / widthCm) * innerWidth}px`
 }
 
+const farInput = el<HTMLInputElement>('farwall')
+farInput.addEventListener('input', () => {
+  farWallCm = parseFloat(farInput.value)
+  el('farwallVal').textContent = `${farWallCm} cm`
+})
+farInput.dispatchEvent(new Event('input'))
+
 const widthInput = el<HTMLInputElement>('width')
 widthInput.addEventListener('input', () => {
   widthCm = parseFloat(widthInput.value)
@@ -394,6 +485,8 @@ addEventListener('keydown', (e) => {
     regenerate()
   } else if (e.key === 'c') {
     void useCamera()
+  } else if (e.key === 's') {
+    void runScan()
   } else if (e.key === 'k') {
     void runCalibration()
   } else if (e.key === ' ') {

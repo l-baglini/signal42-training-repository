@@ -431,16 +431,25 @@ one changed the design.
 centimetre in it. Every guarantee in §6 is metric, so the scan is worthless
 until `a` and `b` are pinned.
 
-They are pinned **by the player's own head.** §7.1 already knows the head's
-metric distance from the inter-pupillary estimate, and the segmenter says which
-pixels the head occupies — so every frame yields one correspondence
-`(D_head, Z_head)`. The calibration in §6.1 asks the player to lean *towards the
-camera*, which produces a second correspondence at a different distance, and two
-correspondences solve the 2×2 system.
+One is pinned **by the player's own head.** §7.1 already knows the head's metric
+distance from the inter-pupillary estimate, and the segmenter says which pixels
+the head occupies, so the frame yields one correspondence `(D_head, Z_head)`.
 
-The calibration therefore does double duty: it measures the body **and** it
-scales the room. Neither was designed for the other, and the fact that they
-compose is the only reason this pipeline is entitled to make metric claims.
+An earlier draft of this section claimed the second came free: the calibration in
+§6.1 asks the player to lean *towards the camera*, so a second frame at a
+different distance would give a second correspondence. **That is wrong, and it
+was found while implementing.** The model's affine transform is unknown *per
+image*, so two frames produce two different unknown transforms rather than two
+constraints on one. Both correspondences must come from the same frame.
+
+The second is therefore a **stated prior** about the distance of the furthest
+surface, exposed to the player as a control. What that costs is worth being
+precise about: **it moves difficulty, not fairness.** A wrong prior makes the room
+come out shallower or deeper than it is, so peek windows are wider or narrower
+than intended — but the engine computes fairness on whatever geometry it is
+handed, so every target it ships is still reachable and still requires a real
+lean. This is the weakest link in the pipeline and it is recorded as such in
+§11.
 
 Residual error of the affine fit is recorded, shown in the debug overlay, and
 added to the margins in §6.4 and §6.5. A badly-fitting scan makes the game more
@@ -692,6 +701,10 @@ Listed because they are choices, not oversights.
 8. **The vision model's suitability judgements are unvalidated taste.** The
    engine's fairness checks are what stop bad taste from producing a broken
    level. That containment is tested; the taste is not.
+9. **Perception hands over geometry it has not judged, on purpose** — and this
+   caught out my own intuition. A wall of finite extent has edges, and an edge is
+   cover; the engine builds a playable level from a bare wall. Had the scan
+   pre-filtered "rooms that look like cover", it would have thrown that away.
 
 ---
 
