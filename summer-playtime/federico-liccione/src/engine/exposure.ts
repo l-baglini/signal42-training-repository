@@ -18,6 +18,7 @@ import type { Envelope, Point3, RoomScan } from './types'
 import { cellCentre, cellIndex, latticeOf, reachCm, type Lattice } from './lattice'
 import { edtSquared, footprintMask } from './footprint'
 import { visible } from './sightline'
+import { DEFAULT_VIEWPORT, onScreen, type Viewport } from './viewport'
 import { dist } from './vec'
 import { inradiusCm, maskCount } from './footprint'
 // One definition of a fact about people. It was briefly declared twice and the
@@ -32,7 +33,7 @@ export interface Enemy {
 }
 
 export type EnemyReject =
-  | 'not-shootable' // no reachable position sees it
+  | 'not-shootable' // no reachable position sees it, or sees it on screen
   | 'no-cover'      // every reachable position is exposed to it
   | 'cannot-retreat' // cover exists but not within the fuse
   | 'exposed-at-rest' // it can already shoot you where you sit
@@ -54,6 +55,32 @@ export interface EnemyAssessment {
   readonly retreatBudgetCm: number
   readonly fair: boolean
   readonly reject: EnemyReject | null
+}
+
+/**
+ * Where the player can both see the enemy and have it on screen.
+ *
+ * The engagement footprint, and the only one the game should ever use. An eye
+ * position with a clear sightline to something off the edge of the glass is not a
+ * firing position, and by the symmetry that runs through this whole design it is
+ * not a position the enemy may fire from either. A playtester was being shot by
+ * enemies they could not see, which is what that gap looks like from the chair.
+ */
+export function engageableMask(
+  lat: Lattice,
+  occluders: Parameters<typeof footprintMask>[1],
+  at: Point3,
+  view: Viewport = DEFAULT_VIEWPORT,
+): Uint8Array {
+  const mask = footprintMask(lat, occluders, at)
+  for (let k = 0; k < lat.nz; k++)
+    for (let j = 0; j < lat.ny; j++)
+      for (let i = 0; i < lat.nx; i++) {
+        const n = cellIndex(lat, i, j, k)
+        if (!mask[n]) continue
+        if (!onScreen(cellCentre(lat, i, j, k), at, view)) mask[n] = 0
+      }
+  return mask
 }
 
 /**
@@ -217,6 +244,7 @@ export function assessEnemy(
 
 export interface EnemyLineupOptions {
   readonly pitch?: number
+  readonly viewport?: Viewport
   readonly jitterK?: number
   readonly leanFraction?: number
   readonly fuseMarginS?: number
@@ -244,8 +272,9 @@ export function assessEnemies(
   const radius = opts.radius ?? 9
   const assessments: EnemyAssessment[] = []
 
+  const view = opts.viewport ?? DEFAULT_VIEWPORT
   for (const at of scan.anchors) {
-    const exposed = footprintMask(lattice, scan.occluders, at)
+    const exposed = engageableMask(lattice, scan.occluders, at, view)
     const cover = coverMask(lattice, exposed)
     const retreat = gapCm(lattice, exposed, cover)
     const fuseS = fuseForFairRetreat(env, retreat, opts.fuseMarginS)
@@ -255,7 +284,7 @@ export function assessEnemies(
         { at, radius, fuseS },
         env,
         exposed,
-        visible(env.rest, at, scan.occluders),
+        visible(env.rest, at, scan.occluders) && onScreen(env.rest, at, view),
         {
           reachCm: reach,
           ...(opts.jitterK === undefined ? {} : { jitterK: opts.jitterK }),

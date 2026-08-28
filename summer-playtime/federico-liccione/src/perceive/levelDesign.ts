@@ -27,7 +27,18 @@ import type { Billboard, RoomScan } from '../engine'
  * about it rather than left to discover it.
  */
 export const COVER_BAND = { nearest: -30, furthest: -96 } as const
-export const EXTENT = { x: 130, y: 70 } as const
+
+/**
+ * How far out cover may be placed.
+ *
+ * Computed, not chosen. The window is about 34 cm wide and the eye sits 60 cm from
+ * it, so the visible cone at the near edge of the cover band spans roughly x ±26
+ * and at the far edge x ±44 — much narrower than the ±130 this used to allow. A
+ * playtester asked for "a tree on the left" and the tree was simply not there: the
+ * model had placed it off the edge of the screen. The bound is generous enough to
+ * allow cover that only matters when the player leans, and no more.
+ */
+export const EXTENT = { x: 66, y: 42 } as const
 export const MAX_COVER = 7
 
 /** Whatever the model sent, before anything is believed about it. */

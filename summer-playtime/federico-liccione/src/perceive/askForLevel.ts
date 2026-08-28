@@ -58,10 +58,24 @@ where their line of sight crosses an obstacle falls off with the obstacle's
 distance, so cover further away than about a metre cannot be leaned around by any
 human at all, and a level built from it is unplayable.
 
+WHAT IS IN FRAME. This matters more than it sounds. The player looks through a
+window about 34 cm wide from 60 cm away, so the visible cone is narrow where cover
+lives: at z = ${COVER_BAND.nearest} it spans about x -26 to 26 and y -16 to 16, and
+at z = ${COVER_BAND.furthest} about x -44 to 44 and y -27 to 27. Cover placed
+outside that is off the edge of the screen and the player never sees it. Stay
+inside x -${EXTENT.x} to ${EXTENT.x} and y -${EXTENT.y} to ${EXTENT.y}, and treat
+the middle of that as the useful area.
+
+WHERE EYE LEVEL IS. y = 0 is the player's eye. A rectangle that does not cross
+y = 0 cannot block a horizontal line of sight, so it is not cover in the ordinary
+sense: it is a *low wall*, which works only if the player is meant to rise up over
+it, and asking somebody to lift their head is a smaller movement than asking them
+to lean sideways. Most of your rectangles should straddle y = 0. One low wall in a
+layout is a good idea; a layout of only low walls has no cover in it at all.
+
 WHAT MAKES A GOOD LAYOUT.
 - Leave gaps. A player who cannot see anything from anywhere has no level, and
-  cover that spans the whole view is a blindfold. Keep the visible span roughly
-  within x from -${EXTENT.x} to ${EXTENT.x} and y from -${EXTENT.y} to ${EXTENT.y}.
+  cover that spans the whole view is a blindfold.
 - Vary the axis. A tall narrow upright makes the player lean sideways; a wide low
   wall makes them rise up over it. A level of only uprights is a level of only
   one movement, and a neck has about half the vertical range it has lateral, so

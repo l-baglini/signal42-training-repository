@@ -7,8 +7,8 @@
  * knows whether the head is a webcam, a keyboard or a pointer — that is what
  * `perceive/tracker.ts` is for.
  */
-import { assessEnemies, visible } from './engine'
-import type { Billboard, Envelope, Point3 } from './engine'
+import { assessEnemies, onScreen, visible } from './engine'
+import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView, type UvRect } from './render/geometry'
 import { Renderer } from './render/renderer'
@@ -98,6 +98,12 @@ let costLines: string[] = []
 let mode: 'window' | 'dolly' = 'window'
 let widthCm = 34
 let roundSeed = 1
+/**
+ * The display's physical size, as the engine sees it. Kept here and handed to
+ * `assessEnemies`, because a fairness check that assumed a nominal screen while
+ * the player had a different one would disagree with what is on the glass.
+ */
+let viewport: Viewport = { widthCm: 34, heightCm: 21 }
 
 /* ---------------- the line-up ---------------- */
 
@@ -121,7 +127,7 @@ const sfx = createSfx()
 let shake = 0
 
 function rebuildLineup(): void {
-  const { assessments } = assessEnemies(room, envelope)
+  const { assessments } = assessEnemies(room, envelope, { viewport })
   rejectCounts = {}
   for (const a of assessments) {
     if (!a.fair && a.reject) rejectCounts[a.reject] = (rejectCounts[a.reject] ?? 0) + 1
@@ -767,11 +773,17 @@ renderScene()
 function frame(now: number): void {
   const eye = tracker.position() ?? envelope.rest
   const screen: Screen = renderer.resize(widthCm)
+  viewport = screen
   const mvp = mode === 'window' ? offAxis(eye, screen) : symmetric(eye, screen)
 
   // The one question, asked once and used for everything: can this enemy see me?
   // By the symmetry in engine/exposure.ts that is also "can I shoot it".
-  exposed = enemies.map((e) => visible(eye, e.at, room.occluders))
+  // The same rule the engine used: unoccluded *and* in frame. If they disagreed,
+  // the game would let an enemy shoot from off the edge of the screen — which is
+  // exactly what a playtester ran into.
+  exposed = enemies.map(
+    (e) => visible(eye, e.at, room.occluders) && onScreen(eye, e.at, screen),
+  )
   updateAim(mvp)
 
   if (combat.phase === 'playing') {
