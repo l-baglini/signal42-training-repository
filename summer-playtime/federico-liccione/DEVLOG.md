@@ -305,6 +305,76 @@ plausible, and the only reason the second and third happened is that a
 seven-line probe printed centroids instead of me reasoning about them. Two of the
 three wrong versions would have passed a less specific test.
 
+## The look was wrong twice, in opposite directions
+
+The first pass at making this stop looking like an engine was procedural
+materials — noise-driven rock and metal on the cover. The playtester rejected them
+as ugly and, more usefully, as harmful: they made the levels harder to read. So
+they came out.
+
+The second pass was a **backlit** look: bright hazy sky, near-black cover, a thin
+rim of light on each top edge, a skyline in the far opening, light shafts, film
+grain, and every surface graded from near-black at the near end to bright at the
+far end. It photographs well. The verdict was *"non mi piace per niente l'effetto
+ottenuto, confonde e basta"*, with a reference: Minecraft, Geometry Dash.
+
+That reference is the actual finding, and it took two failures to hear it. Both of
+those games are legible at a glance, and the reason is not the art budget: **a
+face is one flat colour, the shading is which face you are looking at, and every
+edge is hard.** Everything I had added was soft, and every soft thing was carrying
+a depth cue by *removing contrast* — aerial perspective at 0.72, a haze band at
+the horizon, a vignette at 0.42, a gradient from black to bright on every
+surface. All of it concentrated in the far half of the corridor, which is exactly
+where deciding whether an enemy is exposed is hardest. The picture was spending
+its contrast budget on atmosphere and leaving none for the rules.
+
+What replaced it costs less and states more: a checkered floor, whose tiles get
+smaller with distance and touch nobody's contrast; walls that take the same
+courses so both surfaces agree where one step of depth is; no ceiling, so a block
+always has bright sky behind its top edge; clouds as flat rectangles instead of
+noise.
+
+And one thing I had simply been wrong about for weeks. I had read the solver's
+screen-parallel constraint as forbidding cover from looking like a block. It does
+not — it forbids the **extrusion**. A box with real depth has a silhouette wider
+than its own front face from any off-axis eye, so drawing one would promise the
+player cover that the sightline test does not grant. Bevel *inwards* and the block
+is free: a bright outline on the rectangle itself, four bevel faces lit from the
+upper left, a flat front face, every vertex inside the rectangle and at exactly its
+depth. The constraint did not cost the look. Misreading the constraint did.
+
+`tests/geometry.test.ts` now asserts the room does **not** grade brightness with
+distance. That test previously asserted the opposite, and inverting a test I had
+written on purpose is the clearest record of the mistake I can leave.
+
+## A timer where a situation belonged
+
+The same playtest that rejected the look also said the game had got worse:
+*"è diventato uno spostati e spara, mentre prima quando ti affacciavi vedevi già
+presenti i nemici ed era tutto più dinamico e divertente"*.
+
+This one is a design error I can name precisely. The combat loop inherited its
+spawn model from the earlier hunt mode: enemies arrive on a timer, two at a time,
+and leave after eleven seconds. Under that model the *most likely thing to happen
+when you lean out is nothing*, because most of the round is spent between
+arrivals. So the player learns to lean, look, retreat, wait — and the verb the
+whole project is built on becomes a polling loop.
+
+The fix was to delete the timer, not to tune it. Five enemies stand in the room
+from the first tick and never leave. Leaning out now finds a situation.
+
+Worth recording that this needed no change to the fairness theorem, and the reason
+is a property I had not noticed I already had: an enemy is only shipped if a lean
+is *required* to see it (I2), so at the rest position none of them can see the
+player, however many are standing there. The safe pocket behind cover survives
+the entire lineup. A full room is loud, not unfair — and I only knew that for
+certain because the invariant had been written down years-of-decisions ago in
+SPEC §6.7 rather than being an intuition about the current code.
+
+It did need one addition: with several sightlines opening at once, a single moment
+of over-exposure would bill the player once per enemy per frame. A hit now resets
+every fuse.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
@@ -312,5 +382,8 @@ three wrong versions would have passed a less specific test.
 - Vision accuracy is unverified by construction: no test touches a network. The
   suite proves containment — a wrong model answer stays harmless — and not
   correctness.
-- Nothing has been playtested, so the design bet that peeking is a good verb and
-  the literature's caution that dodging is a bad one are both still theory.
+- Peeking has now been playtested and it holds up; dodging was cut on the
+  playtester's evidence, which agrees with the literature's caution about it.
+- Difficulty is still flat. Every enemy gets the same 0.89 s fuse because the fuse
+  is *derived* from the measured body rather than authored, and nothing yet varies
+  it with distance or with how far into the round the player is.

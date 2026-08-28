@@ -167,6 +167,29 @@ derived from that same identity for a wanted leverage, not picked by taste. If
 scanned rooms start refusing again, look at `nearestCm`/`furthestCm` in
 `fitBillboards` and at `forLeverage` in `proposeAnchors` before anything else.
 
+**The look is flat, bright and hard-edged, and that is deliberate.** Two earlier
+looks were rejected by the playtester — procedural materials, then a backlit
+silhouette look with haze, shafts and grain. The reference they gave is Minecraft
+and Geometry Dash, and the rule that follows from it is: a face is one flat
+colour, the shading is *which* face you are looking at, every edge is hard, and
+nothing carries a depth cue by removing contrast. `src/render/mood.ts` holds five
+palettes and `tests/mood.test.ts` asserts the ordering that keeps a block reading
+as a block. Before adding any atmospheric effect, read the two new sections in
+DEVLOG.md — this has now been got wrong twice.
+
+**Cover may look like a block but must never be extruded.** The screen-parallel
+constraint forbids the extrusion, not the block: a box with depth has a silhouette
+wider than its own front face, which would promise cover the solver does not
+grant. `coverMesh` bevels *inwards* and a test asserts every vertex is inside the
+rectangle and at exactly its depth.
+
+**The room stands full.** Five enemies from the first tick, they never leave, and
+a kill is replaced after a beat. There is no spawn timer any more and reintroducing
+one is how the game got boring: with a timer, the likeliest thing to happen when
+you lean out is nothing. This needed no change to the fairness theorem, because
+I2 already guarantees no shipped enemy can see the player at the rest position —
+so the safe pocket behind cover survives the whole lineup.
+
 **Playtesting has been happening**, and it has produced most of the recent
 commits: the One Euro filter, the lateral threat model, the landing marker, the
 axis mix, the warmth gradient, and hold-to-score all came from someone playing
@@ -176,6 +199,10 @@ can do to this project. The literature says peeking is the strong verb and
 dodging is the weak one (PRIOR-ART.md); the tuning knobs are all in
 `DEFAULT_CONFIG` in `src/game/round.ts` and `leanFraction` / `jitterK` in
 `src/engine/level.ts`. Change those, not the invariants.
+
+**Still mine to write:** README.md for the folder (a judge opens it and finds
+four documents and no front door) and PRIOR-ART.md needs updating for the shooter
+pivot, which moved this *closer* to Wang et al. 2006 rather than further away.
 
 **Not started:** REVIEW.md. It has to be written by the author, not by a model —
 the brief says so explicitly. DEVLOG.md lists what the tests cannot check, and
