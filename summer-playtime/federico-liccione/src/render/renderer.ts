@@ -130,7 +130,12 @@ export class Renderer {
     return { widthCm, heightCm: (widthCm * h) / w }
   }
 
-  draw(eye: Point3, screen: Screen, mode: ProjectionMode, fogFar = 340): void {
+  /**
+   * Returns the matrix it drew with. Aiming needs to project enemies to the
+   * screen, and doing that with a *separately computed* matrix would let the
+   * crosshair and the picture disagree by a frame.
+   */
+  draw(eye: Point3, screen: Screen, mode: ProjectionMode, fogFar = 340): Float32Array {
     const gl = this.gl
     const mvp = mode === 'window' ? offAxis(eye, screen) : symmetric(eye, screen)
     gl.useProgram(this.prog)
@@ -140,5 +145,6 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.bindVertexArray(this.vao)
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0)
+    return mvp
   }
 }

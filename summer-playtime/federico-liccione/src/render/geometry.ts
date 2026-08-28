@@ -134,10 +134,28 @@ export const PALETTE = {
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
   hiding: [0.42, 0.95, 0.78] as Rgb,
+  enemyCovered: [0.30, 0.13, 0.16] as Rgb,
+  enemyExposed: [0.92, 0.28, 0.32] as Rgb,
+  enemyFiring: [1.0, 0.92, 0.55] as Rgb,
+  enemyAimed: [1.0, 0.62, 0.30] as Rgb,
   hidingCold: [0.18, 0.34, 0.32] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
 } as const
+
+/**
+ * An enemy as the renderer needs it. `exposed` is the same boolean the game uses
+ * to decide whether it may be shot and whether it may shoot — one fact, drawn
+ * once, so the picture can never disagree with the rules.
+ */
+export interface EnemyView {
+  readonly at: Point3
+  readonly radius: number
+  readonly exposed: boolean
+  /** Fraction of its fuse charged, 0..1. */
+  readonly fuse: number
+  readonly aimed: boolean
+}
 
 export interface SceneInput {
   readonly occluders: readonly Billboard[]
@@ -168,6 +186,7 @@ export interface SceneInput {
    * invisible, then suddenly visible, with nothing in between to home in on.
    */
   readonly hidingGlow?: number | undefined
+  readonly enemies?: readonly EnemyView[] | undefined
   readonly backdropZ?: number
 }
 
@@ -208,6 +227,26 @@ export function buildScene(input: SceneInput): Mesh {
     const f = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0
     parts.push(targetMesh(t, mix(base, PALETTE.targetRevealed, f)))
   })
+  for (const e of input.enemies ?? []) {
+    // Dim in cover, hot when it can see you, and filling towards its shot as the
+    // fuse charges. The one moment that needs reading at a glance is "it is about
+    // to fire and I am still out", so that is the loudest state.
+    const f = Number.isFinite(e.fuse) ? Math.max(0, Math.min(1, e.fuse)) : 0
+    const base = e.exposed ? PALETTE.enemyExposed : PALETTE.enemyCovered
+    const body = e.exposed ? mix(base, PALETTE.enemyFiring, f) : base
+    parts.push(targetMesh({ at: e.at, radius: e.radius }, body))
+    if (e.aimed && e.exposed) {
+      parts.push(
+        frameMesh(
+          e.at.z + 0.4,
+          e.at.x - e.radius - 3, e.at.x + e.radius + 3,
+          e.at.y - e.radius - 3, e.at.y + e.radius + 3,
+          1.8,
+          PALETTE.enemyAimed,
+        ),
+      )
+    }
+  }
   if (input.threatMarker) {
     const { at, radius } = input.threatMarker
     parts.push(

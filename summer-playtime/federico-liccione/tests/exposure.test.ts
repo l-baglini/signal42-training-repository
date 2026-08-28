@@ -9,7 +9,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  assessEnemies,
   assessEnemy,
+  fuseForFairRetreat,
   coverMask,
   footprintMask,
   gapCm,
@@ -152,5 +154,47 @@ describe('the retreat budget spends measured numbers, not assumed ones', () => {
     })
     expect(a.retreatBudgetCm).toBe(0)
     expect(a.fair).toBe(false)
+  })
+})
+
+describe('the fuse is derived from the body, not tuned', () => {
+  it('grants more time for a longer retreat', () => {
+    const near = fuseForFairRetreat(env, 4)
+    const far = fuseForFairRetreat(env, 40)
+    expect(far).toBeGreaterThan(near)
+  })
+
+  it('grants more time to a slower body and a slower tracker', () => {
+    const base = fuseForFairRetreat(env, 20)
+    expect(fuseForFairRetreat({ ...env, vmax: env.vmax / 3 }, 20)).toBeGreaterThan(base)
+    expect(fuseForFairRetreat({ ...env, latency: env.latency + 0.2 }, 20)).toBeGreaterThan(base)
+  })
+
+  it('never asks a motionless body to retreat', () => {
+    expect(fuseForFairRetreat({ ...env, vmax: 0 }, 20)).toBe(Infinity)
+  })
+
+  it('makes the retreat check pass by construction', () => {
+    // The point of deriving it: no enemy is ever given a fuse this player cannot
+    // beat, so `cannot-retreat` becomes unreachable and the other rejections are
+    // the ones that carry information.
+    const { assessments } = assessEnemies(room, env)
+    expect(assessments.length).toBe(room.anchors.length)
+    for (const a of assessments) expect(a.reject).not.toBe('cannot-retreat')
+  })
+
+  it('and still produces enemies worth fighting', () => {
+    const fair = assessEnemies(room, env).assessments.filter((a) => a.fair)
+    expect(fair.length).toBeGreaterThan(4)
+    for (const a of fair) {
+      expect(a.retreatCm).toBeLessThanOrEqual(a.retreatBudgetCm + 1e-6)
+      expect(a.coveredCells).toBeGreaterThan(0)
+      expect(a.exposedCells).toBeGreaterThan(0)
+    }
+  })
+
+  it('a body that cannot move gets no enemies at all', () => {
+    const still: Envelope = { ...env, vmax: 0 }
+    expect(assessEnemies(room, still).assessments.every((a) => !a.fair)).toBe(true)
   })
 })

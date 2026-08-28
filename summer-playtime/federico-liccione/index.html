@@ -82,6 +82,12 @@
   #hint .text { font-size: 12px; opacity: .75; margin-top: 2px; }
   .hitflash { position: fixed; inset: 0; z-index: 5; pointer-events: none;
     background: rgba(230,60,70,.32); opacity: 0; transition: opacity .35s; }
+  #crosshair { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none;
+    display: none; margin: -11px 0 0 -11px; width: 22px; height: 22px; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute;
+    background: rgba(255,255,255,.75); }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { top: 10px; left: 0; height: 2px; width: 22px; }
   #calib .count { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #calib .note { font-size: 11px; opacity: .6; margin-top: 6px; }
 </style>
@@ -91,9 +97,9 @@
 
   <div class="panel" id="hud">
     <h1>Blind Spot</h1>
-    <div class="sub">You lean to see. Move the cursor as if moving your head.</div>
+    <div class="sub">Lean out to see them — and to be seen. Aim with the mouse.</div>
     <table>
-      <thead><tr><th>target</th><th>lean</th><th>window</th><th>seen</th><th>verdict</th></tr></thead>
+      <thead><tr><th>enemy</th><th>lean</th><th>window</th><th>fuse</th><th>state</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div id="stats"></div>
@@ -109,10 +115,11 @@
       <span class="val" id="widthVal"></span>
     </div>
     <div id="keys">
-      <kbd>space</kbd> play &nbsp; <kbd>o</kbd> window / dolly &nbsp;
-      <kbd>w</kbd> blank the wall &nbsp;
-      <kbd>c</kbd> webcam &nbsp; <kbd>k</kbd> calibrate &nbsp; <kbd>s</kbd> scan the room &nbsp;
-      <kbd>r</kbd> ruler &nbsp; <kbd>wheel</kbd> lean in and out
+      <kbd>space</kbd> play &nbsp; <kbd>WASD</kbd> lean &nbsp; <kbd>Q</kbd>/<kbd>E</kbd> depth
+      &nbsp; <kbd>click</kbd> shoot<br>
+      <kbd>c</kbd> webcam head &nbsp; <kbd>k</kbd> calibrate &nbsp; <kbd>p</kbd> scan the room
+      &nbsp; <kbd>o</kbd> window / dolly &nbsp; <kbd>m</kbd> pointer head &nbsp;
+      <kbd>r</kbd> ruler
     </div>
   </div>
 
@@ -149,6 +156,7 @@
   <div id="hold"><div class="track"><div class="fill" id="holdFill"></div></div>
     <div class="lbl" id="holdLabel">HOLD IT</div></div>
   <div id="hint"><div class="arrow" id="hintArrow"></div><div class="text" id="hintText"></div></div>
+  <div id="crosshair"></div>
   <div class="hitflash" id="flash"></div>
   <div id="cam"></div>
 

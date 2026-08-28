@@ -1,38 +1,32 @@
 /**
- * The app. Wires the engine, the renderer and a tracker together, and does as
- * little thinking as possible — every judgement on screen comes from
- * `src/engine/`, and this file only asks and displays.
+ * The app. Wires the engine, the renderer and a tracker together and thinks as
+ * little as possible: every judgement on screen comes from `src/engine/`, and
+ * this file asks and displays.
  *
- * The tracker is swappable by construction (`src/perceive/tracker.ts`): the
- * mouse is the cleaner control for judging the geometry, the webcam is the real
- * thing, and no game code below knows which one it has.
+ * The head says where you are. The mouse says where you are aiming. Nothing here
+ * knows whether the head is a webcam, a keyboard or a pointer — that is what
+ * `perceive/tracker.ts` is for.
  */
-import {
-  blockingOccluders,
-  footprintMask,
-  generate,
-  latticeOf,
-  nearestRevealing,
-  shouldSpawn,
-  visible,
-} from './engine'
-import type { Billboard, Envelope, Generated, Lattice, Point3, RoomScan, Target } from './engine'
+import { assessEnemies, visible } from './engine'
+import type { Envelope, Point3, RoomScan } from './engine'
 import { validateScan } from './boundary/validate'
-import { buildScene } from './render/geometry'
+import { buildScene, type EnemyView } from './render/geometry'
 import { Renderer } from './render/renderer'
+import { offAxis, project, symmetric, type Screen } from './render/projection'
+import { keyboardTracker } from './perceive/keyboard'
 import { mouseTracker } from './perceive/mouse'
 import { calibrate, type Sample } from './perceive/calibrate'
 import { referenceBody } from './perceive/reference'
 import type { Tracker } from './perceive/tracker'
-import {
-  DEFAULT_CONFIG,
-  newRound,
-  start as startRound,
-  step as stepRound,
-  threatPosition,
-} from './game/round'
-import type { RoundState, TargetSpec } from './game/round'
 import type { CameraModel } from './perceive/roomGeometry'
+import {
+  DEFAULT_COMBAT,
+  accuracy,
+  newCombat,
+  startCombat,
+  step as stepCombat,
+} from './game/combat'
+import type { CombatState, EnemySpec } from './game/combat'
 import roomJson from '../fixtures/desk.room.json'
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -56,222 +50,109 @@ try {
   fatal(err instanceof Error ? err.message : String(err))
 }
 
-/** The scan is untrusted even when it comes from a file. SPEC §7.4. */
 const validated = validateScan(roomJson)
-const fullRoom: RoomScan = validated.scan
-/** Pressing `w` swaps in a wall with nothing to hide behind — the demo beat. */
-const blankRoom: RoomScan = { ...fullRoom, occluders: [] }
+const fixtureRoom: RoomScan = validated.scan
 
-let tracker: Tracker = mouseTracker(canvas)
+let tracker: Tracker = keyboardTracker()
 void tracker.start()
 
 let envelope: Envelope = referenceBody(tracker.latencyS())
 let bodySource = 'reference body'
-let room = fullRoom
+let room = fixtureRoom
 let roomSource = 'hand-authored fixture'
 let farWallCm = 320
 let scanning = false
-let level: Generated
-let targets: readonly Target[] = []
-let revealed: boolean[] = []
-let everRevealed: boolean[] = []
 let mode: 'window' | 'dolly' = 'window'
 let widthCm = 34
-let lattice: Lattice = latticeOf(envelope)
-/**
- * A new seed every round, so one room scan yields a different level each time.
- * The engine was built for this (I5: different seeds pick different targets);
- * the first fixture just did not propose enough candidates for it to show.
- */
 let roundSeed = 1
-let specs: TargetSpec[] = []
-let round: RoundState = newRound(DEFAULT_CONFIG)
-/** The footprint of the target being hunted, recomputed only when it changes. */
-let huntIndex = -1
-let huntMask: Uint8Array | null = null
-let hiding: Billboard[] = []
-/** Where the current hunt's revealing viewpoint is — and where threats go. */
-let peekAt: Point3 | null = null
-let holdFraction: number[] = []
-/** Distance to the revealing viewpoint when the hunt began, for the gradient. */
-let huntStartDistCm = 0
-let warmth = 0
 
-/** How long the player is left to search before the game offers a direction. */
-const HINT_AFTER_S = 2.5
+/* ---------------- the line-up ---------------- */
 
-function regenerate(): void {
-  lattice = latticeOf(envelope)
-  level = generate(room, envelope, { seed: roundSeed, maxTargets: 14 })
-  targets = level.kind === 'level' ? level.targets : []
-  // The score needs the engine's difficulty pair, so it is carried across
-  // rather than recomputed — there is one place that decides what is hard.
-  const byKey = new Map(
-    (level.kind === 'level' ? level.assessments : []).map((a) => [
-      `${a.target.at.x},${a.target.at.y},${a.target.at.z}`,
-      a,
-    ]),
-  )
-  specs = targets.map((t) => {
-    const a = byKey.get(`${t.at.x},${t.at.y},${t.at.z}`)
-    return { leanCm: a?.leanCm ?? 0, windowCm: a?.windowCm ?? 1 }
-  })
-  revealed = targets.map(() => false)
-  everRevealed = targets.map(() => false)
-  holdFraction = targets.map(() => 0)
-  round = newRound(DEFAULT_CONFIG)
-  renderScene()
+interface EnemyEntry {
+  readonly at: Point3
+  readonly radius: number
+  readonly spec: EnemySpec
+  readonly leanCm: number
+  readonly windowCm: number
+  readonly retreatCm: number
+}
+
+let enemies: EnemyEntry[] = []
+let rejectCounts: Record<string, number> = {}
+let combat: CombatState = newCombat(DEFAULT_COMBAT)
+let exposed: boolean[] = []
+let aimed: boolean[] = []
+let firing = false
+let mouseNdc: { x: number; y: number } | null = null
+
+function rebuildLineup(): void {
+  const { assessments } = assessEnemies(room, envelope)
+  rejectCounts = {}
+  for (const a of assessments) {
+    if (!a.fair && a.reject) rejectCounts[a.reject] = (rejectCounts[a.reject] ?? 0) + 1
+  }
+  const fair = assessments.filter((a) => a.fair).sort((x, y) => x.leanCm - y.leanCm)
+  // A different subset each round, from the one scan. The engine was built for
+  // this; the seed only chooses which of the fair ones get used.
+  const offset = fair.length ? roundSeed % fair.length : 0
+  const rotated = [...fair.slice(offset), ...fair.slice(0, offset)].slice(0, 12)
+
+  enemies = rotated.map((a) => ({
+    at: a.enemy.at,
+    radius: a.enemy.radius,
+    spec: { leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS },
+    leanCm: a.leanCm,
+    windowCm: a.windowCm,
+    retreatCm: a.retreatCm,
+  }))
+  exposed = enemies.map(() => false)
+  aimed = enemies.map(() => false)
+  combat = newCombat(DEFAULT_COMBAT)
   renderHud()
   renderRound()
 }
 
+/* ---------------- rendering ---------------- */
+
+function views(): EnemyView[] {
+  const live = new Map(combat.active.map((a) => [a.index, a]))
+  return enemies.flatMap((e, i) => {
+    const a = live.get(i)
+    if (!a) return []
+    return [{
+      at: e.at,
+      radius: e.radius,
+      exposed: exposed[i] ?? false,
+      fuse: e.spec.fuseS > 0 ? a.exposedS / e.spec.fuseS : 0,
+      aimed: aimed[i] ?? false,
+    }]
+  })
+}
+
 function renderScene(): void {
-  const playing = round.phase === 'playing'
   renderer.upload(
     buildScene({
       occluders: room.occluders,
-      targets,
-      revealed,
-      hold: playing ? holdFraction : undefined,
-      active: playing ? round.active.map((a) => a.index) : undefined,
-      threat:
-        playing && round.threat
-          ? { at: threatPosition(round.threat, round.tS), radius: round.threat.radius }
-          : undefined,
-      // The tell. Drawn from the moment it spawns, so the direction to move is
-      // readable before the thing itself is large enough to read.
-      threatMarker:
-        playing && round.threat
-          ? { at: round.threat.to, radius: round.threat.radius }
-          : undefined,
-      hiding: playing ? hiding : undefined,
-      hidingGlow: warmth,
+      targets: [],
+      enemies: combat.phase === 'playing' ? views() : [],
     }),
   )
-}
-
-function renderRound(): void {
-  const panel = el('round')
-  const remaining = Math.max(0, round.endsAtS - round.tS)
-  el('clock').textContent = round.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_CONFIG.durationS.toFixed(1)
-  el('scoreValue').textContent = String(round.score)
-  el('tally').textContent =
-    `${round.revealed} found · ${round.missed} missed · ${round.hits} hit · ${round.dodged} dodged`
-
-  if (round.phase === 'playing') {
-    panel.style.display = 'none'
-    return
-  }
-  panel.style.display = 'block'
-  el('hint').style.display = 'none'
-  el('hold').style.display = 'none'
-  el('warm').style.display = 'none'
-  if (level.kind === 'refusal') {
-    el('roundTitle').textContent = 'No round to play'
-    el('roundBody').textContent = 'This room will not make a fair level. Press w to put the furniture back.'
-    return
-  }
-  if (round.phase === 'ready') {
-    el('roundTitle').textContent = 'Blind Spot'
-    el('roundBody').textContent =
-      'Somewhere in this room there is a marker you cannot see from where you are sitting — ' +
-      'a piece of furniture is in the way. The one that is hiding it lights up. Lean to the side ' +
-      'until the marker comes into view, and it scores. Something red will cross the room at you; ' +
-      'an orange square shows where it will land, so lean out of that spot or it costs you five ' +
-      'seconds of the clock.'
-  } else {
-    el('roundTitle').textContent = `${round.score} points`
-    el('roundBody').textContent =
-      `${round.revealed} found, ${round.missed} missed, ${round.hits} hit, ${round.dodged} dodged.`
-  }
-}
-
-function renderWarmth(index: number, distCm: number): void {
-  const panel = el('warm')
-  if (index < 0 || revealed[index] || !Number.isFinite(distCm)) {
-    panel.style.display = 'none'
-    return
-  }
-  panel.style.display = 'block'
-  el<HTMLElement>('warmFill').style.width = `${(warmth * 100).toFixed(0)}%`
-  el('warmLabel').textContent = `${distCm.toFixed(0)} cm FROM A VIEW OF IT`
-}
-
-function renderHold(heldS: number, index: number): void {
-  const panel = el('hold')
-  if (index < 0 || !revealed[index]) {
-    // Still shown while draining, so losing the position reads as a loss rather
-    // than as nothing happening.
-    if (heldS <= 0) {
-      panel.style.display = 'none'
-      return
-    }
-  }
-  panel.style.display = 'block'
-  const f = Math.min(1, heldS / DEFAULT_CONFIG.holdS)
-  el<HTMLElement>('holdFill').style.width = `${(f * 100).toFixed(0)}%`
-  el('holdLabel').textContent = revealed[index] ? 'HOLD IT' : 'KEEP IT IN VIEW'
-}
-
-/**
- * After a couple of seconds of searching, say which way and how far. Not a
- * concession: the first playtest could not tell there was a hunt on at all, and
- * a hint that arrives only when the player is stuck teaches the mechanic without
- * playing it for them.
- */
-function renderHint(ageS: number, index: number, eye: Point3): void {
-  const panel = el('hint')
-  if (index < 0 || !huntMask || ageS < HINT_AFTER_S || revealed[index]) {
-    panel.style.display = 'none'
-    return
-  }
-  const near = nearestRevealing(lattice, huntMask, eye)
-  if (!near) {
-    panel.style.display = 'none'
-    return
-  }
-  const dx = near.at.x - eye.x
-  const dy = near.at.y - eye.y
-  const dz = near.at.z - eye.z
-  let arrow: string
-  if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)) arrow = dx > 0 ? '\u2192' : '\u2190'
-  else if (Math.abs(dy) >= Math.abs(dz)) arrow = dy > 0 ? '\u2191' : '\u2193'
-  else arrow = dz > 0 ? '\u21a9' : '\u21aa'
-  panel.style.display = 'block'
-  el('hintArrow').textContent = arrow
-  el('hintText').textContent =
-    dz > Math.abs(dx) && dz > Math.abs(dy)
-      ? `lean back ${near.distCm.toFixed(0)} cm`
-      : Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)
-        ? `lean in ${near.distCm.toFixed(0)} cm`
-        : `lean ${near.distCm.toFixed(0)} cm`
-}
-
-function flash(): void {
-  const f = el('flash')
-  f.style.opacity = '1'
-  setTimeout(() => (f.style.opacity = '0'), 90)
 }
 
 function renderHud(): void {
   const rows = el('rows')
   rows.innerHTML = ''
-  const assessments = level.kind === 'level' ? level.assessments : []
-  const shipped = new Set(targets.map((t) => `${t.at.x},${t.at.y},${t.at.z}`))
-
-  for (const a of assessments) {
-    const key = `${a.target.at.x},${a.target.at.y},${a.target.at.z}`
-    const index = targets.findIndex((t) => `${t.at.x},${t.at.y},${t.at.z}` === key)
+  for (const [i, e] of enemies.entries()) {
     const tr = document.createElement('tr')
-    tr.className = revealed[index] ? 'on' : a.fair && shipped.has(key) ? 'fair' : 'rejected'
-    const cells = [
-      `(${a.target.at.x}, ${a.target.at.y}, ${a.target.at.z})`,
-      Number.isFinite(a.leanCm) ? `${a.leanCm.toFixed(1)} cm` : '—',
-      `${a.windowCm.toFixed(1)} cm`,
-      String(a.seen),
-      revealed[index] ? 'REVEALED' : a.fair ? 'fair' : (a.reject ?? ''),
-    ]
-    for (const c of cells) {
+    const live = combat.active.some((a) => a.index === i)
+    tr.className = exposed[i] ? 'on' : live ? 'fair' : 'rejected'
+    for (const c of [
+      `(${e.at.x}, ${e.at.y}, ${e.at.z})`,
+      `${e.leanCm.toFixed(1)} cm`,
+      `${e.windowCm.toFixed(1)} cm`,
+      `${e.spec.fuseS.toFixed(2)} s`,
+      exposed[i] ? 'EXPOSED' : live ? 'in play' : '—',
+    ]) {
       const td = document.createElement('td')
       td.textContent = c
       tr.append(td)
@@ -279,56 +160,119 @@ function renderHud(): void {
     rows.append(tr)
   }
 
-  const s = level.stats
+  const rejects = Object.entries(rejectCounts)
+    .map(([k, n]) => `${n} ${k}`)
+    .join(', ')
   el('stats').textContent =
-    `${s.fair} fair of ${s.candidates} candidates · ${s.latticeCells} reachable eye positions\n` +
-    `room (${roomSource}): ${room.occluders.length} occluders, ${room.anchors.length} candidates\n` +
+    `room (${roomSource}): ${room.occluders.length} cover, ${room.anchors.length} candidates → ` +
+    `${enemies.length} enemies\n` +
+    (rejects ? `rejected: ${rejects}\n` : '') +
     `body (${bodySource}): jitter ${envelope.jitter.toFixed(2)} cm · ` +
     `vmax ${envelope.vmax.toFixed(0)} cm/s · latency ${(envelope.latency * 1000).toFixed(0)} ms\n` +
-    `projection: ${mode === 'window' ? 'off-axis (a window)' : 'symmetric (a dolly)'}` +
-    (validated.typeErrors || validated.clamped
-      ? `\nscan: ${validated.typeErrors} type errors, ${validated.clamped} values clamped`
-      : '')
-
-  const refusal = el('refusal')
-  if (level.kind === 'refusal') {
-    refusal.style.display = 'block'
-    el('refusalReason').textContent = level.reason
-    el('refusalCounts').textContent = Object.entries(level.stats.rejected)
-      .filter(([, n]) => n > 0)
-      .map(([k, n]) => `${String(n).padStart(3)}  ${k}`)
-      .join('\n')
-  } else {
-    refusal.style.display = 'none'
-  }
+    `projection: ${mode === 'window' ? 'off-axis (a window)' : 'symmetric (a dolly)'}`
 }
 
-/* ---------------- switching the tracker ---------------- */
+function renderRound(): void {
+  const panel = el('round')
+  const remaining = Math.max(0, combat.endsAtS - combat.tS)
+  el('clock').textContent =
+    combat.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_COMBAT.durationS.toFixed(1)
+  el('scoreValue').textContent = String(combat.score)
+  el('tally').textContent =
+    `${combat.killed} killed · ${combat.timesShot} hit · ${combat.escaped} escaped · ` +
+    `${(accuracy(combat) * 100).toFixed(0)}% accuracy`
 
-async function useCamera(): Promise<void> {
-  if (tracker.kind === 'camera') return
-  el('tracker').textContent = 'loading the tracker…'
-  // Loaded on demand: MediaPipe is 150 kB of JS, and someone who only ever uses
-  // the mouse should never pay for it. This is the only dynamic import here.
-  const { cameraTracker } = await import('./perceive/camera')
-  const cam = cameraTracker({ mount: el('cam') })
-  el('tracker').textContent = 'starting the webcam…'
-  try {
-    await cam.start()
-  } catch (err) {
-    el('tracker').textContent = `webcam failed: ${err instanceof Error ? err.message : String(err)}`
+  if (combat.phase === 'playing') {
+    panel.style.display = 'none'
     return
   }
-  tracker.stop()
-  tracker = cam
+  panel.style.display = 'block'
+  el('hint').style.display = 'none'
+  el('hold').style.display = 'none'
+  el('warm').style.display = 'none'
+
+  if (enemies.length === 0) {
+    el('roundTitle').textContent = 'No round to play'
+    el('roundBody').textContent =
+      `Nothing in this room can be fought fairly. ${
+        Object.entries(rejectCounts).map(([k, n]) => `${n} ${k}`).join(', ')
+      }.`
+    return
+  }
+  if (combat.phase === 'ready') {
+    el('roundTitle').textContent = 'Blind Spot'
+    el('roundBody').textContent =
+      'Enemies hide behind the furniture. Leaning out is the only way to see one — and the ' +
+      'only way for it to see you. Lean with WASD (or your head, press c), aim and shoot with ' +
+      'the mouse, and get back into cover before it fires.'
+  } else {
+    el('roundTitle').textContent = `${combat.score} points`
+    el('roundBody').textContent =
+      `${combat.killed} killed, ${combat.timesShot} times hit, ${combat.escaped} got away, ` +
+      `${(accuracy(combat) * 100).toFixed(0)}% accuracy.`
+  }
 }
 
-/* ---------------- scanning the room ---------------- */
+function renderExposure(): void {
+  const panel = el('hold')
+  const live = combat.active
+    .map((a) => ({ a, e: enemies[a.index] }))
+    .filter((p) => p.e && exposed[p.a.index])
+    .sort((p, q) => q.a.exposedS / q.e!.spec.fuseS - p.a.exposedS / p.e!.spec.fuseS)[0]
+  if (!live || combat.phase !== 'playing') {
+    panel.style.display = 'none'
+    return
+  }
+  const f = Math.min(1, live.a.exposedS / live.e!.spec.fuseS)
+  panel.style.display = 'block'
+  el<HTMLElement>('holdFill').style.width = `${(f * 100).toFixed(0)}%`
+  el<HTMLElement>('holdFill').style.background = f > 0.6 ? '#ffcf5c' : '#e0685c'
+  el('holdLabel').textContent = f > 0.75 ? 'GET BACK INTO COVER' : 'EXPOSED'
+}
+
+function flash(colour: string): void {
+  const f = el('flash')
+  f.style.background = colour
+  f.style.opacity = '1'
+  setTimeout(() => (f.style.opacity = '0'), 90)
+}
+
+/* ---------------- aiming ---------------- */
 
 /**
- * Turn the player's own room into the level. The one place two models run, and
- * they run once — never in the game loop.
+ * Which enemies the crosshair is over.
+ *
+ * Enemies are screen-parallel quads, so projecting their corners and testing the
+ * pointer against the resulting box is exact — no ray casting needed. It uses the
+ * same matrix the frame was drawn with, so the crosshair and the picture cannot
+ * disagree.
  */
+function updateAim(mvp: Float32Array): void {
+  aimed = enemies.map(() => false)
+  if (!mouseNdc) return
+  for (const a of combat.active) {
+    const e = enemies[a.index]
+    if (!e) continue
+    const pts = [
+      { x: e.at.x - e.radius, y: e.at.y - e.radius, z: e.at.z },
+      { x: e.at.x + e.radius, y: e.at.y - e.radius, z: e.at.z },
+      { x: e.at.x - e.radius, y: e.at.y + e.radius, z: e.at.z },
+      { x: e.at.x + e.radius, y: e.at.y + e.radius, z: e.at.z },
+    ].map((p) => project(mvp, p))
+    if (pts.some((p) => p.w <= 0)) continue
+    const xs = pts.map((p) => p.x)
+    const ys = pts.map((p) => p.y)
+    if (
+      mouseNdc.x >= Math.min(...xs) && mouseNdc.x <= Math.max(...xs) &&
+      mouseNdc.y >= Math.min(...ys) && mouseNdc.y <= Math.max(...ys)
+    ) {
+      aimed[a.index] = true
+    }
+  }
+}
+
+/* ---------------- scanning ---------------- */
+
 async function runScan(): Promise<void> {
   if (scanning) return
   const cam = tracker as Tracker & { video?: HTMLVideoElement }
@@ -347,29 +291,17 @@ async function runScan(): Promise<void> {
   panel.style.display = 'block'
   el('scanTitle').textContent = 'Scanning the room'
   el('scanMeta').textContent = ''
-
-  const camera: CameraModel = {
-    fovDeg: 60,
-    playerZcm: head.z,
-    aboveCentreCm: 12,
-    flipX: false,
-  }
+  const camera: CameraModel = { fovDeg: 60, playerZcm: head.z, aboveCentreCm: 12, flipX: false }
 
   try {
-    // Loaded on demand. transformers.js plus the ONNX runtime is most of a
-    // megabyte of JavaScript, and someone who never scans a room should never
-    // pay for it — the same reason the camera tracker is a dynamic import.
     const { scanRoom } = await import('./perceive/scanRoom')
     const report = await scanRoom({
       video: cam.video,
       headZcm: head.z,
       farWallCm,
       camera,
-      onProgress: (stage) => {
-        el('scanStage').textContent = stage + '…'
-      },
+      onProgress: (stage) => { el('scanStage').textContent = stage + '…' },
     })
-
     const meta =
       `backend  ${report.device} / ${report.dtype}\n` +
       `scan     ${report.ms.toFixed(0)} ms` +
@@ -384,11 +316,11 @@ async function runScan(): Promise<void> {
       room = report.outcome.scan
       roomSource = `your room, ${report.device}/${report.dtype}`
       roundSeed++
-      regenerate()
+      rebuildLineup()
       el('scanTitle').textContent = 'Your room is the level'
       el('scanStage').textContent =
-        `${room.occluders.length} pieces of cover, ${room.anchors.length} candidate positions ` +
-        `proposed — the engine decides which of them are playable.`
+        `${room.occluders.length} pieces of cover, ${room.anchors.length} candidates proposed — ` +
+        `the engine kept ${enemies.length} as fair enemies.`
       el('scanMeta').textContent = meta
     }
   } catch (err) {
@@ -396,10 +328,34 @@ async function runScan(): Promise<void> {
     el('scanStage').textContent = err instanceof Error ? err.message : String(err)
   } finally {
     scanning = false
-    setTimeout(() => {
-      panel.style.display = 'none'
-    }, 6000)
+    setTimeout(() => { panel.style.display = 'none' }, 6000)
   }
+}
+
+/* ---------------- trackers ---------------- */
+
+async function useCamera(): Promise<void> {
+  if (tracker.kind === 'camera') return
+  el('tracker').textContent = 'loading the tracker…'
+  const { cameraTracker } = await import('./perceive/camera')
+  const cam = cameraTracker({ mount: el('cam') })
+  try {
+    await cam.start()
+  } catch (err) {
+    el('tracker').textContent = `webcam failed: ${err instanceof Error ? err.message : String(err)}`
+    return
+  }
+  tracker.stop()
+  tracker = cam
+}
+
+function usePointerHead(): void {
+  // Kept because it is still the cleanest way to judge the projection on its
+  // own — but it takes the mouse away from aiming, so it is not the default.
+  if (tracker.kind === 'camera') return
+  tracker.stop()
+  tracker = mouseTracker(canvas)
+  void tracker.start()
 }
 
 /* ---------------- calibration ---------------- */
@@ -415,7 +371,7 @@ async function runCalibration(): Promise<void> {
   el('calibPrompt').textContent =
     tracker.kind === 'camera'
       ? 'Lean as far as is comfortable — left, right, up, and towards the screen.'
-      : 'Move the cursor as if leaning, and use the wheel to lean in and out.'
+      : 'Hold the lean keys through their full range, including Q and E.'
 
   const samples: Sample[] = []
   const t0 = performance.now()
@@ -438,10 +394,9 @@ async function runCalibration(): Promise<void> {
     const q = result.quality
     el('calibTitle').textContent = q.degenerate ? 'That is not enough movement' : 'Measured'
     el('calibPrompt').textContent =
-      `reach ${q.reachCm.toFixed(1)} cm · ` +
-      `${q.directionsCovered}/${q.directionsTotal} directions pushed into` +
-      (q.degenerate ? ' — the game will refuse rather than ship an unfair level.' : '')
-    regenerate()
+      `reach ${q.reachCm.toFixed(1)} cm · ${q.directionsCovered}/${q.directionsTotal} directions` +
+      (q.degenerate ? ' — the game will refuse rather than ship an unfair fight.' : '')
+    rebuildLineup()
   } else {
     el('calibTitle').textContent = 'Calibration failed'
     el('calibPrompt').textContent = result.reason
@@ -476,30 +431,40 @@ widthInput.addEventListener('input', () => {
 })
 widthInput.dispatchEvent(new Event('input'))
 
+const crosshair = el('crosshair')
+addEventListener('pointermove', (e) => {
+  mouseNdc = { x: (e.clientX / innerWidth) * 2 - 1, y: 1 - (e.clientY / innerHeight) * 2 }
+  crosshair.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`
+  crosshair.style.display = 'block'
+})
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button === 0) firing = true
+})
+
+let roundStartedAt = 0
 addEventListener('keydown', (e) => {
-  if (e.key === 'o') {
-    mode = mode === 'window' ? 'dolly' : 'window'
-    renderHud()
-  } else if (e.key === 'w') {
-    room = room === fullRoom ? blankRoom : fullRoom
-    regenerate()
-  } else if (e.key === 'c') {
-    void useCamera()
-  } else if (e.key === 's') {
-    void runScan()
-  } else if (e.key === 'k') {
-    void runCalibration()
-  } else if (e.key === ' ') {
+  const k = e.key.toLowerCase()
+  if (k === ' ') {
     e.preventDefault()
-    if (round.phase !== 'playing') {
+    if (combat.phase !== 'playing' && enemies.length > 0) {
       roundSeed++
-      regenerate()
-      if (level.kind !== 'level') return
-      round = startRound(round, DEFAULT_CONFIG)
+      rebuildLineup()
+      combat = startCombat(DEFAULT_COMBAT)
       roundStartedAt = performance.now() / 1000
       renderRound()
     }
-  } else if (e.key === 'r') {
+  } else if (k === 'o') {
+    mode = mode === 'window' ? 'dolly' : 'window'
+    renderHud()
+  } else if (k === 'c') {
+    void useCamera()
+  } else if (k === 'm') {
+    usePointerHead()
+  } else if (k === 'p') {
+    void runScan()
+  } else if (k === 'k') {
+    void runCalibration()
+  } else if (k === 'r') {
     const r = el('ruler')
     r.style.display = r.style.display === 'block' ? 'none' : 'block'
     updateRuler()
@@ -507,103 +472,59 @@ addEventListener('keydown', (e) => {
 })
 addEventListener('resize', updateRuler)
 
-regenerate()
-
 /* ---------------- the loop ---------------- */
 
-let lastLatencyRefresh = 0
-let roundStartedAt = 0
+let lastStatus = 0
+rebuildLineup()
+renderScene()
 
 function frame(now: number): void {
   const eye = tracker.position() ?? envelope.rest
-  const screen = renderer.resize(widthCm)
+  const screen: Screen = renderer.resize(widthCm)
+  const mvp = mode === 'window' ? offAxis(eye, screen) : symmetric(eye, screen)
 
-  // The one question the game asks every frame, and the engine answers it.
-  let changed = false
-  targets.forEach((t, i) => {
-    const nowVisible = visible(eye, t.at, room.occluders)
-    if (nowVisible !== revealed[i]) {
-      revealed[i] = nowVisible
-      changed = true
-    }
-    if (nowVisible) everRevealed[i] = true
-  })
+  // The one question, asked once and used for everything: can this enemy see me?
+  // By the symmetry in engine/exposure.ts that is also "can I shoot it".
+  exposed = enemies.map((e) => visible(eye, e.at, room.occluders))
+  updateAim(mvp)
 
-  if (round.phase === 'playing') {
-    const before = round.phase
-    round = stepRound(round, DEFAULT_CONFIG, specs, {
+  if (combat.phase === 'playing') {
+    const before = combat.phase
+    const wasKilled = combat.killed
+    const wasShot = combat.timesShot
+    combat = stepCombat(combat, DEFAULT_COMBAT, enemies.map((e) => e.spec), {
       tS: now / 1000 - roundStartedAt,
       eye,
-      visible: revealed,
-      // The gate. A threat the engine says this player cannot dodge from where
-      // they are is never spawned, and the game has no way to overrule it.
-      maySpawn: (threat) => shouldSpawn(lattice, threat, envelope, eye),
-      // Aimed at the place the player needs to be, not the place they are. This
-      // is what makes holding a decision: the scoring position and the safe
-      // position stop being the same position. The gate above still guarantees
-      // an escape exists.
-      aimAt: peekAt,
+      exposed,
+      aimedAt: aimed.flatMap((v, i) => (v ? [i] : [])),
+      firing,
     })
-    // Track which target is being hunted, and what is hiding it. The mask is
-    // the same footprint the engine used to decide the target was fair, so the
-    // hint can never point somewhere the rules disagree with.
-    const active = round.active[0]
-    const index = active?.index ?? -1
-    const changedHunt = index !== huntIndex
-    if (changedHunt) {
-      huntIndex = index
-      huntStartDistCm = 0
-      huntMask =
-        index >= 0 && targets[index]
-          ? footprintMask(lattice, room.occluders, targets[index]!.at)
-          : null
-    }
-    hiding =
-      index >= 0 && targets[index]
-        ? blockingOccluders(eye, targets[index]!.at, room.occluders)
-        : []
-    const near = huntMask ? nearestRevealing(lattice, huntMask, eye) : null
-    peekAt = near?.at ?? null
-    if (index !== huntIndex || huntStartDistCm === 0) {
-      huntStartDistCm = near?.distCm ?? 0
-    }
-    // A gradient instead of a binary. This is the fix for "I cannot tell where
-    // the objective is": the signal used to be invisible-then-visible with
-    // nothing in between, so there was nothing to home in on.
-    warmth = near && huntStartDistCm > 0
-      ? Math.max(0, Math.min(1, 1 - near.distCm / huntStartDistCm))
-      : 0
-    renderWarmth(index, near?.distCm ?? Infinity)
-
-    holdFraction = targets.map(() => 0)
-    if (active && index >= 0) {
-      holdFraction[index] = Math.min(1, active.heldS / DEFAULT_CONFIG.holdS)
-    }
-    renderHold(active ? active.heldS : 0, index)
-    renderHint(active ? round.tS - active.bornS : 0, index, eye)
-
-    for (const ev of round.events) if (ev.kind === 'hit') flash()
+    firing = false
+    if (combat.killed > wasKilled) flash('rgba(120,230,180,.22)')
+    if (combat.timesShot > wasShot) flash('rgba(230,60,70,.32)')
     renderRound()
-    if (round.phase !== before) renderHud()
-    changed = true
-  } else if (changed) {
-    renderHud()
+    renderExposure()
+    if (combat.phase !== before) renderHud()
+    renderScene()
+  } else {
+    firing = false
   }
 
-  if (changed) renderScene()
-
-  // Latency is measured, and what the dodge guarantee spends must stay current.
-  if (now - lastLatencyRefresh > 1000) {
-    lastLatencyRefresh = now
+  if (now - lastStatus > 500) {
+    lastStatus = now
     const measured = tracker.latencyS()
-    if (Math.abs(measured - envelope.latency) > 0.005) {
+    if (Math.abs(measured - envelope.latency) > 0.008) {
       envelope = { ...envelope, latency: measured }
-      renderHud()
     }
-    el('tracker').textContent = `${tracker.kind}: ${tracker.status()}`
+    el('tracker').textContent = tracker.status()
+    if (combat.phase !== 'playing') renderHud()
   }
 
   renderer.draw(eye, screen, mode)
   requestAnimationFrame(frame)
 }
 requestAnimationFrame(frame)
+
+// Note: `game/round.ts` — the hunt mode this replaced — is no longer wired up. It
+// stays in the tree with its tests because it was a real design iteration whose
+// findings are recorded in DEVLOG.md, not because anything still calls it.

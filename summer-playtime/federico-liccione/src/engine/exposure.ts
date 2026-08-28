@@ -14,8 +14,10 @@
  * is makeable** in the time the enemy gives you, at the speed you were measured
  * moving. All three are properties of one mask and one envelope.
  */
-import type { Envelope, Point3 } from './types'
-import { cellCentre, cellIndex, type Lattice } from './lattice'
+import type { Envelope, Point3, RoomScan } from './types'
+import { cellCentre, cellIndex, latticeOf, reachCm, type Lattice } from './lattice'
+import { footprintMask } from './footprint'
+import { visible } from './sightline'
 import { dist } from './vec'
 import { inradiusCm, maskCount } from './footprint'
 // One definition of a fact about people. It was briefly declared twice and the
@@ -52,6 +54,23 @@ export interface EnemyAssessment {
   readonly retreatBudgetCm: number
   readonly fair: boolean
   readonly reject: EnemyReject | null
+}
+
+/**
+ * How long this enemy must wait before firing, for the retreat to be possible.
+ *
+ * Derived rather than tuned: reaction time, plus the *measured* perception
+ * latency, plus the time to cross the gap from the firing position back into
+ * cover at the *measured* speed of this body, plus a margin. So fairness holds
+ * by construction — an enemy is never given a fuse this player cannot beat — and
+ * the margin is the only number anyone gets to tune.
+ *
+ * The direction of the consequence is the usual one: a slower body, or a noisier
+ * tracker, is given more time rather than a worse game.
+ */
+export function fuseForFairRetreat(env: Envelope, retreatCm: number, marginS = 0.55): number {
+  if (!(env.vmax > 0) || !Number.isFinite(retreatCm)) return Infinity
+  return REACTION_S + env.latency + retreatCm / env.vmax + marginS
 }
 
 /**
@@ -136,6 +155,24 @@ export function assessEnemy(
     }
   }
 
+  /**
+   * A non-finite fuse is not a generous enemy: it is the signal that
+   * `fuseForFairRetreat` found no retreat. Letting it through made
+   * `retreatBudgetCm` come out as `0 * Infinity` — NaN — and every comparison
+   * against NaN is false, so the retreat check silently passed and a motionless
+   * body was handed enemies. A test caught it.
+   *
+   * Checked *after* shootability and cover, so the more fundamental reasons keep
+   * their precedence — an enemy nobody can shoot says so, rather than blaming
+   * the retreat.
+   */
+  if (!Number.isFinite(enemy.fuseS)) {
+    return {
+      ...base, leanCm: Infinity, windowCm: 0, retreatCm: Infinity, retreatBudgetCm: 0,
+      fair: false, reject: 'cannot-retreat',
+    }
+  }
+
   let leanCm = Infinity
   for (let k = 0; k < lat.nz; k++)
     for (let j = 0; j < lat.ny; j++)
@@ -165,4 +202,56 @@ export function assessEnemy(
     return { ...full, fair: false, reject: 'cannot-retreat' }
   }
   return { ...full, fair: true, reject: null }
+}
+
+export interface EnemyLineupOptions {
+  readonly pitch?: number
+  readonly jitterK?: number
+  readonly leanFraction?: number
+  readonly fuseMarginS?: number
+  readonly radius?: number
+}
+
+export interface EnemyLineup {
+  readonly assessments: readonly EnemyAssessment[]
+  readonly lattice: Lattice
+}
+
+/**
+ * Judge every candidate position in a scan as a possible enemy.
+ *
+ * The enemy analogue of `assess` in level.ts, and the same division of labour:
+ * perception proposed these positions and has no say in which survive.
+ */
+export function assessEnemies(
+  scan: RoomScan,
+  env: Envelope,
+  opts: EnemyLineupOptions = {},
+): EnemyLineup {
+  const lattice = latticeOf(env, opts.pitch ?? 2)
+  const reach = reachCm(lattice, env.rest)
+  const radius = opts.radius ?? 9
+  const assessments: EnemyAssessment[] = []
+
+  for (const at of scan.anchors) {
+    const exposed = footprintMask(lattice, scan.occluders, at)
+    const cover = coverMask(lattice, exposed)
+    const retreat = gapCm(lattice, exposed, cover)
+    const fuseS = fuseForFairRetreat(env, retreat, opts.fuseMarginS)
+    assessments.push(
+      assessEnemy(
+        lattice,
+        { at, radius, fuseS },
+        env,
+        exposed,
+        visible(env.rest, at, scan.occluders),
+        {
+          reachCm: reach,
+          ...(opts.jitterK === undefined ? {} : { jitterK: opts.jitterK }),
+          ...(opts.leanFraction === undefined ? {} : { leanFraction: opts.leanFraction }),
+        },
+      ),
+    )
+  }
+  return { assessments, lattice }
 }

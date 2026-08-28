@@ -91,7 +91,7 @@ There are no pixels below the renderer. Fields carry their unit in the name
 
 ## State — resume here
 
-`npm test` is green at 294 tests and `npx tsc --noEmit` is clean. Commits are
+`npm test` is green at 345 tests and `npx tsc --noEmit` is clean. Commits are
 small and each one leaves the suite green, so `git log --oneline` is a reliable
 account of what exists.
 
@@ -137,7 +137,24 @@ accuracy need eyes and a face. Nothing headless can check them.
 3. **The semantic scan** — one vision call per room, plus the cost panel.
 4. *(optional, first to cut)* the director.
 
-**Press `s` to scan the room.** Needs the webcam on (`c`) and a face in frame —
+**The game is cover combat.** Lean out to see an enemy — which is also the only
+way for it to see you — aim with the mouse, shoot, and get back behind cover
+before its fuse completes. `src/game/combat.ts` is the round; `src/engine/
+exposure.ts` is the fairness theorem. The head does slow positional work and the
+mouse does fast precision, which is the answer to the one piece of published
+evidence against this whole design (PRIOR-ART.md, Kulshreshth & LaViola).
+
+The enemy's fuse is **derived from the measured body**, not tuned: reaction time
+plus measured latency plus the time to cross from the firing position back into
+cover at the measured speed, plus a margin. So no enemy is ever given a fuse this
+player cannot beat, and the margin is the only number anyone gets to turn.
+
+`src/game/round.ts` is the earlier "hunt" mode. It is fully tested and no longer
+wired up. It stays because it was a real design iteration whose findings are in
+DEVLOG.md — do not treat it as dead weight to delete, and do not treat it as live
+code either.
+
+**Press `p` to scan the room.** Needs the webcam on (`c`) and a face in frame —
 the head is the only metric correspondence available, so without it the room has
 no scale. The far-wall prior is a slider, and it is the honest weak point: it
 moves difficulty, not fairness.
