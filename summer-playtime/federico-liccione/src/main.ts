@@ -13,6 +13,7 @@ import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView } from './render/geometry'
 import { Renderer } from './render/renderer'
 import { offAxis, project, symmetric, type Screen } from './render/projection'
+import { createSfx } from './render/sound'
 import { keyboardTracker } from './perceive/keyboard'
 import { mouseTracker } from './perceive/mouse'
 import { calibrate, type Sample } from './perceive/calibrate'
@@ -88,6 +89,8 @@ let exposed: boolean[] = []
 let aimed: boolean[] = []
 let firing = false
 let mouseNdc: { x: number; y: number } | null = null
+const sfx = createSfx()
+let shake = 0
 
 function rebuildLineup(): void {
   const { assessments } = assessEnemies(room, envelope)
@@ -228,6 +231,7 @@ function renderExposure(): void {
     return
   }
   const f = Math.min(1, live.a.exposedS / live.e!.spec.fuseS)
+  sfx.exposed(f)
   panel.style.display = 'block'
   el<HTMLElement>('holdFill').style.width = `${(f * 100).toFixed(0)}%`
   el<HTMLElement>('holdFill').style.background = f > 0.6 ? '#ffcf5c' : '#e0685c'
@@ -489,7 +493,11 @@ addEventListener('pointermove', (e) => {
   crosshair.style.display = 'block'
 })
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button === 0) firing = true
+  if (e.button === 0) {
+    firing = true
+    // WebAudio has to start from a gesture, so the first shot is what unlocks it.
+    sfx.unlock()
+  }
 })
 
 let roundStartedAt = 0
@@ -515,6 +523,12 @@ addEventListener('keydown', (e) => {
     void runScan()
   } else if (k === 'k') {
     void runCalibration()
+  } else if (k === 'h') {
+    const p = el('hud')
+    p.classList.toggle('collapsed')
+  } else if (k === 'n') {
+    sfx.setEnabled(!sfx.enabled)
+    el('tracker').textContent = sfx.enabled ? 'sound on' : 'sound off'
   } else if (k === 'r') {
     const r = el('ruler')
     r.style.display = r.style.display === 'block' ? 'none' : 'block'
@@ -526,6 +540,8 @@ addEventListener('resize', updateRuler)
 /* ---------------- the loop ---------------- */
 
 let lastStatus = 0
+// Collapsed by default: it plays as a game and expands into an instrument.
+el('hud').classList.add('collapsed')
 rebuildLineup()
 renderScene()
 
@@ -550,9 +566,17 @@ function frame(now: number): void {
       aimedAt: aimed.flatMap((v, i) => (v ? [i] : [])),
       firing,
     })
+    for (const ev of combat.events) {
+      if (ev.kind === 'miss' || ev.kind === 'killed') sfx.shot()
+      if (ev.kind === 'killed') sfx.kill()
+      if (ev.kind === 'shot') sfx.hurt()
+    }
     firing = false
     if (combat.killed > wasKilled) flash('rgba(120,230,180,.22)')
-    if (combat.timesShot > wasShot) flash('rgba(230,60,70,.32)')
+    if (combat.timesShot > wasShot) {
+      flash('rgba(230,60,70,.32)')
+      shake = 1
+    }
     renderRound()
     renderExposure()
     if (combat.phase !== before) renderHud()
@@ -571,7 +595,8 @@ function frame(now: number): void {
     if (combat.phase !== 'playing') renderHud()
   }
 
-  renderer.draw(eye, screen, mode)
+  shake = Math.max(0, shake - 0.045)
+  renderer.draw(eye, screen, mode, 340, now / 1000, shake)
   requestAnimationFrame(frame)
 }
 requestAnimationFrame(frame)

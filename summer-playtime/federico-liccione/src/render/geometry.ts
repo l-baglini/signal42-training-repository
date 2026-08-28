@@ -134,8 +134,11 @@ export const PALETTE = {
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
   hiding: [0.42, 0.95, 0.78] as Rgb,
-  enemyCovered: [0.30, 0.13, 0.16] as Rgb,
-  enemyExposed: [0.92, 0.28, 0.32] as Rgb,
+  enemySocket: [0.10, 0.05, 0.07] as Rgb,
+  enemyLid: [0.24, 0.09, 0.12] as Rgb,
+  enemySclera: [0.94, 0.86, 0.82] as Rgb,
+  enemyIris: [0.86, 0.22, 0.26] as Rgb,
+  enemyPupil: [0.06, 0.03, 0.04] as Rgb,
   enemyFiring: [1.0, 0.92, 0.55] as Rgb,
   enemyAimed: [1.0, 0.62, 0.30] as Rgb,
   hidingCold: [0.18, 0.34, 0.32] as Rgb,
@@ -155,6 +158,48 @@ export interface EnemyView {
   /** Fraction of its fuse charged, 0..1. */
   readonly fuse: number
   readonly aimed: boolean
+}
+
+/**
+ * An enemy, drawn as an eye that opens when it can see you.
+ *
+ * Not decoration: exposure in this game *is* mutual sight, so an eye is the
+ * literal statement of the rule. And it is built from concentric rectangles
+ * rather than a texture, which keeps it inside the one hard constraint of the
+ * whole project — screen-parallel quads, the reason the sightline solver is exact
+ * rather than approximate.
+ *
+ * Closed and dark when it cannot see you. Open, with the pupil heating towards
+ * its shot, when it can. The state that must read in a glance is "it is about to
+ * fire and I am still out", so that is the loudest one.
+ */
+export function enemyMesh(e: EnemyView): Mesh {
+  const r = e.radius
+  const z = e.at.z
+  const cx = e.at.x
+  const cy = e.at.y
+  const f = Number.isFinite(e.fuse) ? Math.max(0, Math.min(1, e.fuse)) : 0
+  const open = e.exposed ? 1 : 0.12
+
+  const parts: Mesh[] = [
+    quad(z, cx - r, cx + r, cy - r, cy + r, PALETTE.enemySocket),
+  ]
+
+  const lidGap = r * open
+  if (e.exposed) {
+    parts.push(quad(z - 0.2, cx - r * 0.92, cx + r * 0.92, cy - lidGap, cy + lidGap, PALETTE.enemySclera))
+    const ir = r * 0.52 * (1 - 0.18 * f)
+    parts.push(quad(z - 0.4, cx - ir, cx + ir, cy - Math.min(ir, lidGap), cy + Math.min(ir, lidGap),
+      mix(PALETTE.enemyIris, PALETTE.enemyFiring, f)))
+    const pr = r * 0.24
+    parts.push(quad(z - 0.6, cx - pr, cx + pr, cy - Math.min(pr, lidGap), cy + Math.min(pr, lidGap),
+      mix(PALETTE.enemyPupil, PALETTE.enemyFiring, f * f)))
+  } else {
+    // A closed eye: a single dark slit, so a covered enemy still reads as being
+    // *there* without reading as a threat.
+    parts.push(quad(z - 0.2, cx - r * 0.9, cx + r * 0.9, cy - r * 0.1, cy + r * 0.1, PALETTE.enemyLid))
+  }
+  return merge(parts)
 }
 
 export interface SceneInput {
@@ -228,13 +273,7 @@ export function buildScene(input: SceneInput): Mesh {
     parts.push(targetMesh(t, mix(base, PALETTE.targetRevealed, f)))
   })
   for (const e of input.enemies ?? []) {
-    // Dim in cover, hot when it can see you, and filling towards its shot as the
-    // fuse charges. The one moment that needs reading at a glance is "it is about
-    // to fire and I am still out", so that is the loudest state.
-    const f = Number.isFinite(e.fuse) ? Math.max(0, Math.min(1, e.fuse)) : 0
-    const base = e.exposed ? PALETTE.enemyExposed : PALETTE.enemyCovered
-    const body = e.exposed ? mix(base, PALETTE.enemyFiring, f) : base
-    parts.push(targetMesh({ at: e.at, radius: e.radius }, body))
+    parts.push(enemyMesh(e))
     if (e.aimed && e.exposed) {
       parts.push(
         frameMesh(

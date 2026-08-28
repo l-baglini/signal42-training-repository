@@ -4,7 +4,16 @@
  * be able to hide behind a graphics context.
  */
 import { describe, expect, it } from 'vitest'
-import { backdropHalfExtent, backdropMesh, buildScene, merge, quad, targetMesh } from '../src/render/geometry'
+import {
+  backdropHalfExtent,
+  backdropMesh,
+  buildScene,
+  enemyMesh,
+  merge,
+  quad,
+  targetMesh,
+} from '../src/render/geometry'
+import type { EnemyView } from '../src/render/geometry'
 import type { Billboard, Target } from '../src/engine'
 import raw from '../fixtures/desk.room.json'
 import type { RoomScan } from '../src/engine'
@@ -161,5 +170,62 @@ describe('buildScene', () => {
     const m = targetMesh({ at: { x: 10, y: -4, z: -100 }, radius: 6 }, [1, 1, 1])
     const xs = [...m.positions].filter((_, i) => i % 3 === 0)
     expect(Math.max(...xs) - Math.min(...xs)).toBe(12)
+  })
+})
+
+describe('an enemy is an eye', () => {
+  const base: EnemyView = {
+    at: { x: 10, y: -4, z: -120 },
+    radius: 9,
+    exposed: false,
+    fuse: 0,
+    aimed: false,
+  }
+
+  it('is a closed slit when it cannot see you, and an open eye when it can', () => {
+    const shut = enemyMesh(base)
+    const open = enemyMesh({ ...base, exposed: true })
+    // Open adds the sclera, the iris and the pupil; shut has one lid.
+    expect(open.positions.length).toBeGreaterThan(shut.positions.length)
+    expect(shut.indices.length).toBeGreaterThan(0)
+  })
+
+  it('heats towards its shot as the fuse charges', () => {
+    const cold = enemyMesh({ ...base, exposed: true, fuse: 0 })
+    const hot = enemyMesh({ ...base, exposed: true, fuse: 1 })
+    expect(cold.colors).not.toEqual(hot.colors)
+    expect(cold.positions.length).toBe(hot.positions.length)
+  })
+
+  it('never emits a colour outside 0..1, whatever the fuse says', () => {
+    for (const fuse of [-3, 0.5, 2, NaN]) {
+      const m = enemyMesh({ ...base, exposed: true, fuse })
+      for (const v of m.colors) {
+        expect(Number.isFinite(v)).toBe(true)
+        expect(v).toBeGreaterThanOrEqual(0)
+        expect(v).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+
+  it('never emits an inverted rectangle, at any radius', () => {
+    for (const radius of [1, 9, 40]) {
+      for (const exposed of [true, false]) {
+        const m = enemyMesh({ ...base, radius, exposed, fuse: 0.7 })
+        for (let i = 0; i < m.positions.length; i += 12) {
+          const xs = [m.positions[i]!, m.positions[i + 3]!]
+          expect(xs[1]).toBeGreaterThanOrEqual(xs[0]!)
+        }
+        expect(m.indices.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('stays inside its own radius, so the hit box matches the picture', () => {
+    const m = enemyMesh({ ...base, exposed: true, fuse: 0.4 })
+    for (let i = 0; i < m.positions.length; i += 3) {
+      expect(Math.abs(m.positions[i]! - base.at.x)).toBeLessThanOrEqual(base.radius + 1e-6)
+      expect(Math.abs(m.positions[i + 1]! - base.at.y)).toBeLessThanOrEqual(base.radius + 1e-6)
+    }
   })
 })

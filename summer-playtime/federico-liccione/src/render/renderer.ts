@@ -17,24 +17,46 @@ in vec3 aColor;
 uniform mat4 uMVP;
 out vec3 vColor;
 out float vDepth;
+out vec2 vClip;
 void main() {
   vColor = aColor;
   vDepth = -aPos.z;
   gl_Position = uMVP * vec4(aPos, 1.0);
+  vClip = gl_Position.xy / max(gl_Position.w, 0.0001);
 }`
 
 const FRAG = `#version 300 es
 precision highp float;
 in vec3 vColor;
 in float vDepth;
+in vec2 vClip;
 uniform float uFogFar;
 uniform vec3 uFog;
+uniform float uTime;
+uniform float uShake;
 out vec4 frag;
+
+// Cheap hash for the grain. Deterministic in space, animated by uTime.
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 void main() {
-  // Aerial perspective. A monocular depth cue that works on a flat panel, and
-  // the only place in the renderer where anything is added for the look of it.
+  // Aerial perspective: a monocular depth cue that works on a flat panel.
   float t = clamp(vDepth / uFogFar, 0.0, 1.0);
-  frag = vec4(mix(vColor, uFog, t * 0.72), 1.0);
+  vec3 c = mix(vColor, uFog, t * 0.72);
+
+  // Vignette. Darkening the edges pushes the eye to the middle, which is where
+  // the window is, and costs one dot product.
+  float r = length(vClip);
+  c *= 1.0 - 0.42 * clamp(r * r * 0.55, 0.0, 1.0);
+
+  // Grain, and a red lift while the screen is shaking from a hit.
+  float g = hash(gl_FragCoord.xy + vec2(uTime * 37.0, uTime * 17.0));
+  c += (g - 0.5) * 0.028;
+  c += vec3(0.20, 0.02, 0.03) * uShake;
+
+  frag = vec4(c, 1.0);
 }`
 
 export type ProjectionMode = 'window' | 'dolly'
@@ -135,13 +157,22 @@ export class Renderer {
    * screen, and doing that with a *separately computed* matrix would let the
    * crosshair and the picture disagree by a frame.
    */
-  draw(eye: Point3, screen: Screen, mode: ProjectionMode, fogFar = 340): Float32Array {
+  draw(
+    eye: Point3,
+    screen: Screen,
+    mode: ProjectionMode,
+    fogFar = 340,
+    timeS = 0,
+    shake = 0,
+  ): Float32Array {
     const gl = this.gl
     const mvp = mode === 'window' ? offAxis(eye, screen) : symmetric(eye, screen)
     gl.useProgram(this.prog)
     gl.uniformMatrix4fv(gl.getUniformLocation(this.prog, 'uMVP'), false, mvp)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uFogFar'), fogFar)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uFog'), 0.02, 0.03, 0.06)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uTime'), timeS)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.bindVertexArray(this.vao)
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0)

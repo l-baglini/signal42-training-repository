@@ -13,7 +13,11 @@
   .panel { position: fixed; z-index: 10; padding: 12px 14px; border-radius: 10px;
     background: rgba(6, 9, 16, .84); border: 1px solid rgba(255,255,255,.12);
     backdrop-filter: blur(8px); }
-  #hud { top: 12px; left: 12px; width: 430px; max-height: calc(100% - 24px); overflow: auto; }
+  #hud { top: 12px; left: 12px; width: 430px; max-height: calc(100% - 24px); overflow: auto;
+    transition: opacity .2s; }
+  /* The engine's numbers are for the author and for the showcase, not for play. */
+  #hud.collapsed table, #hud.collapsed #stats, #hud.collapsed .row { display: none; }
+  #hud.collapsed { width: 300px; opacity: .8; }
   #hud h1 { margin: 0 0 2px; font-size: 14px; letter-spacing: .01em; }
   #hud .sub { opacity: .55; font-size: 11px; margin-bottom: 10px; }
   table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 11px; }
@@ -130,7 +134,7 @@
       &nbsp; <kbd>click</kbd> shoot<br>
       <kbd>c</kbd> webcam head &nbsp; <kbd>k</kbd> calibrate &nbsp; <kbd>p</kbd> scan the room
       &nbsp; <kbd>o</kbd> window / dolly &nbsp; <kbd>m</kbd> pointer head &nbsp;
-      <kbd>r</kbd> ruler
+      <kbd>h</kbd> hide numbers &nbsp; <kbd>n</kbd> sound &nbsp; <kbd>r</kbd> ruler
     </div>
   </div>
 
