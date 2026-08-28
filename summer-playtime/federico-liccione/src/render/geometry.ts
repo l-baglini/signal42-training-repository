@@ -8,6 +8,7 @@
  * there they arrive via the projection matrix.
  */
 import type { Billboard, Point3, Target } from '../engine'
+import { DEFAULT_MOOD, type Mood } from './mood'
 
 export interface Mesh {
   /** xyz per vertex, cm. */
@@ -131,7 +132,9 @@ export interface EnvironmentOptions {
 
 const ENV_DEFAULTS = {
   nearZ: -14,
-  farZ: -500,
+  // The corridor stops short of the sky so that the far end is an *opening*, with
+  // a skyline standing in the gap. A closed tube has nothing to be backlit by.
+  farZ: -430,
   halfWidth: 118,
   floorY: -64,
   ceilingY: 66,
@@ -151,7 +154,7 @@ const ENV_DEFAULTS = {
  * of a lighting rig, and it is what makes a rectangle read as a silhouette rather
  * than as a placeholder.
  */
-export function environmentMesh(opts: EnvironmentOptions = {}): Mesh {
+export function environmentMesh(mood: Mood = DEFAULT_MOOD, opts: EnvironmentOptions = {}): Mesh {
   const o = { ...ENV_DEFAULTS, ...opts }
   const parts: Mesh[] = []
   const span = o.nearZ - o.farZ
@@ -165,7 +168,7 @@ export function environmentMesh(opts: EnvironmentOptions = {}): Mesh {
     // rather than as a smooth wash.
     const stripe = i % 2 === 0 ? 1 : 0.88
 
-    const grade = (near: Rgb, far: Rgb, t: number): Rgb => {
+    const grade = (near: readonly [number, number, number], far: readonly [number, number, number], t: number): Rgb => {
       const e = Math.pow(t, 0.72) * stripe
       return [
         near[0] + (far[0] - near[0]) * e,
@@ -174,30 +177,71 @@ export function environmentMesh(opts: EnvironmentOptions = {}): Mesh {
       ]
     }
 
-    const fl0 = grade(PALETTE.floorNear, PALETTE.floorFar, t0)
-    const fl1 = grade(PALETTE.floorNear, PALETTE.floorFar, t1)
+    const fl0 = grade(mood.floorNear, mood.floorFar, t0)
+    const fl1 = grade(mood.floorNear, mood.floorFar, t1)
     parts.push(quad3(
       { x: -o.halfWidth, y: o.floorY, z: z0 }, { x: o.halfWidth, y: o.floorY, z: z0 },
       { x: -o.halfWidth, y: o.floorY, z: z1 }, { x: o.halfWidth, y: o.floorY, z: z1 },
       fl0, fl0, fl1, fl1,
     ))
 
-    const ce0 = grade(PALETTE.ceilingNear, PALETTE.ceilingFar, t0)
-    const ce1 = grade(PALETTE.ceilingNear, PALETTE.ceilingFar, t1)
+    const ce0 = grade(mood.ceilingNear, mood.ceilingFar, t0)
+    const ce1 = grade(mood.ceilingNear, mood.ceilingFar, t1)
     parts.push(quad3(
       { x: -o.halfWidth, y: o.ceilingY, z: z0 }, { x: o.halfWidth, y: o.ceilingY, z: z0 },
       { x: -o.halfWidth, y: o.ceilingY, z: z1 }, { x: o.halfWidth, y: o.ceilingY, z: z1 },
       ce0, ce0, ce1, ce1,
     ))
 
-    const wa0 = grade(PALETTE.wallNear, PALETTE.wallFar, t0)
-    const wa1 = grade(PALETTE.wallNear, PALETTE.wallFar, t1)
+    const wa0 = grade(mood.wallNear, mood.wallFar, t0)
+    const wa1 = grade(mood.wallNear, mood.wallFar, t1)
     for (const sx of [-1, 1]) {
       parts.push(quad3(
         { x: sx * o.halfWidth, y: o.floorY, z: z0 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z0 },
         { x: sx * o.halfWidth, y: o.floorY, z: z1 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z1 },
         wa0, wa0, wa1, wa1,
       ))
+    }
+  }
+  return merge(parts)
+}
+
+/**
+ * A skyline standing in the far opening.
+ *
+ * Towers, or trees, or whatever the eye decides they are: flat silhouettes at four
+ * depths, dark against a bright sky. They occlude nothing and are the cheapest
+ * possible statement that the corridor is somewhere rather than nowhere.
+ *
+ * Seeded, so a level looks the same every time it is played — the seed comes from
+ * the level, not from the clock.
+ */
+export function skylineMesh(mood: Mood = DEFAULT_MOOD, seed = 1): Mesh {
+  let s = (seed * 2654435761) >>> 0
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 4294967296
+  }
+  const parts: Mesh[] = []
+  const layers = [
+    { z: -452, scale: 1.0, tint: 0.55 },
+    { z: -472, scale: 0.82, tint: 0.75 },
+    { z: -492, scale: 0.66, tint: 0.95 },
+  ]
+  for (const layer of layers) {
+    const tone: Rgb = [
+      mood.skyline[0] * layer.tint + mood.haze[0] * (1 - layer.tint) * 0.25,
+      mood.skyline[1] * layer.tint + mood.haze[1] * (1 - layer.tint) * 0.25,
+      mood.skyline[2] * layer.tint + mood.haze[2] * (1 - layer.tint) * 0.25,
+    ]
+    let x = -430
+    while (x < 430) {
+      const w = 26 + rnd() * 74
+      const h = (34 + rnd() * 190) * layer.scale
+      const gap = 8 + rnd() * 46
+      // Rooted below the corridor floor so no gap shows under a tower.
+      parts.push(quad(layer.z, x, x + w, -300, -60 + h, tone))
+      x += w + gap
     }
   }
   return merge(parts)
@@ -211,11 +255,11 @@ export function environmentMesh(opts: EnvironmentOptions = {}): Mesh {
  * rim along the top. Nothing here leaves the rectangle, so the picture cannot
  * promise solidity the engine does not believe in.
  */
-export function coverMesh(b: Billboard, uv?: UvRect): Mesh {
+export function coverMesh(b: Billboard, mood: Mood = DEFAULT_MOOD, uv?: UvRect): Mesh {
   // With a texture rect it is a plain textured quad: that path exists so the
   // player can see their own room on the cover, and a gradient over a photograph
   // fights the photograph. Without one it is the silhouette treatment below.
-  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, PALETTE.coverTop, uv)
+  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, mood.coverTop as Rgb, uv)
   const rimHeight = Math.min(2.2, (b.y1 - b.y0) * 0.06)
   const body: Mesh = {
     positions: new Float32Array([
@@ -223,14 +267,14 @@ export function coverMesh(b: Billboard, uv?: UvRect): Mesh {
       b.x0, b.y1 - rimHeight, b.z, b.x1, b.y1 - rimHeight, b.z,
     ]),
     colors: new Float32Array([
-      ...PALETTE.coverBottom, ...PALETTE.coverBottom,
-      ...PALETTE.coverTop, ...PALETTE.coverTop,
+      ...mood.coverBottom, ...mood.coverBottom,
+      ...mood.coverTop, ...mood.coverTop,
     ]),
     uvs: new Float32Array(8),
     textured: new Float32Array(4),
     indices: new Uint32Array([0, 1, 2, 2, 1, 3]),
   }
-  const rim = quad(b.z, b.x0, b.x1, b.y1 - rimHeight, b.y1, PALETTE.coverRim)
+  const rim = quad(b.z, b.x0, b.x1, b.y1 - rimHeight, b.y1, mood.coverRim as Rgb)
   return merge([body, rim])
 }
 
@@ -240,14 +284,19 @@ export function coverMesh(b: Billboard, uv?: UvRect): Mesh {
  * Contact shadows are the cheapest way to stop objects looking like stickers, and
  * this one is floor geometry — it occludes nothing and is therefore unconstrained.
  */
-export function contactShadowMesh(b: Billboard, floorY: number, depth = 34): Mesh {
+export function contactShadowMesh(
+  b: Billboard,
+  floorY: number,
+  mood: Mood = DEFAULT_MOOD,
+  depth = 34,
+): Mesh {
   const y = floorY + 0.4
   const pad = 6
   return quad3(
     { x: b.x0 - pad, y, z: b.z }, { x: b.x1 + pad, y, z: b.z },
     { x: b.x0 - pad * 2, y, z: b.z - depth }, { x: b.x1 + pad * 2, y, z: b.z - depth },
     PALETTE.contactShadow, PALETTE.contactShadow,
-    PALETTE.floorFar, PALETTE.floorFar,
+    mood.floorFar, mood.floorFar,
   )
 }
 
@@ -502,6 +551,9 @@ export interface SceneInput {
   readonly sky?: boolean | undefined
   /** False leaves out the floor, walls and ceiling. */
   readonly environment?: boolean | undefined
+  readonly mood?: Mood | undefined
+  /** Seeds the skyline, so a level looks the same every time. */
+  readonly skylineSeed?: number | undefined
   readonly enemies?: readonly EnemyView[] | undefined
   readonly backdropZ?: number
 }
@@ -523,11 +575,15 @@ export function buildScene(input: SceneInput): Mesh {
       ? backdropMesh(backdropZ, 460, 320, 16, 11, PALETTE.backdropA, PALETTE.backdropB)
       : skyMesh(backdropZ, 460, 320),
   ]
-  if (input.environment !== false) parts.push(environmentMesh())
+  const mood = input.mood ?? DEFAULT_MOOD
+  if (input.environment !== false) {
+    parts.push(skylineMesh(mood, input.skylineSeed ?? 1))
+    parts.push(environmentMesh(mood))
+  }
 
   // Shadows before the cover, so a piece of cover always wins its own footing.
-  for (const o of input.occluders) parts.push(contactShadowMesh(o, floorY))
-  input.occluders.forEach((o, i) => parts.push(coverMesh(o, input.occluderUvs?.[i])))
+  for (const o of input.occluders) parts.push(contactShadowMesh(o, floorY, mood))
+  input.occluders.forEach((o, i) => parts.push(coverMesh(o, mood, input.occluderUvs?.[i])))
 
   for (const o of input.hiding ?? []) {
     const g = Number.isFinite(input.hidingGlow ?? 0)

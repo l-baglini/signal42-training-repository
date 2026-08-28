@@ -47,6 +47,10 @@ uniform float uHasRoom;
 uniform float uRoomLevel;
 uniform float uPosterise;
 uniform float uRain;
+uniform vec3 uSkyLow;
+uniform vec3 uSkyHigh;
+uniform vec3 uHaze;
+uniform float uShafts;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -71,14 +75,12 @@ float fbm2(vec2 p) {
 
 /** Horizon, gradient, and cloud that drifts. Costs nothing to occlusion. */
 vec3 skyAt(vec2 uv, float t) {
-  vec3 low = vec3(0.09, 0.12, 0.19);
-  vec3 high = vec3(0.26, 0.34, 0.48);
-  vec3 c = mix(low, high, pow(clamp(uv.y, 0.0, 1.0), 0.75));
+  vec3 c = mix(uSkyLow, uSkyHigh, pow(clamp(uv.y, 0.0, 1.0), 0.75));
   float cl = fbm2(vec2(uv.x * 3.2 + t * 0.010, uv.y * 2.2 - t * 0.003));
   cl = smoothstep(0.46, 0.80, cl) * smoothstep(0.02, 0.45, uv.y);
-  c = mix(c, vec3(0.46, 0.50, 0.58), cl * 0.5);
+  c = mix(c, uHaze * 0.9, cl * 0.45);
   // A band of haze at the horizon, which is what sells distance.
-  c = mix(c, vec3(0.20, 0.24, 0.31), smoothstep(0.22, 0.0, uv.y) * 0.7);
+  c = mix(c, uHaze, smoothstep(0.26, 0.0, uv.y) * 0.75);
   return c;
 }
 
@@ -121,6 +123,23 @@ void main() {
   // the window is, and costs one dot product.
   float r = length(vClip);
   c *= 1.0 - 0.42 * clamp(r * r * 0.55, 0.0, 1.0);
+
+  /**
+   * Light shafts from the far opening, in screen space.
+   *
+   * Radial streaks from a point just above the horizon, broken up by noise and
+   * fading with distance from it. Screen space because a volumetric pass for
+   * something with no gameplay meaning is a lot of machinery for one mood, and
+   * because the corridor's vanishing point is always the middle of the window.
+   */
+  if (uShafts > 0.001) {
+    vec2 fromSun = vClip - vec2(0.0, -0.06);
+    float ang = atan(fromSun.y, fromSun.x);
+    float rays = fbm2(vec2(ang * 3.6, uTime * 0.05));
+    rays = pow(smoothstep(0.42, 0.95, rays), 1.6);
+    float fall = 1.0 - smoothstep(0.05, 1.25, length(fromSun));
+    c += uHaze * rays * fall * uShafts * 0.5;
+  }
 
   /**
    * Rain, as columns of falling streaks. Screen-space on purpose: weather is
@@ -169,12 +188,19 @@ export class Renderer {
   private readonly texFlagBuf: WebGLBuffer
   private readonly idxBuf: WebGLBuffer
   private roomTex: WebGLTexture | null = null
+  /** What distance pulls colour towards. Per-level, from the mood. */
+  fog: [number, number, number] = [0.16, 0.14, 0.16]
   /** How strongly the texture shows. 0 turns it off entirely. */
   roomLevel = 1
   /** Quantise the texture into the palette. For photographs, not for materials. */
   posterise = false
   /** 0 to 1. Weather is a per-level property. */
   rain = 0
+  /** Sky, haze and shafts, all per-level. See `render/mood.ts`. */
+  skyLow: [number, number, number] = [0.42, 0.34, 0.32]
+  skyHigh: [number, number, number] = [0.13, 0.18, 0.30]
+  haze: [number, number, number] = [0.52, 0.40, 0.34]
+  shafts = 0.45
   private indexCount = 0
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -301,13 +327,17 @@ export class Renderer {
     gl.useProgram(this.prog)
     gl.uniformMatrix4fv(gl.getUniformLocation(this.prog, 'uMVP'), false, mvp)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uFogFar'), fogFar)
-    gl.uniform3f(gl.getUniformLocation(this.prog, 'uFog'), 0.02, 0.03, 0.06)
+    gl.uniform3f(gl.getUniformLocation(this.prog, 'uFog'), ...this.fog)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uTime'), timeS)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uHasRoom'), this.roomTex ? 1 : 0)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRoomLevel'), this.roomLevel)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uPosterise'), this.posterise ? 1 : 0)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRain'), this.rain)
+    gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyLow'), ...this.skyLow)
+    gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyHigh'), ...this.skyHigh)
+    gl.uniform3f(gl.getUniformLocation(this.prog, 'uHaze'), ...this.haze)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uShafts'), this.shafts)
     gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
     if (this.roomTex) {
       gl.activeTexture(gl.TEXTURE0)

@@ -11,6 +11,7 @@ import { assessEnemies, onScreen, visible } from './engine'
 import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView, type UvRect } from './render/geometry'
+import { DEFAULT_MOOD, moodFor, type Mood } from './render/mood'
 import { Renderer } from './render/renderer'
 import { offAxis, project, symmetric, type Screen } from './render/projection'
 import { createSfx } from './render/sound'
@@ -95,16 +96,30 @@ let roomUv = new Map<string, UvRect>()
 let occluderLabels = new Map<string, string>()
 /** The scanned frame, once there is one. `t` switches to it. */
 let showPhoto = false
-/** Set by the level's own words. See `weatherFor`. */
-let rain = 0
 
-function weatherFor(text: string): number {
-  const t = text.toLowerCase()
-  for (const w of ['rain', 'pioggia', 'storm', 'tempesta', 'downpour', 'temporale', 'wet', 'bagnat']) {
-    if (t.includes(w)) return 1
-  }
-  return 0
+/**
+ * The level's palette, weather and light, all chosen from the level's own words.
+ *
+ * The same trick as everything else in this file that reads a label: a level that
+ * calls itself a rainy night looks like one, and the three writers who produce
+ * level text — the fixtures, the vision model, the language model — all write
+ * those words already without being asked to.
+ */
+let mood: Mood = DEFAULT_MOOD
+
+function applyMood(text: string, seed: number): void {
+  mood = moodFor(text)
+  renderer.skyLow = [...mood.skyLow] as [number, number, number]
+  renderer.skyHigh = [...mood.skyHigh] as [number, number, number]
+  renderer.haze = [...mood.haze] as [number, number, number]
+  renderer.fog = [...mood.fog] as [number, number, number]
+  renderer.shafts = mood.shafts
+  renderer.rain = mood.rain
+  skylineSeed = seed
 }
+
+let skylineSeed = 1
+
 let sessionCents = 0
 let costLines: string[] = []
 let mode: 'window' | 'dolly' = 'window'
@@ -216,6 +231,8 @@ function renderScene(): void {
       occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : undefined,
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
+      mood,
+      skylineSeed,
       threatMarker:
         shotFrom && shotFrom.untilWallS > performance.now() / 1000
           ? { at: shotFrom.at, radius: 16 }
@@ -460,7 +477,7 @@ async function designLevel(description: string): Promise<void> {
     const validated = validateScan(result.report.scan)
     room = validated.scan
     roomSource = `${result.name}, designed`
-    rain = weatherFor(`${result.name} ${result.blurb} ${description}`)
+    applyMood(`${result.name} ${result.blurb} ${description}`, roundSeed)
     roomUv = new Map()
     occluderLabels = new Map()
     for (const o of room.occluders) occluderLabels.set(geomKey(o), o.label)
@@ -759,7 +776,7 @@ addEventListener('keydown', (e) => {
     const next = rooms[roomIndex]!
     room = next.scan
     roomSource = next.name
-    rain = weatherFor(`${next.name} ${next.blurb}`)
+    applyMood(`${next.name} ${next.blurb}`, roomIndex + 1)
     roomUv = new Map()
     occluderLabels = new Map()
     renderer.setRoomTexture(null)
@@ -834,7 +851,7 @@ el('hud').classList.add('collapsed')
  */
 renderer.roomLevel = 1
 renderer.posterise = false
-rain = weatherFor(`${rooms[0]!.name} ${rooms[0]!.blurb}`)
+applyMood(`${rooms[0]!.name} ${rooms[0]!.blurb}`, 1)
 rebuildLineup()
 renderScene()
 
@@ -902,7 +919,6 @@ function frame(now: number): void {
 
   renderLabels(mvp)
   shake = Math.max(0, shake - 0.045)
-  renderer.rain = rain
   renderer.draw(eye, screen, mode, 420, now / 1000, shake)
   requestAnimationFrame(frame)
 }

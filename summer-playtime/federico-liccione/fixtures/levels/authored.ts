@@ -56,7 +56,9 @@ const provenance = (name: string) => ({
 const doorway: AuthoredLevel = {
   id: 'doorway',
   name: 'Doorway',
-  blurb: 'Two walls and a gap. The only way to look down the corridor is to stand in it.',
+  blurb:
+    'Two walls and a gap at dusk. The only way to look down the corridor is to ' +
+    'stand in it.',
   scan: {
     source: 'fixture',
     occluders: [
@@ -77,7 +79,9 @@ const doorway: AuthoredLevel = {
 const shelves: AuthoredLevel = {
   id: 'shelves',
   name: 'Shelves',
-  blurb: 'Uprights at four depths. Every one of them hides a different sliver of the room.',
+  blurb:
+    'An industrial warehouse: uprights at four depths, and every one of them hides ' +
+    'a different sliver of the room.',
   scan: {
     source: 'fixture',
     occluders: [
@@ -103,8 +107,9 @@ const parapet: AuthoredLevel = {
   id: 'parapet',
   name: 'Parapet',
   blurb:
-    'Rain on a low wall you have to rise above, and two pillars you have to lean ' +
-    'past. The weather comes from those words — see `weatherFor` in main.ts.',
+    'A rainy night on a low wall you have to rise above, and two pillars you have ' +
+    'to lean past. The weather and the palette both come from those words — see ' +
+    '`moodFor` in src/render/mood.ts.',
   scan: {
     source: 'fixture',
     occluders: [

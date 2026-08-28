@@ -13,6 +13,7 @@ import {
   enemyMesh,
   environmentMesh,
   merge,
+  skylineMesh,
   quad,
   quad3,
   targetMesh,
@@ -402,7 +403,10 @@ describe('cover as a silhouette', () => {
      * treats the rectangle as solid, so anything drawn outside it — or any gap
      * left inside it — is the picture lying about the rules.
      */
-    for (const mesh of [coverMesh(b), coverMesh(b, { u0: 0, v0: 0, u1: 1, v1: 1 })]) {
+    for (const mesh of [
+      coverMesh(b),
+      coverMesh(b, undefined, { u0: 0, v0: 0, u1: 1, v1: 1 }),
+    ]) {
       for (let i = 0; i < mesh.positions.length; i += 3) {
         expect(mesh.positions[i]!).toBeGreaterThanOrEqual(b.x0 - 1e-6)
         expect(mesh.positions[i]!).toBeLessThanOrEqual(b.x1 + 1e-6)
@@ -435,7 +439,7 @@ describe('cover as a silhouette', () => {
 
   it('drops the gradient when given a texture, because a photo fights it', () => {
     const plain = coverMesh(b)
-    const textured = coverMesh(b, { u0: 0, v0: 0, u1: 1, v1: 1 })
+    const textured = coverMesh(b, undefined, { u0: 0, v0: 0, u1: 1, v1: 1 })
     expect([...textured.textured].every((v) => v === 1)).toBe(true)
     expect([...plain.textured].every((v) => v === 0)).toBe(true)
   })
@@ -460,5 +464,39 @@ describe('contact shadows', () => {
     expect(Math.max(...far) - Math.min(...far)).toBeGreaterThan(
       Math.max(...near) - Math.min(...near),
     )
+  })
+})
+
+describe('the skyline in the far opening', () => {
+  it('is deterministic for a seed, so a level looks the same twice', () => {
+    expect(skylineMesh(undefined, 7).positions).toEqual(skylineMesh(undefined, 7).positions)
+  })
+
+  it('and different for a different seed', () => {
+    expect(skylineMesh(undefined, 7).positions).not.toEqual(skylineMesh(undefined, 8).positions)
+  })
+
+  it('stands beyond the corridor and is rooted below its floor', () => {
+    // Rooted low so no gap can show underneath a tower.
+    const m = skylineMesh(undefined, 3)
+    for (let i = 2; i < m.positions.length; i += 3) {
+      expect(m.positions[i]!).toBeLessThan(-430)
+      expect(m.positions[i]!).toBeGreaterThan(-540)
+    }
+    const ys = [...m.positions].filter((_, i) => i % 3 === 1)
+    expect(Math.min(...ys)).toBeLessThan(-200)
+  })
+
+  it('spans the opening rather than a corner of it', () => {
+    const xs = [...skylineMesh(undefined, 5).positions].filter((_, i) => i % 3 === 0)
+    expect(Math.min(...xs)).toBeLessThan(-300)
+    expect(Math.max(...xs)).toBeGreaterThan(300)
+  })
+
+  it('occludes nothing, so it is allowed to be any shape it likes', () => {
+    // Stated as a test because it is the licence the whole environment relies on:
+    // the solver only ever sees `scan.occluders`, and none of this is in there.
+    const m = skylineMesh(undefined, 1)
+    expect(m.indices.length).toBeGreaterThan(60)
   })
 })
