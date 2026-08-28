@@ -134,6 +134,11 @@ whatever speed you can actually manage.
 .venv/bin/python tools/run_app.py --max-fret 21 --song hotel-california.gp3 --audio
 ```
 
+Files come from anywhere that has them — **[gprotab.net](https://gprotab.net/)** is a
+community archive of 50,000-odd Guitar Pro tabs, free and without an account. They are
+community transcriptions, so quality varies and the fingering you get is whoever's who typed
+it in; `--refinger` below exists partly for that.
+
 | Key | |
 |---|---|
 | `p` | play / pause |

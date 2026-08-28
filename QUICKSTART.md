@@ -271,6 +271,17 @@ the two cannot drift apart.
     --song yoursong.gp3
 ```
 
+### Where to get files
+
+[**gprotab.net**](https://gprotab.net/) is the community archive — 50,000-odd Guitar Pro
+tabs, free to download and no account needed. Ultimate Guitar has more, behind a login. Both
+are user transcriptions rather than official scores, so the notes are usually right and the
+fingering is whatever the person typing it in preferred; `--refinger` re-solves that for the
+neck you actually have.
+
+gprotab also exports MIDI and MusicXML, which is worth knowing for later: the fingering
+solver exists so those can be read, and only the file readers are missing.
+
 Reads Guitar Pro (`.gp3`/`.gp4`/`.gp5`) and plays the part on the neck. It lists
 the file's tracks on startup with their note counts and how far up the neck they
 reach; `--track N` picks one, otherwise it takes the first six-string guitar
