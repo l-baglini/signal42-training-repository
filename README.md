@@ -103,6 +103,7 @@ per-module conventions.
 | [`fretguide/modes.py`](fretguide/modes.py) | Modes as degrees of a key, and the pentatonic positions carved out of them |
 | [`fretguide/score.py`](fretguide/score.py) | A song as timed fretboard positions — Guitar Pro in, `(string, fret, when)` out |
 | [`fretguide/fingering.py`](fretguide/fingering.py) | Where to play a note — the shortest-path solver between pitches and the fretboard |
+| [`fretguide/transport.py`](fretguide/transport.py) | The play head over a song — resolves to the same thing a chord does |
 | [`fretguide/menu.py`](fretguide/menu.py) | The practice catalogue as a browsable tree — pure state, no toolkit, shared by both apps |
 | [`fretguide/capture.py`](fretguide/capture.py) | V4L2 capture, raw-YUV path |
 | [`fretguide/dataset.py`](fretguide/dataset.py) | Labels → homographies, augmentation, heatmap codec |
@@ -113,7 +114,7 @@ per-module conventions.
 | [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 411 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 434 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -133,7 +134,7 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-411 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
+434 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.

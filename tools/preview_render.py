@@ -57,6 +57,10 @@ def main() -> int:
                     help="neck length; defaults to a Stratocaster's 21 for the synthetic "
                          "source and 12 (all the model poses) for the others")
     ap.add_argument("--out", default="diagnostics/overlay.png")
+    ap.add_argument("--song", default=None, help="a Guitar Pro file to sample")
+    ap.add_argument("--track", type=int, default=None, help="which track of --song")
+    ap.add_argument("--beat", type=float, default=0.0,
+                    help="where in the song to sample; each rendered frame advances a beat")
     ap.add_argument("--no-grid", action="store_true")
     ap.add_argument("--menu", action="store_true",
                     help="draw the practice menu too, opened on the current selection")
@@ -80,7 +84,15 @@ def main() -> int:
         print(e)
         return 1
 
-    resolved = resolve_selection(sel, max_fret=max_fret)
+    play = None
+    if args.song:
+        from fretguide.score import read_guitarpro
+        from fretguide.transport import Transport
+        song = read_guitarpro(args.song)
+        track = (song.tracks[args.track] if args.track is not None
+                 else next(t for t in song.tracks if t.playable))
+        play = Transport(song=song, track=track, beat=args.beat)
+    resolved = play.resolved() if play else resolve_selection(sel, max_fret=max_fret)
     if resolved is None:
         print(f"unknown selection {sel.id!r}")
         return 2
@@ -98,7 +110,7 @@ def main() -> int:
             return 1
 
     strip, posed = [], 0
-    for _ in range(args.frames):
+    for frame_i in range(args.frames):
         packet = src.read()
         if packet is None:
             break
@@ -106,6 +118,11 @@ def main() -> int:
         if packet.H is not None:
             if not args.no_grid:
                 render.draw_grid(view, packet.H, max_fret)
+            if play is not None:
+                # One beat per rendered frame: a strip that walks the song, which
+                # is the point of sampling it as stills rather than as video.
+                play.seek(args.beat + frame_i)
+                resolved = play.resolved()
             render.draw_selection(view, packet.H, resolved)
             posed += 1
         else:

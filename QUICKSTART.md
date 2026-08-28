@@ -255,10 +255,51 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 411 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 434 tests, no camera or GPU needed
 ```
 
 ## Layout
 
 See the layout table in [`README.md`](README.md#layout) — kept in one place so
 the two cannot drift apart.
+
+## Playing along to a song
+
+```bash
+.venv/bin/pip install -e ".[score]"
+.venv/bin/python tools/run_app.py --source synthetic --max-fret 21 \
+    --song yoursong.gp3
+```
+
+Reads Guitar Pro (`.gp3`/`.gp4`/`.gp5`) and plays the part on the neck. It lists
+the file's tracks on startup with their note counts and how far up the neck they
+reach; `--track N` picks one, otherwise it takes the first six-string guitar
+part. Bass and drums are filtered out — they have the wrong string count or no
+fretboard at all.
+
+| Key | Action |
+|---|---|
+| `p` | play / pause |
+| `[` `]` | back / forward one bar |
+| `-` `=` | slower / faster (0.25×–2×) |
+| `0` | back to the start |
+| `SPACE` | freeze the picture — which freezes the song with it |
+
+**Slow it down first.** `-` four times is half speed, and the dots are an
+instruction you have to read before your hand can follow it.
+
+Two things worth knowing. The neck ends at fret 12 on camera, so a solo written
+above that cannot be drawn there — the startup listing says which tracks fit.
+`--refinger` throws the tab's fingering away and re-solves the part for the neck
+you have, which brings most of those back into reach:
+
+```bash
+.venv/bin/python tools/run_app.py --song yoursong.gp3 --track 1 --refinger -d 4
+```
+
+Sample a song as stills instead of watching it, one beat per frame:
+
+```bash
+.venv/bin/python tools/preview_render.py --song yoursong.gp3 --beat 8 --frames 4 \
+    --max-fret 21 --out diagnostics/song.png
+```

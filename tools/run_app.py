@@ -62,6 +62,7 @@ from fretguide.content import CHORD_IDS, SCALE_IDS, resolve_selection
 from fretguide.geometry import grid_lines
 from fretguide.menu import Layout, Menu, preferred_anchor
 from fretguide.source import STRAT_FRETS, open_source
+from fretguide.transport import Transport
 from fretguide.types import Selection
 
 # X11 keysyms, which is what cv2.waitKeyEx reports on the Qt backend this ships with.
@@ -73,6 +74,49 @@ GENERATED = [
     "G major", "E minor", "A minor pentatonic", "E minor pentatonic",
     "C major", "A major", "D dorian", "E blues", "A major pentatonic",
 ]
+
+
+def load_song(args, max_fret: int) -> Transport:
+    """Open --song, pick a track, and hand back a play head over it.
+
+    Bass and drums are filtered out rather than offered: they have the wrong
+    string count or no fretboard at all, and putting them on a six-string neck
+    would draw confident nonsense.
+    """
+    from fretguide.score import read_guitarpro
+
+    song = read_guitarpro(args.song)
+    playable = [t for t in song.tracks if t.playable]
+    if not playable:
+        raise SystemExit(f"{args.song}: no six-string guitar track to play")
+
+    print(f"\n{song.title} — {song.artist}   {len(song.bars)} bars, "
+          f"{song.tempos[0].bpm:g} bpm")
+    for i, tr in enumerate(song.tracks):
+        why = "" if tr.playable else ("  [drums]" if tr.percussion else f"  [{tr.string_count} strings]")
+        reach = "" if tr.fits_camera else f"  {tr.frets_above_camera:.0%} above fret {12}"
+        print(f"  {i:>2}  {tr.name[:24]:24} {len(tr.notes):>5} notes  max fret {tr.max_fret:>2}"
+              f"{reach}{why}")
+
+    track = song.tracks[args.track] if args.track is not None else playable[0]
+    if not track.playable:
+        raise SystemExit(f"track {args.track} ({track.name}) is not a six-string guitar part")
+
+    if args.refinger:
+        from dataclasses import replace
+
+        from fretguide.fingering import Hand, solve, to_pitches
+        result = solve(to_pitches(track.notes), Hand(max_fret=max_fret))
+        print(f"\nre-fingered for a {max_fret}-fret neck: {len(result.notes)} notes"
+              + (f", {result.unplayable} out of reach" if result.unplayable else ""))
+        track = replace(track, notes=result.notes)
+
+    if track.max_fret > max_fret:
+        print(f"\n  NOTE: {track.name} reaches fret {track.max_fret} but this neck ends at "
+              f"{max_fret}. Those notes will not be drawn — try --refinger, or "
+              f"--max-fret {min(24, track.max_fret)} on the synthetic source.")
+    print(f"\nplaying: {track.name}   p = play/pause, [ ] = bar, - = = speed, 0 = restart\n")
+    return Transport(song=song, track=track, playing=True)
 
 
 def resolve_auto(args) -> str:
@@ -127,6 +171,13 @@ def main() -> int:
     ap.add_argument("--headless", action="store_true",
                     help="do everything except open a window — for measuring the loop, "
                          "and for machines with no display")
+    ap.add_argument("--song", default=None,
+                    help="a Guitar Pro file to play along to (needs the [score] extra)")
+    ap.add_argument("--track", type=int, default=None,
+                    help="which track of --song; omit to list them and pick the first guitar")
+    ap.add_argument("--refinger", action="store_true",
+                    help="discard the tab's fingering and re-solve it, which is how a part "
+                         "written above fret 12 can be brought into camera range")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--no-smooth", action="store_true")
     args = ap.parse_args()
@@ -174,6 +225,7 @@ def main() -> int:
         return 1
 
     max_fret = getattr(src, "max_fret", max_fret)
+    song = load_song(args, max_fret) if args.song else None
     sel = Selection("chord", "G")
     scale_i = gen_i = 0
     show_grid, show_fingers, mirror, frozen = True, True, False, False
@@ -182,6 +234,7 @@ def main() -> int:
     dot_scale = float(args.dot_scale)
     frame_times: deque[float] = deque(maxlen=40)
     held = None
+    song_t: float | None = None
 
     print(__doc__)
     win = "FretGuide"
@@ -228,7 +281,16 @@ def main() -> int:
             # to_bgr widens greyscale for us, so `colour` only decides whether the chroma
             # planes are spent — the drawing code below never learns which it got.
             view = packet.to_bgr() if colour else cv2.cvtColor(packet.gray, cv2.COLOR_GRAY2BGR)
-            resolved = resolve_selection(sel, max_fret=max_fret)
+            if song is not None:
+                # Driven by the frame's own timestamp, not a wall clock, so
+                # freezing the picture freezes the play head with it: `held`
+                # replays the same packet, the delta is zero, and the song
+                # stops where the frame did.
+                song.tick(packet.t - (song_t if song_t is not None else packet.t))
+                song_t = packet.t
+                resolved = song.resolved()
+            else:
+                resolved = resolve_selection(sel, max_fret=max_fret)
             name = resolved.name if resolved else f"<unknown: {sel.id}>"
 
             if packet.H is not None and resolved is not None:
@@ -300,6 +362,18 @@ def main() -> int:
                 menu.open = False
             elif k in (27, ord("q")):
                 break
+            elif song is not None and k == ord("p"):
+                song.toggle()
+            elif song is not None and k == ord("["):
+                song.nudge_bars(-1)
+            elif song is not None and k == ord("]"):
+                song.nudge_bars(1)
+            elif song is not None and k == ord("-"):
+                song.scale_rate(1 / 1.25)
+            elif song is not None and k in (ord("="), ord("+")):
+                song.scale_rate(1.25)
+            elif song is not None and k == ord("0"):
+                song.seek(0.0)
             elif ord("1") <= k <= ord("7"):
                 sel = Selection("chord", CHORD_IDS[k - ord("1")])
             elif k == ord("s"):

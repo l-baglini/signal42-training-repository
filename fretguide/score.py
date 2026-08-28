@@ -143,6 +143,15 @@ class Song:
             seconds += (min(nxt, beat) - t.start) * 60.0 / t.bpm
         return seconds
 
+    def bpm_at(self, beat: float) -> float:
+        """The tempo in force at ``beat`` — what a playing clock advances by."""
+        current = self.tempos[0].bpm
+        for t in self.tempos:
+            if t.start > beat:
+                break
+            current = t.bpm
+        return current
+
     def bar_at(self, beat: float) -> Bar | None:
         """The bar containing ``beat``, for a transport that seeks musically."""
         if not self.bars:
