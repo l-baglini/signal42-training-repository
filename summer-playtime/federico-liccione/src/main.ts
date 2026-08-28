@@ -279,8 +279,8 @@ function renderRound(): void {
     combat.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_COMBAT.durationS.toFixed(1)
   el('scoreValue').textContent = String(combat.score)
   el('tally').textContent =
-    `${combat.killed} killed · ${combat.timesShot} hit · ${combat.escaped} escaped · ` +
-    `${(accuracy(combat) * 100).toFixed(0)}% accuracy`
+    `${combat.killed} killed · ${combat.timesShot} hit · ` +
+    `${combat.active.length} standing · ${(accuracy(combat) * 100).toFixed(0)}% accuracy`
 
   if (combat.phase === 'playing') {
     panel.style.display = 'none'
@@ -303,13 +303,13 @@ function renderRound(): void {
     el('roundTitle').textContent = rooms[roomIndex]!.name
     el('roundBody').textContent =
       `${rooms[roomIndex]!.blurb}\n\n` +
-      'Leaning out is the only way to see an enemy — and the only way for it to see you. ' +
-      'Lean with WASD (or your head, press c), aim and shoot with the mouse, and get back ' +
-      'into cover before it fires.'
+      'The room is already full. Leaning out is the only way to see what is in it — and ' +
+      'the only way for it to see you. Lean with WASD (or your head, press c), aim and ' +
+      'shoot with the mouse, and get back into cover before the shot lands.'
   } else {
     el('roundTitle').textContent = `${combat.score} points`
     el('roundBody').textContent =
-      `${combat.killed} killed, ${combat.timesShot} times hit, ${combat.escaped} got away, ` +
+      `${combat.killed} killed, ${combat.timesShot} times hit, ` +
       `${(accuracy(combat) * 100).toFixed(0)}% accuracy.`
   }
 }

@@ -28,7 +28,7 @@ const SPECS: EnemySpec[] = [
   { leanCm: 7, windowCm: 4, fuseS: 1.4 },
   { leanCm: 12, windowCm: 2, fuseS: 1.1 },
 ]
-const cfg: CombatConfig = { ...DEFAULT_COMBAT, seed: 5, maxConcurrent: 1 }
+const cfg: CombatConfig = { ...DEFAULT_COMBAT, seed: 5, waveSize: 1 }
 
 interface Driver {
   readonly state: CombatState
@@ -159,24 +159,60 @@ describe('exposure is the risk and the opportunity at once', () => {
   })
 })
 
-describe('enemies come and go', () => {
-  it('an enemy that is never engaged leaves on its own', () => {
-    const d = driver().at(0).at(cfg.enemyLifeS + 0.2)
-    expect(d.state.escaped).toBe(1)
-    expect(d.state.score).toBe(0)
-    expect(d.events.some((e) => e.kind === 'escaped')).toBe(true)
+describe('the room stands full', () => {
+  it('is full on the first tick, not on a timer', () => {
+    /**
+     * The complaint this answers, in the playtester's words: *"prima quando ti
+     * affacciavi vedevi già presenti i nemici ed era tutto più dinamico e
+     * divertente"*. A drip-feed meant leaning out mostly found nothing, and the
+     * loop collapsed into move-and-shoot. Leaning out has to find a situation.
+     */
+    const d = driver({ ...cfg, waveSize: 2 }).at(0)
+    expect(d.state.active.length).toBe(2)
   })
 
-  it('respects the concurrency limit', () => {
-    const wide: CombatConfig = { ...cfg, maxConcurrent: 2, spawnGapS: 0.1 }
-    const d = driver(wide).span(0, 6)
-    expect(d.state.active.length).toBeLessThanOrEqual(2)
+  it('an enemy that is never engaged stays put', () => {
+    // They do not leave any more. There is nothing to wait out: the only way the
+    // room empties is that you empty it.
+    const d = driver().at(0).span(0, 30)
+    expect(d.state.active.length).toBe(1)
+    expect(d.state.score).toBe(0)
+  })
+
+  it('replaces a kill one at a time, so the kill reads', () => {
+    const d = driver({ ...cfg, waveSize: 2 }).at(0)
+    const target = d.state.active[0]!.index
+    d.at(0.1, { exposed: only(target), aimedAt: [target], firing: true })
+    expect(d.state.active.length).toBe(1)
+    d.span(0.15, 1.4)
+    expect(d.state.active.length).toBe(2)
   })
 
   it('never has the same enemy in play twice', () => {
-    const wide: CombatConfig = { ...cfg, maxConcurrent: 2, spawnGapS: 0.1 }
+    const wide: CombatConfig = { ...cfg, waveSize: 2, waveGapS: 0.1 }
     const d = driver(wide).span(0, 8)
     expect(new Set(d.state.active.map((a) => a.index)).size).toBe(d.state.active.length)
+  })
+
+  it('cannot want more bodies than the level has positions', () => {
+    const d = driver({ ...cfg, waveSize: 9 }).span(0, 6)
+    expect(d.state.active.length).toBe(SPECS.length)
+  })
+
+  it('a hit resets every fuse, not only the one that landed', () => {
+    /**
+     * With a standing lineup one lean can open three sightlines, and without this
+     * a single moment of over-exposure would bill the player three times in three
+     * frames. It also buys one fuse of grace to get back behind cover.
+     */
+    const d = driver({ ...cfg, waveSize: 2 }).at(0)
+    const all = SPECS.map(() => true)
+    d.span(0.05, 3, { exposed: all })
+    const shots = d.events.filter((e) => e.kind === 'shot')
+    // Two enemies, three seconds fully exposed, fuses of 1.4 s and 1.1 s: without
+    // the reset this would be five or six hits.
+    expect(shots.length).toBeGreaterThan(0)
+    expect(shots.length).toBeLessThanOrEqual(3)
   })
 })
 

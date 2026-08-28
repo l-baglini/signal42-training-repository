@@ -23,12 +23,22 @@ export type Phase = 'ready' | 'playing' | 'over'
 
 export interface CombatConfig {
   readonly durationS: number
-  /** How long an enemy waits before it gives up and leaves. */
-  readonly enemyLifeS: number
-  readonly maxConcurrent: number
+  /**
+   * How many enemies stand in the room at once.
+   *
+   * The room starts **full**. This replaced a drip-feed — two at a time, spawning
+   * on a timer, leaving after eleven seconds — and the playtest verdict on that
+   * was exact: *"prima quando ti affacciavi vedevi già presenti i nemici ed era
+   * tutto più dinamico"*. With a timer, leaning out mostly found an empty
+   * corridor, so the loop degenerated into move-and-wait-and-shoot. With a
+   * standing lineup, leaning out finds a **situation**, and the question becomes
+   * which of the things looking back at you you can afford to take.
+   */
+  readonly waveSize: number
   /** What being shot costs. Time, because time is the resource. */
   readonly hitPenaltyS: number
-  readonly spawnGapS: number
+  /** The beat before a killed enemy is replaced, so the kill reads. */
+  readonly waveGapS: number
   /** How fast the fuse drains once you are back behind cover, as a multiple. */
   readonly coverDrain: number
   readonly seed: number
@@ -36,10 +46,9 @@ export interface CombatConfig {
 
 export const DEFAULT_COMBAT: CombatConfig = {
   durationS: 90,
-  enemyLifeS: 11,
-  maxConcurrent: 2,
+  waveSize: 5,
   hitPenaltyS: 6,
-  spawnGapS: 1.1,
+  waveGapS: 0.8,
   // Forgiving on purpose: ducking should feel like safety, and a tracker flicker
   // must not hand the player a free reset either.
   coverDrain: 3,
@@ -57,14 +66,12 @@ export interface EnemySpec {
 export interface ActiveEnemy {
   readonly index: number
   readonly bornS: number
-  readonly deadlineS: number
   /** Seconds of accumulated exposure. Drains in cover. */
   readonly exposedS: number
 }
 
 export type CombatEvent =
   | { readonly kind: 'killed'; readonly index: number; readonly points: number }
-  | { readonly kind: 'escaped'; readonly index: number }
   | { readonly kind: 'shot'; readonly index: number; readonly penaltyS: number }
   | { readonly kind: 'miss' }
   | { readonly kind: 'spawned'; readonly index: number }
@@ -76,12 +83,12 @@ export interface CombatState {
   readonly endsAtS: number
   readonly score: number
   readonly killed: number
-  readonly escaped: number
   readonly timesShot: number
   readonly shotsFired: number
   readonly active: readonly ActiveEnemy[]
-  readonly nextSpawnAtS: number
-  readonly cursor: number
+  readonly nextWaveAtS: number
+  /** How many times the room has been topped up. Seeds the choice of who stands. */
+  readonly wave: number
   readonly events: readonly CombatEvent[]
 }
 
@@ -111,12 +118,11 @@ export function newCombat(cfg: CombatConfig = DEFAULT_COMBAT): CombatState {
     endsAtS: cfg.durationS,
     score: 0,
     killed: 0,
-    escaped: 0,
     timesShot: 0,
     shotsFired: 0,
     active: [],
-    nextSpawnAtS: 0,
-    cursor: 0,
+    nextWaveAtS: 0,
+    wave: 0,
     events: [],
   }
 }
@@ -149,7 +155,7 @@ export function step(
   const events: CombatEvent[] = []
   const dtS = Math.max(0, Math.min(0.25, tick.tS - state.tS))
   const tS = tick.tS
-  let { score, killed, escaped, timesShot, shotsFired, cursor, nextSpawnAtS, endsAtS } = state
+  let { score, killed, timesShot, shotsFired, wave, nextWaveAtS, endsAtS } = state
 
   /**
    * The trigger resolves before the fuses. A player who fires and ducks on the
@@ -171,48 +177,82 @@ export function step(
       score += points
       killed++
       events.push({ kind: 'killed', index: hit, points })
-      nextSpawnAtS = Math.min(nextSpawnAtS, tS + cfg.spawnGapS)
+      nextWaveAtS = Math.min(nextWaveAtS, tS + cfg.waveGapS)
     }
   }
 
-  const active: ActiveEnemy[] = []
+  /**
+   * The fuses. Charging only while you are out, draining faster than they charge
+   * once you are back in — so reaching the end of one means you were still out,
+   * and the engine has already proved that ducking was possible in the time it
+   * allowed.
+   */
+  const advanced: ActiveEnemy[] = []
   for (const a of state.active) {
     if (shotDead.has(a.index)) continue
-
-    const exposedS = tick.exposed[a.index]
-      ? a.exposedS + dtS
-      : Math.max(0, a.exposedS - dtS * cfg.coverDrain)
-
-    // The fuse only charges while you are out, so reaching the end means you were
-    // still out. Ducking is the whole defence, and the engine has already proved
-    // that ducking is possible in the time the fuse allows.
-    if (exposedS >= specs[a.index]!.fuseS) {
-      timesShot++
-      endsAtS -= cfg.hitPenaltyS
-      events.push({ kind: 'shot', index: a.index, penaltyS: cfg.hitPenaltyS })
-      nextSpawnAtS = Math.min(nextSpawnAtS, tS + cfg.spawnGapS)
-      continue
-    }
-    if (tS >= a.deadlineS) {
-      escaped++
-      events.push({ kind: 'escaped', index: a.index })
-      nextSpawnAtS = Math.min(nextSpawnAtS, tS + cfg.spawnGapS)
-      continue
-    }
-    active.push({ ...a, exposedS })
+    advanced.push({
+      ...a,
+      exposedS: tick.exposed[a.index]
+        ? a.exposedS + dtS
+        : Math.max(0, a.exposedS - dtS * cfg.coverDrain),
+    })
   }
 
-  if (active.length < cfg.maxConcurrent && tS >= nextSpawnAtS) {
-    const rng = mulberry32(cfg.seed + state.cursor)
-    const offset = Math.floor(rng() * specs.length)
-    for (let attempt = 0; attempt < specs.length; attempt++) {
-      const index = (cursor + offset + attempt) % specs.length
-      if (active.some((a) => a.index === index)) continue
-      active.push({ index, bornS: tS, deadlineS: tS + cfg.enemyLifeS, exposedS: 0 })
+  /**
+   * One hit per tick, and it resets **every** fuse.
+   *
+   * With a standing lineup a lean can open three sightlines at once, and without
+   * this a single moment of over-exposure would cascade into three penalties in
+   * three consecutive frames. Resetting all of them says the obvious thing
+   * instead: you were hit, everyone who had a shot took it, and now they are all
+   * starting over — which also buys the player one fuse of grace to get back
+   * behind cover.
+   */
+  const hitBy = advanced.find((a) => a.exposedS >= specs[a.index]!.fuseS)
+  let active: ActiveEnemy[]
+  if (hitBy) {
+    timesShot++
+    endsAtS -= cfg.hitPenaltyS
+    events.push({ kind: 'shot', index: hitBy.index, penaltyS: cfg.hitPenaltyS })
+    active = advanced.map((a) => ({ ...a, exposedS: 0 }))
+  } else {
+    active = advanced
+  }
+
+  /**
+   * Top the room up.
+   *
+   * At the start of a round it fills all at once — that is the whole point, and it
+   * is why leaning out finds a situation rather than a timer. Afterwards it
+   * replaces the dead one at a time, so a kill is visibly a kill before the next
+   * body arrives.
+   *
+   * An enemy is only ever *shipped* by the engine if a lean is needed to see it,
+   * so at the rest position none of them can see the player however many are
+   * standing there. The safe pocket behind cover survives the whole lineup, which
+   * is what makes a full room fair rather than merely loud.
+   */
+  if (active.length < cfg.waveSize && tS >= nextWaveAtS) {
+    const standing = new Set(active.map((a) => a.index))
+    const candidates: number[] = []
+    for (let i = 0; i < specs.length; i++) if (!standing.has(i)) candidates.push(i)
+    // Fisher-Yates, seeded. Striding a list to spread a selection out is what
+    // aliased three times in `proposeAnchors`; a shuffle cannot alias.
+    const rng = mulberry32(cfg.seed + wave)
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      const tmp = candidates[i]!
+      candidates[i] = candidates[j]!
+      candidates[j] = tmp
+    }
+    const want = active.length === 0 ? cfg.waveSize : 1
+    for (const index of candidates.slice(0, Math.max(0, want))) {
+      active.push({ index, bornS: tS, exposedS: 0 })
       events.push({ kind: 'spawned', index })
-      cursor = index + 1
-      nextSpawnAtS = tS + cfg.spawnGapS
-      break
+    }
+    if (candidates.length > 0) {
+      wave++
+      nextWaveAtS = tS + cfg.waveGapS
     }
   }
 
@@ -225,12 +265,11 @@ export function step(
     endsAtS,
     score,
     killed,
-    escaped,
     timesShot,
     shotsFired,
     active: phase === 'over' ? [] : active,
-    nextSpawnAtS,
-    cursor,
+    nextWaveAtS,
+    wave,
     events,
   }
 }
