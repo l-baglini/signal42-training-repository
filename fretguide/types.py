@@ -75,7 +75,7 @@ class Selection:
     #: ``"<key>:<degree>"``, e.g. ``"G:2"`` for Dorian in the key of G. See
     #: :mod:`fretguide.modes` for why modes are addressed by key and degree rather than
     #: by their own root.
-    mode: Literal["scale", "chord", "scale_generated", "mode_box"]
+    mode: Literal["scale", "chord", "scale_generated", "mode_box", "penta_box"]
     id: str
 
 

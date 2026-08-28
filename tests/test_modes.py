@@ -12,7 +12,15 @@ from __future__ import annotations
 import pytest
 
 from fretguide.content import G_MAJOR_BOX, resolve_selection
-from fretguide.modes import BOX_FRETS, MODES, key_modes, mode_box, transpose
+from fretguide.modes import (
+    BOX_FRETS,
+    MODES,
+    key_modes,
+    key_pentatonics,
+    mode_box,
+    pentatonic_box,
+    transpose,
+)
 from fretguide.theory import chroma, chroma_at, scale_chromas
 from fretguide.types import Selection
 
@@ -276,3 +284,80 @@ def test_eolio_string_four_is_fingered_from_the_twelfth_fret():
     }
     shifted = [s for s, a in anchors_by_string.items() if a == 11]
     assert shifted == [3], f"only string 3 should sit back at fret 11, got {shifted}"
+
+
+# --------------------------------------------------------------------------- #
+# Pentatonic positions
+# --------------------------------------------------------------------------- #
+
+
+def test_a_key_has_exactly_five_pentatonic_positions():
+    """Not an arbitrary count. The seven modal boxes occupy only five distinct windows,
+    and those windows *are* the pentatonic positions — the same five shapes."""
+    assert len(key_pentatonics("G")) == 5
+    assert [p.index for p in key_pentatonics("G")] == [1, 2, 3, 4, 5]
+    assert [p.position for p in key_pentatonics("G")] == [2, 4, 7, 9, 11]
+
+
+def test_a_pentatonic_position_is_its_modal_box_minus_the_fourth_and_seventh():
+    """The whole construction, asserted directly rather than reimplemented."""
+    from fretguide.theory import chroma, chroma_at
+
+    for key in ("G", "C", "F#"):
+        dropped = {(chroma(key) + 5) % 12, (chroma(key) + 11) % 12}
+        modes = {m.italian: m for m in key_modes(key, max_fret=24)}
+        for pent in key_pentatonics(key, max_fret=24):
+            box = pentatonic_box(pent, max_fret=24)
+            parent = mode_box(modes[pent.from_mode], max_fret=24)
+            want = {(p.string, p.fret, p.finger) for p in parent
+                    if chroma_at(p.string, p.fret) not in dropped}
+            assert {(p.string, p.fret, p.finger) for p in box} == want
+
+
+def test_every_pentatonic_position_has_two_notes_on_every_string():
+    """What makes it a pentatonic box rather than a box with holes in it.
+
+    This is also why Lidio does not carry a position: it loses its lowest note with the
+    4th and ends up with one note on the low E, so Frigio takes that window instead.
+    """
+    for key in ("G", "C", "E", "A#"):
+        for pent in key_pentatonics(key, max_fret=24):
+            box = pentatonic_box(pent, max_fret=24)
+            per_string = [sum(1 for p in box if p.string == s) for s in range(1, 7)]
+            assert per_string == [2] * 6, f"{key} {pent.label}: {per_string}"
+            assert len(box) == 12
+
+
+def test_pentatonic_notes_belong_to_the_pentatonic_scale():
+    from fretguide.theory import chroma_at, scale_chromas
+
+    for key in ("G", "D"):
+        allowed = scale_chromas(key, "major pentatonic")
+        for pent in key_pentatonics(key, max_fret=24):
+            for p in pentatonic_box(pent, max_fret=24):
+                assert chroma_at(p.string, p.fret) in allowed
+
+
+def test_the_minor_flag_moves_the_root_without_moving_a_note():
+    """G major pentatonic and E minor pentatonic are one scale. Being able to see the
+    same box rooted both ways is the point of saying so."""
+    pent = key_pentatonics("G", max_fret=24)[0]
+    major = pentatonic_box(pent, max_fret=24)
+    minor = pentatonic_box(pent, max_fret=24, minor=True)
+    assert {(p.string, p.fret) for p in major} == {(p.string, p.fret) for p in minor}
+    assert [p.is_root for p in major] != [p.is_root for p in minor]
+    assert pent.relative_minor == "E"
+
+
+def test_pentatonic_fingering_is_inherited_from_the_modal_box():
+    """Same shape, same hand. A pentatonic position fingered differently from the modal
+    box it sits inside would make the relationship invisible, which is most of its value.
+    """
+    for pent in key_pentatonics("G", max_fret=24):
+        box = pentatonic_box(pent, max_fret=24)
+        assert all(1 <= p.finger <= 4 for p in box)
+
+
+@pytest.mark.parametrize("bad", ["G:0:", "G:6:", "G:x:", "H:1:", "G", ":", ""])
+def test_malformed_pentatonic_ids_resolve_to_nothing(bad):
+    assert resolve_selection(Selection("penta_box", bad), max_fret=21) is None

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .content import CHORD_IDS
-from .modes import key_modes
+from .modes import key_modes, key_pentatonics
 from .theory import _SHARP_NAMES
 from .types import Selection
 
@@ -29,18 +29,15 @@ from .types import Selection
 #: it is the open fifth string, the reference pitch, and where every book starts.
 ROOTS: tuple[str, ...] = tuple(_SHARP_NAMES[9:] + _SHARP_NAMES[:9])
 
-#: Scale types offered per key beyond the modes, in labelled groups. These are shown
-#: across the whole neck, because unlike the modes they really are different note sets and
-#: a full-neck map is the useful view of them.
-EXTRA_GROUPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
-    ("Pentatonic — whole neck", (
-        ("Major pentatonic", "major pentatonic"),
-        ("Minor pentatonic", "minor pentatonic"),
-    )),
-    ("Other — whole neck", (
-        ("Blues", "blues"),
-        ("Harmonic minor", "harmonic minor"),
-    )),
+#: Scales offered whole-neck, after the modal and pentatonic boxes. Unlike the modes
+#: these really are different note sets, so a full-neck map is the useful view of them --
+#: and it keeps the minor pentatonic reachable when you want the whole thing rather than
+#: one position.
+WHOLE_NECK: tuple[tuple[str, str], ...] = (
+    ("Major pentatonic", "major pentatonic"),
+    ("Minor pentatonic", "minor pentatonic"),
+    ("Blues", "blues"),
+    ("Harmonic minor", "harmonic minor"),
 )
 
 CHORDS_GROUP = "Chords"
@@ -89,10 +86,17 @@ def right_rows(left_label: str, max_fret: int = 12) -> list[Row]:
     for m in key_modes(left_label, max_fret=max_fret):
         rows.append(Row(m.label, Selection("mode_box", f"{left_label}:{m.degree}"),
                         detail=m.detail))
-    for group, entries in EXTRA_GROUPS:
-        rows.append(Row(group, heading=True))
-        for label, scale_name in entries:
-            rows.append(Row(label, Selection("scale_generated", f"{left_label} {scale_name}")))
+
+    pents = key_pentatonics(left_label, max_fret=max_fret)
+    rows.append(Row(f"Pentatonic — {left_label} maj / {pents[0].relative_minor} min",
+                    heading=True))
+    for pent in pents:
+        rows.append(Row(pent.label, Selection("penta_box", f"{left_label}:{pent.index}:"),
+                        detail=pent.detail))
+
+    rows.append(Row("Whole neck", heading=True))
+    for label, scale_name in WHOLE_NECK:
+        rows.append(Row(label, Selection("scale_generated", f"{left_label} {scale_name}")))
     return rows
 
 

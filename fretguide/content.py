@@ -12,7 +12,7 @@ Scales, by contrast, are now generated for any root and any scale name.
 
 from __future__ import annotations
 
-from .modes import key_modes, mode_box
+from .modes import key_modes, key_pentatonics, mode_box, pentatonic_box
 from .theory import scale_positions
 from .types import ChordVoicing, FretPosition, ResolvedSelection, ScaleBox, Selection
 
@@ -181,6 +181,24 @@ def resolve_selection(sel: Selection, max_fret: int = 12) -> ResolvedSelection |
         if not positions:
             return None
         return ResolvedSelection(name=f"{m.name} — {m.detail}", positions=positions)
+
+    if sel.mode == "penta_box":
+        key, _, rest = sel.id.partition(":")
+        index, _, flavour = rest.partition(":")
+        if not key or not index.isdigit() or not 1 <= int(index) <= 5:
+            return None
+        try:
+            pents = key_pentatonics(key, max_fret=max_fret)
+        except ValueError:
+            return None
+        pent = pents[int(index) - 1]
+        minor = flavour == "min"
+        positions = pentatonic_box(pent, max_fret=max_fret, minor=minor)
+        if not positions:
+            return None
+        name = f"{pent.relative_minor} minor pent" if minor else f"{pent.root} major pent"
+        return ResolvedSelection(name=f"{name} — {pent.label} · {pent.detail}",
+                                 positions=positions)
 
     if sel.mode == "scale_generated":
         root, _, scale_name = sel.id.partition(" ")

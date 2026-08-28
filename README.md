@@ -100,7 +100,7 @@ per-module conventions.
 | [`fretguide/geometry.py`](fretguide/geometry.py) | Fret law, homography, `solve_is_trustworthy` — the trust gate |
 | [`fretguide/theory.py`](fretguide/theory.py) | Note maths, scales, chords, neck-wide generation |
 | [`fretguide/content.py`](fretguide/content.py) | Curated voicings and scale boxes |
-| [`fretguide/modes.py`](fretguide/modes.py) | Modes as degrees of a key: root, chord, box position, fingering |
+| [`fretguide/modes.py`](fretguide/modes.py) | Modes as degrees of a key, and the pentatonic positions carved out of them |
 | [`fretguide/menu.py`](fretguide/menu.py) | The practice catalogue and cursor — pure state, no toolkit, shared by both apps |
 | [`fretguide/capture.py`](fretguide/capture.py) | V4L2 capture, raw-YUV path |
 | [`fretguide/dataset.py`](fretguide/dataset.py) | Labels → homographies, augmentation, heatmap codec |
@@ -111,7 +111,7 @@ per-module conventions.
 | [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 331 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 344 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -131,7 +131,7 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-331 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
+344 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.

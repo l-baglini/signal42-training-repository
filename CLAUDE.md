@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 331 tests
+.venv/bin/python -m pytest tests/ -q      # 344 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -92,7 +92,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 | `fretguide/source.py` | Frame sources — the one abstraction both apps consume. `SyntheticSource` needs no camera, no model and no dataset; it is how the overlay gets developed and tested here, and it draws a full 21-fret Strat neck (`STRAT_FRETS`). **Camera sources stay pinned at 12 frets** — the model predicts two keypoints per fret wire from the nut to the twelfth and cannot pose past it. Its backdrop is cached per size, so don't reintroduce per-frame full-resolution numpy: that cost 74 ms/frame and capped the mode at 13 fps. |
 
 | `tests/` | Must stay hardware-free. Build a fixture (see `test_source.py::_write_fake_dataset`) rather than reaching for `dataset/frames/`, which a fresh clone does not have. |
-| `fretguide/modes.py` | Modes as degrees of a key, not as roots. **Every mode of a key is the same note set** — asked for whole-neck, all seven return identical positions. What differs is the root, the chord it sits over, and the box. All seven box shapes are **transcribed** into `SHAPES_IN_G`, never computed: four span four frets and use one hand position, three span five and the hand shifts between strings, which no offset formula expresses. Positions are not stored — they fall out of the notes and reproduce the source sheet's roman numerals, which is the transcription's own check. |
+| `fretguide/modes.py` | Modes as degrees of a key, not as roots. **Every mode of a key is the same note set** — asked for whole-neck, all seven return identical positions. What differs is the root, the chord it sits over, and the box. All seven box shapes are **transcribed** into `SHAPES_IN_G`, never computed: four span four frets and use one hand position, three span five and the hand shifts between strings, which no offset formula expresses. Positions are not stored — they fall out of the notes and reproduce the source sheet's roman numerals, which is the transcription's own check. Pentatonic positions are derived here too: a modal box minus the 4th and 7th. The seven modes occupy five distinct windows, which is why there are five pentatonic positions — same shapes. |
+
 
 
 | `fretguide/menu.py` | The practice catalogue and cursor state. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. |

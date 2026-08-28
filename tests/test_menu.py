@@ -73,7 +73,7 @@ def test_every_catalogue_entry_actually_resolves():
             assert resolved is not None, f"{lrow.label} / {rrow.label} does not resolve"
             assert resolved.positions, f"{lrow.label} / {rrow.label} resolves to nothing"
             checked += 1
-    assert checked == 7 + 12 * (7 + 4), f"catalogue changed size: {checked}"
+    assert checked == 7 + 12 * (7 + 5 + 4), f"catalogue changed size: {checked}"
 
 
 def test_chords_are_reachable_and_are_chords():
@@ -84,12 +84,19 @@ def test_chords_are_reachable_and_are_chords():
 
 def test_a_key_offers_its_groups_with_headings():
     rows = right_rows("A")
-    assert [r.label for r in rows if r.heading] == [
-        "Modes of A", "Pentatonic — whole neck", "Other — whole neck"]
+    headings = [r.label for r in rows if r.heading]
+    assert headings[0] == "Modes of A"
+    assert headings[1].startswith("Pentatonic")
+    assert headings[2] == "Whole neck"
     assert all(r.selection is None for r in rows if r.heading)
+
     modes = [r for r in rows if r.selection and r.selection.mode == "mode_box"]
-    assert len(modes) == 7
-    assert all(r.selection.id.startswith("A:") for r in modes)
+    assert len(modes) == 7 and all(r.selection.id.startswith("A:") for r in modes)
+
+    pents = [r for r in rows if r.selection and r.selection.mode == "penta_box"]
+    assert len(pents) == 5, "a key has five pentatonic positions, not more or fewer"
+    assert [r.label for r in pents] == [f"Pos {i}" for i in range(1, 6)]
+
     whole = [r for r in rows if r.selection and r.selection.mode == "scale_generated"]
     assert all(r.selection.id.startswith("A ") for r in whole)
 
@@ -100,6 +107,7 @@ def test_the_cursor_never_lands_on_a_heading():
     m = Menu()
     m.click(0, 1)  # key of A
     m.focus(1)
+    playable = sum(1 for r in m.right if r.selection is not None)
     seen = set()
     for _ in range(len(m.right) * 2):
         m.move(1)
@@ -108,7 +116,7 @@ def test_the_cursor_never_lands_on_a_heading():
     for _ in range(len(m.right) * 2):
         m.move(-1)
         assert m.right[m.right_index].selection is not None
-    assert len(seen) == 11, "did not visit every scale in the key"
+    assert len(seen) == playable, "did not visit everything in the key"
 
 
 def test_moving_the_left_column_changes_the_key_but_keeps_your_place():

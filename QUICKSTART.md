@@ -143,8 +143,23 @@ What distinguishes them is the three things on each row: the **root**, the
 sound like Dorian), and the **position** of the four-fret box it is played in. So
 each mode is drawn as a box with finger numbers, not as the whole neck.
 
-Pentatonics, blues and harmonic minor stay whole-neck, because unlike the modes
-they really are different note sets.
+### Pentatonics
+
+The same five shapes, one at a time. Take a modal box, remove the 4th and the
+7th, and what remains is the pentatonic in that position — two notes on every
+string, the same fingering, the same place on the neck.
+
+That is not a convenient coincidence. The seven modal boxes occupy only **five
+distinct windows**, and five is exactly how many pentatonic positions there are,
+because they are the same five shapes. Each row says which mode it comes from,
+so the relationship stays in view.
+
+`G maj / E min` on every row is the other half of it: G major pentatonic and E
+minor pentatonic are one scale. The dots are identical; only which note you hear
+as home changes.
+
+Blues, harmonic minor and the whole-neck pentatonics are still there under
+**Whole neck**, for when you want the map rather than one position.
 
 To print the boxes for a music stand, or to check them against your own material:
 
