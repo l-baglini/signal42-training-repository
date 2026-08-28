@@ -69,6 +69,10 @@
     border: 1px solid rgba(255,255,255,.14); border-radius: 5px; color: #e7edf8;
     padding: 4px 7px; font-size: 11px; font-family: inherit; }
   .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
+  /* Sensitivity acts on captured pointer deltas, so it needs the capture. If the
+     browser refuses, say so rather than leaving a slider that does nothing. */
+  .row.inert { opacity: .45; }
+  .row.inert label::after { content: ' — no pointer capture'; opacity: .7; }
   #fatal { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 520px;
     border-color: rgba(255,140,140,.4); }
   #cam { position: fixed; bottom: 12px; right: 12px; z-index: 10; }
@@ -181,6 +185,11 @@
       <label>Your screen's width</label>
       <input id="width" type="range" min="12" max="80" step="0.5" value="34">
       <span class="val" id="widthVal"></span>
+    </div>
+    <div class="row" id="sensRow">
+      <label>Aim sensitivity, in a round</label>
+      <input id="sens" type="range" min="0.3" max="3" step="0.05" value="1">
+      <span class="val" id="sensVal"></span>
     </div>
     <div class="row scanonly">
       <label>Room depth, when scanning</label>

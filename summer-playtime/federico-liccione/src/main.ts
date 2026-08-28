@@ -954,12 +954,94 @@ widthInput.addEventListener('input', () => {
 })
 widthInput.dispatchEvent(new Event('input'))
 
+/* ---------------- aiming ---------------- */
+
+/**
+ * Where the crosshair is, in CSS pixels.
+ *
+ * Two regimes, and the reason there are two is worth stating. Outside a round the
+ * crosshair *is* the operating system's cursor, one to one, because the panel has
+ * sliders and a text box in it and taking the pointer away from those would be
+ * hostile. Inside a round the pointer is **locked**: the cursor stops existing,
+ * and the crosshair moves by accumulated deltas instead.
+ *
+ * Locking is what makes a sensitivity setting mean anything at all — an absolute
+ * cursor already has the operating system's own acceleration applied and there is
+ * nothing left to scale. It also fixes something nobody had complained about yet:
+ * an absolute cursor can leave the window mid-round, and the crosshair goes with
+ * it.
+ */
+let aimPx: { x: number; y: number } | null = null
+/** Multiplies raw pointer deltas while locked. Slider, so it is the player's. */
+let sensitivity = 1
+let pointerLocked = false
+
 const crosshair = el('crosshair')
-addEventListener('pointermove', (e) => {
-  mouseNdc = { x: (e.clientX / innerWidth) * 2 - 1, y: 1 - (e.clientY / innerHeight) * 2 }
-  crosshair.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`
+
+function placeCrosshair(x: number, y: number): void {
+  aimPx = { x, y }
+  mouseNdc = { x: (x / innerWidth) * 2 - 1, y: 1 - (y / innerHeight) * 2 }
+  crosshair.style.transform = `translate(${x}px, ${y}px)`
   crosshair.style.display = 'block'
+}
+
+addEventListener('pointermove', (e) => {
+  if (pointerLocked) {
+    // Clamped to the window: locked deltas are unbounded, and a crosshair that
+    // wandered a metre off-screen would take a metre of mouse to come back.
+    const from = aimPx ?? { x: innerWidth / 2, y: innerHeight / 2 }
+    placeCrosshair(
+      Math.min(innerWidth, Math.max(0, from.x + e.movementX * sensitivity)),
+      Math.min(innerHeight, Math.max(0, from.y + e.movementY * sensitivity)),
+    )
+  } else {
+    placeCrosshair(e.clientX, e.clientY)
+  }
 })
+
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === canvas
+  if (pointerLocked) {
+    if (!aimPx) placeCrosshair(innerWidth / 2, innerHeight / 2)
+    // It worked at least once, so the slider is real.
+    el('sensRow').classList.remove('inert')
+  }
+})
+
+/**
+ * Requested from the keypress that starts the round, which is the user gesture the
+ * browser requires. It can still be refused — an unfocused document, a browser
+ * that has decided otherwise — and refusal is not an error: the absolute cursor
+ * keeps working and only the sensitivity slider stops meaning anything, which the
+ * panel says.
+ */
+function grabPointer(): void {
+  const refused = () => el('sensRow').classList.add('inert')
+  try {
+    const r = canvas.requestPointerLock() as unknown
+    if (r instanceof Promise) r.catch(refused)
+  } catch {
+    // Absolute aiming is the fallback and is already running. What the player
+    // needs to know is only that the slider has nothing to act on.
+    refused()
+  }
+}
+
+function releasePointer(): void {
+  if (document.pointerLockElement === canvas) document.exitPointerLock()
+}
+
+// Wired after the declarations above rather than beside the other sliders: this
+// handler assigns `sensitivity`, and dispatching the initial event before that
+// `let` is evaluated would throw on a temporal dead zone.
+const sensInput = el<HTMLInputElement>('sens')
+sensInput.addEventListener('input', () => {
+  sensitivity = parseFloat(sensInput.value)
+  el('sensVal').textContent = `${sensitivity.toFixed(2)}x`
+})
+sensInput.dispatchEvent(new Event('input'))
+// Inert from the start only where the browser cannot capture the pointer at all.
+if (!('requestPointerLock' in canvas)) el('sensRow').classList.add('inert')
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button === 0) {
     firing = true
@@ -981,6 +1063,7 @@ addEventListener('keydown', (e) => {
       rebuildLineup()
       combat = startCombat(DEFAULT_COMBAT)
       roundStartedAt = performance.now() / 1000
+      grabPointer()
       renderRound()
     }
   } else if (k === 'o') {
@@ -1090,7 +1173,12 @@ function frame(now: number): void {
     }
     renderRound()
     renderExposure()
-    if (combat.phase !== before) renderHud()
+    if (combat.phase !== before) {
+      renderHud()
+      // This branch only runs while a round was playing, so any change out of it is
+      // the round ending — and the panel that comes back needs a cursor.
+      releasePointer()
+    }
     renderScene()
   } else {
     firing = false

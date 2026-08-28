@@ -23,6 +23,10 @@ your head with a line in the panel saying so; `C` toggles between the two. Press
 `K` to spend ten seconds measuring your range, which is what every number in the
 level is scaled to.
 
+The mouse aims. During a round the pointer is captured, so the crosshair cannot
+leave the window and the sensitivity slider has deltas to act on; between rounds
+it is the ordinary cursor, because the panel has controls in it.
+
 `npm run dev` runs `npm run setup` first, which copies the MediaPipe WASM out of
 the pinned package and downloads the face model into `public/`. Nothing this app
 needs at runtime comes from a CDN — it is meant to be shown in a room whose wifi

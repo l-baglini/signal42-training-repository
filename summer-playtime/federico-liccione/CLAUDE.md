@@ -124,6 +124,14 @@ rectangle and at exactly its depth.
   in the frame loop exist for that, and both skip mid-round because a rebuild
   restarts the round.
 
+- **Aiming has two regimes and the split is on purpose.** Outside a round the
+  crosshair *is* the OS cursor, one to one, because the panel has sliders and a
+  text box in it. Inside a round the pointer is **locked** and the crosshair moves
+  by accumulated deltas — which is the only thing a sensitivity setting can act
+  on, since an absolute cursor already has the OS's acceleration baked in. Refusal
+  to lock is not an error: absolute aiming keeps working and the slider marks
+  itself inert.
+
 ### The round
 
 **The room stands full.** Eight enemies from the first tick, they never leave, and
