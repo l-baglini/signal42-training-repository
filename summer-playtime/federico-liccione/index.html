@@ -72,6 +72,15 @@
   #round h2 { margin: 0 0 8px; font-size: 17px; }
   #round p { margin: 0 0 10px; white-space: pre-line; }
   #round .note { font-size: 11px; opacity: .6; }
+  #round .compose { margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,.12); text-align: left; }
+  #round .composeTitle { font-size: 11px; opacity: .55; margin-bottom: 7px;
+    letter-spacing: .03em; }
+  #round .compose input { display: block; width: 100%; margin-bottom: 6px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 6px; color: #e7edf8; padding: 7px 9px; font: inherit; font-size: 12px; }
+  #round .compose input:focus { outline: none; border-color: rgba(124,224,192,.55); }
+  #round .composeNote { font-size: 10.5px; opacity: .45; line-height: 1.45; }
   #scan { left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 520px;
     display: none; text-align: left; border-color: rgba(124,180,224,.4); }
   #scan h2 { margin: 0 0 8px; font-size: 15px; color: #8cc4f0; }
@@ -121,18 +130,6 @@
     <div id="stats"></div>
     <div id="tracker"></div>
     <div class="row">
-      <label>Describe a level</label>
-      <input id="describe" type="text" autocomplete="off"
-        placeholder="a corridor with pillars and a low wall on the right">
-      <span class="val"></span>
-    </div>
-    <div class="row">
-      <label>Claude API key</label>
-      <input id="apikey" type="password" placeholder="optional · never stored"
-        autocomplete="off" spellcheck="false">
-      <span class="val"></span>
-    </div>
-    <div class="row">
       <label>Far wall (prior)</label>
       <input id="farwall" type="range" min="120" max="600" step="10" value="320">
       <span class="val" id="farwallVal"></span>
@@ -167,7 +164,18 @@
   <div class="panel" id="round">
     <h2 id="roundTitle">Blind Spot</h2>
     <p id="roundBody"></p>
-    <div class="note">press <kbd>space</kbd></div>
+    <div class="note">press <kbd>space</kbd> to play &nbsp;·&nbsp; <kbd>[</kbd> <kbd>]</kbd> for another level</div>
+    <div class="compose">
+      <div class="composeTitle">or describe one and have it built</div>
+      <input id="describe" type="text" autocomplete="off"
+        placeholder="a corridor with pillars and a low wall on the right">
+      <input id="apikey" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Claude API key — never stored, and the shipped levels need none">
+      <div class="composeNote">
+        The model lays out the walls. The engine decides which positions your body
+        can fairly fight from — and says so.
+      </div>
+    </div>
   </div>
 
   <div class="panel" id="refusal">
