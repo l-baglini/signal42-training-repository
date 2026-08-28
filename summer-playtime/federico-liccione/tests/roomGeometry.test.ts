@@ -220,6 +220,58 @@ describe('fitting billboards', () => {
     ).toBeLessThanOrEqual(2)
   })
 
+  it('fits a distant room into the playable band, preserving the order', () => {
+    /**
+     * The test for the failure that produced the compression. A real scan of a
+     * real room refused with 129 of 180 candidates unreachable, because the room
+     * put its nearest surface metres behind the player's head while the mechanic
+     * needs cover near the window: leverage over a sightline is (1 - s), and
+     * cover two and a half metres away cannot be leaned around by anybody.
+     *
+     * So a room whose every surface is far must still come out playable, and the
+     * ordering — what is in front of what, which is all occlusion depends on —
+     * must survive exactly.
+     */
+    const values = new Float32Array(W * H).fill(0.05) // a wall a long way off
+    const person = new Float32Array(W * H)
+    for (let v = 40; v < 120; v++) for (let u = 64; u < 96; u++) {
+      values[v * W + u] = 0.9
+      person[v * W + u] = 1
+    }
+    // A shelf, still far away, but nearer than the wall.
+    for (let v = 20; v < 90; v++) for (let u = 8; u < 50; u++) values[v * W + u] = 0.14
+
+    const far = { width: W, height: H, values }
+    const mask2 = { width: W, height: H, values: person }
+    const fit2 = solveScale(far, mask2, { headZcm: HEAD_Z, farWallCm: 520 })
+    if (!isFit(fit2)) throw new Error('expected a fit')
+
+    // True distances: both surfaces are metres away.
+    expect(depthToCm(fit2, 0.14)).toBeGreaterThan(200)
+    expect(depthToCm(fit2, 0.05)).toBeGreaterThan(400)
+
+    const bills = fitBillboards(far, mask2, fit2, { minPixels: 300 })
+    expect(bills.length).toBeGreaterThanOrEqual(2)
+    for (const b of bills) {
+      expect(-b.z).toBeGreaterThanOrEqual(30)
+      expect(-b.z).toBeLessThanOrEqual(300)
+    }
+    // The shelf is still in front of the wall.
+    const shallowest = Math.max(...bills.map((b) => b.z))
+    const deepest = Math.min(...bills.map((b) => b.z))
+    expect(shallowest).toBeGreaterThan(deepest)
+
+    // And it is now actually playable rather than refused.
+    const out = buildRoomScan({
+      depth: far, mask: mask2,
+      headZcm: HEAD_Z, farWallCm: 520,
+      model: 'synthetic', atISO: '2026-08-28T00:00:00.000Z',
+    })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(generate(validateScan(out.scan).scan, seated()).kind).toBe('level')
+  })
+
   it('finds nothing in a frame that is all one distance', () => {
     const flat = new Float32Array(W * H).fill(0.5)
     const bills = fitBillboards(

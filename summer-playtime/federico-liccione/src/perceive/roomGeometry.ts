@@ -226,9 +226,14 @@ export interface FitOptions {
   readonly maxOccluders?: number
   readonly minPixels?: number
   readonly personThreshold?: number
-  /** Depth range kept, in cm beyond the screen. */
+  /**
+   * The playable depth band, in cm beyond the screen. The room's observed range
+   * is fitted into this rather than used at true scale — see `fitBillboards`.
+   */
   readonly nearestCm?: number
   readonly furthestCm?: number
+  /** Set false to use true metric depth and accept that most rooms refuse. */
+  readonly compressToBand?: boolean
 }
 
 const FIT_DEFAULTS = {
@@ -236,8 +241,9 @@ const FIT_DEFAULTS = {
   maxOccluders: 12,
   minPixels: 900,
   personThreshold: 0.6,
-  nearestCm: 12,
-  furthestCm: 520,
+  nearestCm: 34,
+  furthestCm: 290,
+  compressToBand: true,
 } as const
 
 /**
@@ -247,6 +253,22 @@ const FIT_DEFAULTS = {
  * a world-space rectangle to each. The result is a deliberate 2.5D
  * approximation — SPEC §5 and accepted weakness 2 — and the reason the sightline
  * solver can be exact rather than approximate.
+ *
+ * **The room's depth range is compressed into the playable band, not used at
+ * true scale.** This is a decision with a cost and it was forced by a real scan:
+ * mapping centimetres one-to-one, a real room refused with 129 of 180 candidates
+ * unreachable. The reason is the leverage identity — the player's control over
+ * where a sightline crosses an occluder is `(1 - s)`, so cover two and a half
+ * metres away cannot be leaned around by any human at all, and a real room puts
+ * its nearest surface metres behind the player's head rather than at arm's
+ * length like the hand-authored fixture did.
+ *
+ * The compression is **monotone**, so every occlusion relationship the scan
+ * observed is preserved exactly: what is in front of what, and therefore what
+ * hides what, is untouched. What is lost is absolute distance — the scanned room
+ * is a faithful account of its structure and a deliberate fiction about its
+ * size. Fairness is unaffected, because the engine computes it on the geometry it
+ * is handed, whatever that geometry means.
  */
 export function fitBillboards(
   depth: DepthField,
@@ -258,16 +280,42 @@ export function fitBillboards(
   const cam = opts.camera ?? DEFAULT_CAMERA
   const { width, height, values } = depth
 
-  const gameZ = new Float32Array(values.length)
+  const metric = new Float32Array(values.length)
   const usable = new Uint8Array(values.length)
   for (let i = 0; i < values.length; i++) {
     if ((mask.values[i] ?? 0) >= o.personThreshold) continue
     const zc = depthToCm(fit, values[i]!)
-    if (!Number.isFinite(zc)) continue
-    const zg = -Math.max(0, zc - cam.playerZcm)
-    if (-zg < o.nearestCm || -zg > o.furthestCm) continue
-    gameZ[i] = zg
+    // Behind the player's own plane, and not absurd. Beyond that, no judgement.
+    if (!Number.isFinite(zc) || zc <= cam.playerZcm + 4 || zc > 3000) continue
+    metric[i] = zc
     usable[i] = 1
+  }
+
+  // Percentiles rather than min and max: one speck of noise at the far end would
+  // otherwise squash the whole room into the near half of the band.
+  const sample: number[] = []
+  for (let i = 0; i < metric.length; i += 4) if (usable[i]) sample.push(metric[i]!)
+  if (sample.length < 64) return []
+  sample.sort((a, b) => a - b)
+  const at = (p: number) => sample[Math.min(sample.length - 1, Math.round(p * (sample.length - 1)))]!
+  const nearMetric = at(0.05)
+  const farMetric = at(0.95)
+  const spread = Math.max(1, farMetric - nearMetric)
+
+  const gameZ = new Float32Array(values.length)
+  for (let i = 0; i < metric.length; i++) {
+    if (!usable[i]) continue
+    if (o.compressToBand) {
+      const t = Math.max(0, Math.min(1, (metric[i]! - nearMetric) / spread))
+      gameZ[i] = -(o.nearestCm + t * (o.furthestCm - o.nearestCm))
+    } else {
+      const zg = -Math.max(0, metric[i]! - cam.playerZcm)
+      if (-zg < o.nearestCm || -zg > o.furthestCm) {
+        usable[i] = 0
+        continue
+      }
+      gameZ[i] = zg
+    }
   }
 
   const edges: number[] = []
@@ -285,7 +333,11 @@ export function fitBillboards(
     for (let i = 0; i < values.length; i++) {
       if (!usable[i]) continue
       const z = gameZ[i]!
-      if (z <= hi && z > lo) {
+      // The last band has to include its own far edge, or the deepest pixels —
+      // which land exactly on it after the compression — fall through and the
+      // back wall of every room disappears. A test caught this.
+      const inBand = k === o.bands - 1 ? z <= hi && z >= lo : z <= hi && z > lo
+      if (inBand) {
         binary[i] = 1
         zSum += z
         count++
@@ -412,7 +464,15 @@ export function proposeAnchors(
   yMin = Math.max(yMin - 20, -60)
   yMax = Math.min(yMax + 20, 60)
 
-  const depths = opts.depths ?? [nearest - 70, nearest - 110, nearest - 160]
+  /**
+   * Depths chosen from the leverage identity rather than by taste. A target at
+   * `z_t` behind cover at `z_o`, seen from `z_e`, leaves the player leverage
+   * `1 - (z_o - z_e)/(z_t - z_e)`; solving for a wanted leverage gives
+   * `z_t = z_e + (z_o - z_e)/(1 - L)`. These are L = 0.35, 0.5 and 0.62.
+   */
+  const eyeZ = 60
+  const forLeverage = (L: number) => Math.round(eyeZ + (nearest - eyeZ) / (1 - L))
+  const depths = opts.depths ?? [forLeverage(0.35), forLeverage(0.5), forLeverage(0.62)]
   const out: Point3[] = []
   for (const z of depths) {
     for (let y = yMin; y <= yMax; y += pitch * 1.6) {

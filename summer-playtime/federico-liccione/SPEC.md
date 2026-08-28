@@ -456,6 +456,21 @@ added to the margins in §6.4 and §6.5. A badly-fitting scan makes the game mor
 conservative, never more unfair — the same failure direction as everywhere else
 in this design.
 
+**The room's depth range is compressed into the playable band, not used at true
+scale.** A decision forced by a real scan rather than chosen: mapping centimetres
+one-to-one, an actual room refused with 129 of 180 candidates unreachable. The
+cause is the leverage identity of §6.3 — control over where a sightline crosses
+an occluder is `(1 - s)` — so cover two and a half metres away cannot be leaned
+around by anybody, and a real room puts its nearest surface metres behind the
+player's head rather than at arm's length like the hand-authored fixture did.
+
+The compression is **monotone**, so every occlusion relationship the scan
+observed survives exactly: what is in front of what, and therefore what hides
+what, is untouched. What is lost is absolute distance. The scanned room is a
+faithful account of its structure and a deliberate fiction about its size, and
+fairness is unaffected because the engine computes it on whatever geometry it is
+handed.
+
 **Never read the library's normalised depth image.** The convenience output is
 min-max normalised per frame across the whole frame, so a face 40 cm from the
 lens owns the top of the range and compresses a five-metre room into a sliver.

@@ -142,6 +142,14 @@ the head is the only metric correspondence available, so without it the room has
 no scale. The far-wall prior is a slider, and it is the honest weak point: it
 moves difficulty, not fairness.
 
+Two things about the scan that are not obvious and are both load-bearing. The
+room's depth is **compressed into the playable band** rather than used at true
+scale — without it a real room refuses, because leverage over a sightline is
+`(1 - s)` and cover metres away cannot be leaned around. And anchor depths are
+derived from that same identity for a wanted leverage, not picked by taste. If
+scanned rooms start refusing again, look at `nearestCm`/`furthestCm` in
+`fitBillboards` and at `forLeverage` in `proposeAnchors` before anything else.
+
 **Playtesting has been happening**, and it has produced most of the recent
 commits: the One Euro filter, the lateral threat model, the landing marker, the
 axis mix, the warmth gradient, and hold-to-score all came from someone playing
