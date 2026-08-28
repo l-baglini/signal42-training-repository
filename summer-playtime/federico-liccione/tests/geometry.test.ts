@@ -260,3 +260,52 @@ describe('an enemy is an eye', () => {
     }
   })
 })
+
+describe('room texturing', () => {
+  const uv = { u0: 0.25, v0: 0.1, u1: 0.75, v1: 0.6 }
+
+  it('a quad without a uv rect is flat-coloured', () => {
+    const m = quad(-50, -1, 1, -1, 1, [1, 0, 0])
+    expect([...m.textured]).toEqual([0, 0, 0, 0])
+    expect(m.uvs.length).toBe(8)
+  })
+
+  it('a quad with one is textured, with v flipped for image order', () => {
+    // Image v runs downwards and world y runs up, so the bottom of the rectangle
+    // takes the *larger* v. Getting this backwards flips the furniture.
+    const m = quad(-50, -1, 1, -1, 1, [1, 0, 0], uv)
+    expect([...m.textured]).toEqual([1, 1, 1, 1])
+    const ys = [m.positions[1]!, m.positions[4]!, m.positions[7]!, m.positions[10]!]
+    const vs = [m.uvs[1]!, m.uvs[3]!, m.uvs[5]!, m.uvs[7]!]
+    for (let i = 0; i < 4; i++) {
+      // toBeCloseTo, not toBe: these live in a Float32Array, so 0.6 comes back
+      // as 0.60000002.
+      expect(vs[i]).toBeCloseTo(ys[i]! < 0 ? uv.v1 : uv.v0, 6)
+    }
+  })
+
+  it('merge keeps uvs and flags aligned with their vertices', () => {
+    const flat = quad(-10, 0, 1, 0, 1, [1, 0, 0])
+    const tex = quad(-20, 0, 1, 0, 1, [0, 1, 0], uv)
+    const m = merge([flat, tex])
+    expect([...m.textured]).toEqual([0, 0, 0, 0, 1, 1, 1, 1])
+    expect(m.uvs.length).toBe(m.positions.length / 3 * 2)
+  })
+
+  it('buildScene textures only the occluders it was given a rect for', () => {
+    const uvs = [uv, undefined, undefined]
+    const m = buildScene({ occluders: room.occluders, targets: [], occluderUvs: uvs })
+    const flagged = [...m.textured].filter((v) => v === 1).length
+    expect(flagged).toBe(4) // exactly one quad
+  })
+
+  it('a short or missing uv array is not an error', () => {
+    // The array is built from a scan and the scan can be replaced at any moment;
+    // a mismatch must degrade to flat colour rather than throw mid-frame.
+    for (const uvs of [undefined, [], [undefined, uv]]) {
+      const m = buildScene({ occluders: room.occluders, targets: [], occluderUvs: uvs })
+      expect(m.indices.length).toBeGreaterThan(0)
+      for (const v of m.textured) expect(v === 0 || v === 1).toBe(true)
+    }
+  })
+})

@@ -8,9 +8,9 @@
  * `perceive/tracker.ts` is for.
  */
 import { assessEnemies, visible } from './engine'
-import type { Envelope, Point3, RoomScan } from './engine'
+import type { Billboard, Envelope, Point3, RoomScan } from './engine'
 import { validateScan } from './boundary/validate'
-import { buildScene, type EnemyView } from './render/geometry'
+import { buildScene, type EnemyView, type UvRect } from './render/geometry'
 import { Renderer } from './render/renderer'
 import { offAxis, project, symmetric, type Screen } from './render/projection'
 import { createSfx } from './render/sound'
@@ -65,6 +65,17 @@ let room = fixtureRoom
 let roomSource = 'hand-authored fixture'
 let farWallCm = 320
 let scanning = false
+/**
+ * Where each occluder's pixels live in the scanned frame, keyed by geometry.
+ *
+ * Keyed rather than parallel because the semantic pass may drop an occluder or
+ * move it to no-spawn, which would silently shift a parallel array by one and
+ * paint the wrong furniture on the wrong rectangle. Geometry is a safe key
+ * precisely because `applyInventory` is tested never to change it.
+ */
+const geomKey = (b: Billboard): string => `${b.z}|${b.x0}|${b.x1}|${b.y0}|${b.y1}`
+let roomUv = new Map<string, UvRect>()
+let occluderLabels = new Map<string, string>()
 let sessionCents = 0
 let costLines: string[] = []
 let mode: 'window' | 'dolly' = 'window'
@@ -140,6 +151,7 @@ function renderScene(): void {
   renderer.upload(
     buildScene({
       occluders: room.occluders,
+      occluderUvs: room.occluders.map((o) => roomUv.get(geomKey(o))),
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
     }),
@@ -218,6 +230,47 @@ function renderRound(): void {
       `${combat.killed} killed, ${combat.timesShot} times hit, ${combat.escaped} got away, ` +
       `${(accuracy(combat) * 100).toFixed(0)}% accuracy.`
   }
+}
+
+/**
+ * The model's names, floated over the furniture they belong to.
+ *
+ * Cheap, and it is what makes the room read as *yours* rather than as geometry
+ * that happens to have come from a camera. Positioned by projecting the top edge
+ * of each rectangle through the matrix the frame was drawn with.
+ */
+function renderLabels(mvp: Float32Array): void {
+  const host = el('labels')
+  if (occluderLabels.size === 0) {
+    host.textContent = ''
+    return
+  }
+  const positions: Array<{ x: number; y: number; text: string }> = []
+  for (const o of room.occluders) {
+    const text = occluderLabels.get(geomKey(o))
+    if (!text) continue
+    const p = project(mvp, { x: (o.x0 + o.x1) / 2, y: o.y1, z: o.z })
+    if (p.w <= 0 || Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) continue
+    positions.push({
+      x: ((p.x + 1) / 2) * innerWidth,
+      y: ((1 - p.y) / 2) * innerHeight,
+      text,
+    })
+  }
+  if (host.childElementCount !== positions.length) {
+    host.textContent = ''
+    for (const _ of positions) {
+      const d = document.createElement('div')
+      d.className = 'label'
+      host.append(d)
+    }
+  }
+  positions.forEach((p, i) => {
+    const node = host.children[i] as HTMLElement | undefined
+    if (!node) return
+    node.textContent = p.text
+    node.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -120%)`
+  })
 }
 
 function renderExposure(): void {
@@ -339,6 +392,22 @@ async function runScan(): Promise<void> {
       el('scanMeta').textContent = meta
     } else {
       room = report.outcome.scan
+      // The frame becomes the level art, and each piece of cover is drawn with
+      // the pixels it was measured from.
+      roomUv = new Map()
+      occluderLabels = new Map()
+      const found = report.outcome
+      found.scan.occluders.forEach((o, i) => {
+        const box = found.regions[i]
+        if (!box) return
+        roomUv.set(geomKey(o), {
+          u0: box.u0 / found.frameWidth,
+          v0: box.v0 / found.frameHeight,
+          u1: (box.u1 + 1) / found.frameWidth,
+          v1: (box.v1 + 1) / found.frameHeight,
+        })
+      })
+      if (report.canvas) renderer.setRoomTexture(report.canvas)
       roomSource = `your room, ${report.device}/${report.dtype}`
       roundSeed++
       rebuildLineup()
@@ -363,6 +432,10 @@ async function runScan(): Promise<void> {
           // Names and hazards only. It cannot add a candidate, move a rectangle
           // or make a position playable — the engine judges again, unchanged.
           room = applyInventory(room, named.inventory)
+          for (const o of room.occluders) {
+            // The label the model gave, if this rectangle kept one.
+            if (!o.label.startsWith('band-')) occluderLabels.set(geomKey(o), o.label)
+          }
           roomSource = `your room, named`
           rebuildLineup()
           recordCost(named.cost, named.ms, named.dropped, named.typeErrors)
@@ -595,6 +668,7 @@ function frame(now: number): void {
     if (combat.phase !== 'playing') renderHud()
   }
 
+  renderLabels(mvp)
   shake = Math.max(0, shake - 0.045)
   renderer.draw(eye, screen, mode, 340, now / 1000, shake)
   requestAnimationFrame(frame)

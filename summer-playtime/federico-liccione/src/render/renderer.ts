@@ -14,12 +14,18 @@ import { offAxis, symmetric, type Screen } from './projection'
 const VERT = `#version 300 es
 in vec3 aPos;
 in vec3 aColor;
+in vec2 aUv;
+in float aTextured;
 uniform mat4 uMVP;
 out vec3 vColor;
 out float vDepth;
 out vec2 vClip;
+out vec2 vUv;
+out float vTextured;
 void main() {
   vColor = aColor;
+  vUv = aUv;
+  vTextured = aTextured;
   vDepth = -aPos.z;
   gl_Position = uMVP * vec4(aPos, 1.0);
   vClip = gl_Position.xy / max(gl_Position.w, 0.0001);
@@ -30,10 +36,14 @@ precision highp float;
 in vec3 vColor;
 in float vDepth;
 in vec2 vClip;
+in vec2 vUv;
+in float vTextured;
 uniform float uFogFar;
 uniform vec3 uFog;
 uniform float uTime;
 uniform float uShake;
+uniform sampler2D uRoom;
+uniform float uHasRoom;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -42,9 +52,19 @@ float hash(vec2 p) {
 }
 
 void main() {
+  vec3 own = vColor;
+  if (vTextured > 0.5 && uHasRoom > 0.5) {
+    // The room's own pixels, pushed darker and cooler so the game reads on top of
+    // them: a photograph at full brightness competes with everything drawn over
+    // it, and the enemies have to win that fight.
+    vec3 tex = texture(uRoom, vUv).rgb;
+    float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
+    own = mix(vec3(lum) * vec3(0.72, 0.80, 0.96), tex, 0.45) * 0.62;
+  }
+
   // Aerial perspective: a monocular depth cue that works on a flat panel.
   float t = clamp(vDepth / uFogFar, 0.0, 1.0);
-  vec3 c = mix(vColor, uFog, t * 0.72);
+  vec3 c = mix(own, uFog, t * 0.72);
 
   // Vignette. Darkening the edges pushes the eye to the middle, which is where
   // the window is, and costs one dot product.
@@ -78,7 +98,10 @@ export class Renderer {
   private readonly vao: WebGLVertexArrayObject
   private readonly posBuf: WebGLBuffer
   private readonly colBuf: WebGLBuffer
+  private readonly uvBuf: WebGLBuffer
+  private readonly texFlagBuf: WebGLBuffer
   private readonly idxBuf: WebGLBuffer
+  private roomTex: WebGLTexture | null = null
   private indexCount = 0
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -100,16 +123,24 @@ export class Renderer {
     const vao = gl.createVertexArray()
     const posBuf = gl.createBuffer()
     const colBuf = gl.createBuffer()
+    const uvBuf = gl.createBuffer()
+    const texFlagBuf = gl.createBuffer()
     const idxBuf = gl.createBuffer()
-    if (!vao || !posBuf || !colBuf || !idxBuf) throw new Error('buffer allocation failed')
+    if (!vao || !posBuf || !colBuf || !uvBuf || !texFlagBuf || !idxBuf) {
+      throw new Error('buffer allocation failed')
+    }
     this.vao = vao
     this.posBuf = posBuf
     this.colBuf = colBuf
+    this.uvBuf = uvBuf
+    this.texFlagBuf = texFlagBuf
     this.idxBuf = idxBuf
 
     gl.bindVertexArray(vao)
     this.attribute(posBuf, 'aPos', 3)
     this.attribute(colBuf, 'aColor', 3)
+    this.attribute(uvBuf, 'aUv', 2)
+    this.attribute(texFlagBuf, 'aTextured', 1)
 
     gl.enable(gl.DEPTH_TEST)
     gl.clearColor(0.01, 0.02, 0.04, 1)
@@ -130,9 +161,36 @@ export class Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.DYNAMIC_DRAW)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colBuf)
     gl.bufferData(gl.ARRAY_BUFFER, mesh.colors, gl.DYNAMIC_DRAW)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.uvs, gl.DYNAMIC_DRAW)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texFlagBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.textured, gl.DYNAMIC_DRAW)
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW)
     this.indexCount = mesh.indices.length
+  }
+
+  /**
+   * Hand over the frame the room was measured from, to be drawn on the furniture.
+   * Called once per scan; the texture is kept until the next one.
+   */
+  setRoomTexture(source: TexImageSource | null): void {
+    const gl = this.gl
+    if (!source) {
+      this.roomTex = null
+      return
+    }
+    if (!this.roomTex) {
+      const tex = gl.createTexture()
+      if (!tex) return
+      this.roomTex = tex
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.roomTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
   }
 
   /**
@@ -173,6 +231,12 @@ export class Renderer {
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uFog'), 0.02, 0.03, 0.06)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uTime'), timeS)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uHasRoom'), this.roomTex ? 1 : 0)
+    gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
+    if (this.roomTex) {
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, this.roomTex)
+    }
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.bindVertexArray(this.vao)
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0)

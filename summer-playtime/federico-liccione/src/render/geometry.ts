@@ -14,7 +14,19 @@ export interface Mesh {
   readonly positions: Float32Array
   /** rgb per vertex, 0..1. */
   readonly colors: Float32Array
+  /** uv per vertex. Meaningless where `textured` is 0. */
+  readonly uvs: Float32Array
+  /** 1 where the vertex should sample the room texture instead of its colour. */
+  readonly textured: Float32Array
   readonly indices: Uint32Array
+}
+
+/** A rectangle in texture space, 0..1, v measured downwards as images are. */
+export interface UvRect {
+  readonly u0: number
+  readonly v0: number
+  readonly u1: number
+  readonly v1: number
 }
 
 export type Rgb = readonly [number, number, number]
@@ -29,6 +41,7 @@ export function quad(
   y0: number,
   y1: number,
   colour: Rgb,
+  uv?: UvRect,
 ): Mesh {
   const positions = new Float32Array([
     x0, y0, z,
@@ -38,7 +51,13 @@ export function quad(
   ])
   const colors = new Float32Array(12)
   for (let i = 0; i < 4; i++) colors.set(colour, i * 3)
-  return { positions, colors, indices: new Uint32Array(QUAD_INDICES) }
+  // Image v runs downwards while world y runs up, so the rows are swapped here
+  // rather than at every call site.
+  const uvs = uv
+    ? new Float32Array([uv.u0, uv.v1, uv.u1, uv.v1, uv.u0, uv.v0, uv.u1, uv.v0])
+    : new Float32Array(8)
+  const textured = new Float32Array(4).fill(uv ? 1 : 0)
+  return { positions, colors, uvs, textured, indices: new Uint32Array(QUAD_INDICES) }
 }
 
 export function merge(meshes: readonly Mesh[]): Mesh {
@@ -50,21 +69,25 @@ export function merge(meshes: readonly Mesh[]): Mesh {
   }
   const positions = new Float32Array(nv * 3)
   const colors = new Float32Array(nv * 3)
+  const uvs = new Float32Array(nv * 2)
+  const textured = new Float32Array(nv)
   const indices = new Uint32Array(ni)
   let vo = 0
   let io = 0
   for (const m of meshes) {
     positions.set(m.positions, vo * 3)
     colors.set(m.colors, vo * 3)
+    uvs.set(m.uvs, vo * 2)
+    textured.set(m.textured, vo)
     for (let i = 0; i < m.indices.length; i++) indices[io + i] = m.indices[i]! + vo
     vo += m.positions.length / 3
     io += m.indices.length
   }
-  return { positions, colors, indices }
+  return { positions, colors, uvs, textured, indices }
 }
 
-export const occluderMesh = (b: Billboard, colour: Rgb): Mesh =>
-  quad(b.z, b.x0, b.x1, b.y0, b.y1, colour)
+export const occluderMesh = (b: Billboard, colour: Rgb, uv?: UvRect): Mesh =>
+  quad(b.z, b.x0, b.x1, b.y0, b.y1, colour, uv)
 
 /** A target, drawn as a square facing the window at its own depth. */
 export const targetMesh = (t: Target, colour: Rgb): Mesh =>
@@ -257,6 +280,15 @@ export interface SceneInput {
    * invisible, then suddenly visible, with nothing in between to home in on.
    */
   readonly hidingGlow?: number | undefined
+  /**
+   * Where each occluder came from in the scan's frame, so the cover can be drawn
+   * with the pixels it was measured from. Parallel to `occluders`.
+   *
+   * This is the whole point of the scan being visible rather than merely used:
+   * the furniture you are hiding behind is your furniture, with its own image on
+   * it, and nobody has to be told that the level came from the room.
+   */
+  readonly occluderUvs?: readonly (UvRect | undefined)[] | undefined
   readonly enemies?: readonly EnemyView[] | undefined
   readonly backdropZ?: number
 }
@@ -275,7 +307,9 @@ export function buildScene(input: SceneInput): Mesh {
   const parts: Mesh[] = [
     backdropMesh(backdropZ, 260, 170, 16, 11, PALETTE.backdropA, PALETTE.backdropB),
   ]
-  for (const o of input.occluders) parts.push(occluderMesh(o, PALETTE.occluder))
+  input.occluders.forEach((o, i) =>
+    parts.push(occluderMesh(o, PALETTE.occluder, input.occluderUvs?.[i])),
+  )
   for (const o of input.hiding ?? []) {
     const g = Number.isFinite(input.hidingGlow ?? 0)
       ? Math.max(0, Math.min(1, input.hidingGlow ?? 0))
