@@ -1,0 +1,180 @@
+/* ============================================================
+   EspañolFlow — Global Reset & Design Tokens
+   ============================================================ */
+
+/* ---------- Custom properties ---------- */
+:root {
+  /* Brand */
+  --color-primary:        #C60B1E;
+  --color-primary-light:  #F43F5E;
+  --color-primary-dark:   #9B0717;
+  --color-accent:         #F1BF00;
+  --color-accent-light:   #FCD34D;
+
+  /* Surfaces */
+  --color-bg:             #FAFAFA;
+  --color-surface:        #FFFFFF;
+  --color-surface-2:      #F4F4F5;
+  --color-border:         #E4E4E7;
+
+  /* Text */
+  --color-text:           #18181B;
+  --color-text-muted:     #71717A;
+  --color-text-light:     #A1A1AA;
+
+  /* Semantic */
+  --color-success:        #10B981;
+  --color-success-bg:     #ECFDF5;
+  --color-error:          #EF4444;
+  --color-error-bg:       #FEF2F2;
+  --color-warning:        #F59E0B;
+  --color-warning-bg:     #FFFBEB;
+  --color-info:           #3B82F6;
+  --color-info-bg:        #EFF6FF;
+
+  /* Shape */
+  --radius-sm:  6px;
+  --radius-md:  12px;
+  --radius-lg:  20px;
+  --radius-xl:  28px;
+
+  /* Elevation */
+  --shadow-sm:  0 1px 3px  rgba(0, 0, 0, 0.08);
+  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.10);
+  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Typography */
+  --font-sans:  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Motion */
+  --transition: 0.2s ease;
+
+  /* Layout */
+  --max-width:  1100px;
+}
+
+/* ---------- Box-sizing reset ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin:     0;
+  padding:    0;
+}
+
+/* ---------- Base ---------- */
+html {
+  scroll-behavior: smooth;
+  font-size:       16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family:        var(--font-sans);
+  background-color:   var(--color-bg);
+  color:              var(--color-text);
+  line-height:        1.6;
+  min-height:         100vh;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Typography defaults ---------- */
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+a {
+  color:           var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img,
+svg {
+  display:   block;
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size:   inherit;
+}
+
+/* ---------- Utility: container ---------- */
+.container {
+  width:     100%;
+  max-width: var(--max-width);
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+@media (min-width: 640px) {
+  .container {
+    padding-inline: 24px;
+  }
+}
+
+/* ---------- Utility: screen-reader only ---------- */
+.sr-only {
+  position:   absolute;
+  width:      1px;
+  height:     1px;
+  padding:    0;
+  margin:     -1px;
+  overflow:   hidden;
+  clip:       rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border:     0;
+}
+
+/* ---------- Utility: flex helpers ---------- */
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  display:        flex;
+  flex-direction: column;
+}
+
+/* ---------- Utility: gap ---------- */
+.gap-4  { gap: 4px;  }
+.gap-8  { gap: 8px;  }
+.gap-12 { gap: 12px; }
+.gap-16 { gap: 16px; }
+.gap-20 { gap: 20px; }
+.gap-24 { gap: 24px; }
+.gap-32 { gap: 32px; }
+
+/* ---------- Utility: margin-top ---------- */
+.mt-4  { margin-top: 4px;  }
+.mt-8  { margin-top: 8px;  }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.mt-24 { margin-top: 24px; }
+.mt-32 { margin-top: 32px; }
+.mt-48 { margin-top: 48px; }
+
+/* ---------- Utility: margin-bottom ---------- */
+.mb-4  { margin-bottom: 4px;  }
+.mb-8  { margin-bottom: 8px;  }
+.mb-12 { margin-bottom: 12px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-20 { margin-bottom: 20px; }
+.mb-24 { margin-bottom: 24px; }
+.mb-32 { margin-bottom: 32px; }
+.mb-48 { margin-bottom: 48px; }
+
+/* ---------- Utility: text alignment ---------- */
+.text-center { text-align: center; }
+.text-left   { text-align: left;   }
+.text-right  { text-align: right;  }

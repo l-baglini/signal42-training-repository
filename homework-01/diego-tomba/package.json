@@ -1,0 +1,55 @@
+{
+  "name": "repowatcher",
+  "version": "0.1.0",
+  "description": "Monitor GitHub/GitLab repositories with AI-powered storytelling and Claude Agent SDK cost estimation",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "bin": {
+    "repowatcher": "src/presentation/cli/index.ts"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "worker": "tsx worker/index.ts",
+    "cli": "tsx src/presentation/cli/index.ts",
+    "agent": "tsx src/presentation/cli/index.ts agent",
+    "watch": "tsx src/presentation/cli/index.ts watch",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/domain/services/estimator.service.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@inquirer/prompts": "^7.2.0",
+    "@prisma/client": "^6.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "commander": "^13.0.0",
+    "lucide-react": "^0.469.0",
+    "next": "^15.1.4",
+    "node-cron": "^3.0.3",
+    "octokit": "^4.1.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.3",
+    "recharts": "^2.15.0",
+    "remark-gfm": "^4.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "^6.2.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5.8.0"
+  }
+}
