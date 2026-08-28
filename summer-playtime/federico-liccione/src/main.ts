@@ -86,6 +86,9 @@ let round: RoundState = newRound(DEFAULT_CONFIG)
 let huntIndex = -1
 let huntMask: Uint8Array | null = null
 let hiding: Billboard[] = []
+/** Where the current hunt's revealing viewpoint is — and where threats go. */
+let peekAt: Point3 | null = null
+let holdFraction: number[] = []
 
 /** How long the player is left to search before the game offers a direction. */
 const HINT_AFTER_S = 2.5
@@ -108,6 +111,7 @@ function regenerate(): void {
   })
   revealed = targets.map(() => false)
   everRevealed = targets.map(() => false)
+  holdFraction = targets.map(() => 0)
   round = newRound(DEFAULT_CONFIG)
   renderScene()
   renderHud()
@@ -121,6 +125,7 @@ function renderScene(): void {
       occluders: room.occluders,
       targets,
       revealed,
+      hold: playing ? holdFraction : undefined,
       active: playing ? round.active.map((a) => a.index) : undefined,
       threat:
         playing && round.threat
@@ -151,6 +156,7 @@ function renderRound(): void {
   }
   panel.style.display = 'block'
   el('hint').style.display = 'none'
+  el('hold').style.display = 'none'
   if (level.kind === 'refusal') {
     el('roundTitle').textContent = 'No round to play'
     el('roundBody').textContent = 'This room will not make a fair level. Press w to put the furniture back.'
@@ -169,6 +175,22 @@ function renderRound(): void {
     el('roundBody').textContent =
       `${round.revealed} found, ${round.missed} missed, ${round.hits} hit, ${round.dodged} dodged.`
   }
+}
+
+function renderHold(heldS: number, index: number): void {
+  const panel = el('hold')
+  if (index < 0 || !revealed[index]) {
+    // Still shown while draining, so losing the position reads as a loss rather
+    // than as nothing happening.
+    if (heldS <= 0) {
+      panel.style.display = 'none'
+      return
+    }
+  }
+  panel.style.display = 'block'
+  const f = Math.min(1, heldS / DEFAULT_CONFIG.holdS)
+  el<HTMLElement>('holdFill').style.width = `${(f * 100).toFixed(0)}%`
+  el('holdLabel').textContent = revealed[index] ? 'HOLD IT' : 'KEEP IT IN VIEW'
 }
 
 /**
@@ -407,6 +429,11 @@ function frame(now: number): void {
       // The gate. A threat the engine says this player cannot dodge from where
       // they are is never spawned, and the game has no way to overrule it.
       maySpawn: (threat) => shouldSpawn(lattice, threat, envelope, eye),
+      // Aimed at the place the player needs to be, not the place they are. This
+      // is what makes holding a decision: the scoring position and the safe
+      // position stop being the same position. The gate above still guarantees
+      // an escape exists.
+      aimAt: peekAt,
     })
     // Track which target is being hunted, and what is hiding it. The mask is
     // the same footprint the engine used to decide the target was fair, so the
@@ -424,6 +451,13 @@ function frame(now: number): void {
       index >= 0 && targets[index]
         ? blockingOccluders(eye, targets[index]!.at, room.occluders)
         : []
+    peekAt = huntMask ? (nearestRevealing(lattice, huntMask, eye)?.at ?? null) : null
+
+    holdFraction = targets.map(() => 0)
+    if (active && index >= 0) {
+      holdFraction[index] = Math.min(1, active.heldS / DEFAULT_CONFIG.holdS)
+    }
+    renderHold(active ? active.heldS : 0, index)
     renderHint(active ? round.tS - active.bornS : 0, index, eye)
 
     for (const ev of round.events) if (ev.kind === 'hit') flash()

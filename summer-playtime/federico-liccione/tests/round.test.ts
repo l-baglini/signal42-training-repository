@@ -59,26 +59,66 @@ describe('scoring', () => {
   })
 })
 
-describe('targets', () => {
-  it('a revealed target scores and leaves', () => {
+/** Ticks at 20 Hz over a span, with a fixed visibility vector. */
+function span(fromS: number, toS: number, visible: boolean[]): Tick[] {
+  const out: Tick[] = []
+  for (let t = fromS; t <= toS + 1e-9; t += 0.05) out.push(tick(Number(t.toFixed(3)), visible))
+  return out
+}
+
+describe('targets must be held, not brushed past', () => {
+  it('a glimpse scores nothing', () => {
+    const { state } = run([
+      tick(0, [false, false]),
+      tick(0.05, [true, false]),
+      tick(0.1, [false, false]),
+    ])
+    expect(state.revealed).toBe(0)
+    expect(state.score).toBe(0)
+    expect(state.active).toHaveLength(1)
+  })
+
+  it('holding it for the hold time scores and leaves', () => {
     const { state, events } = run([
       tick(0, [false, false]),
-      tick(0.1, [true, false]),
+      ...span(0.05, cfg.holdS + 0.3, [true, false]),
     ])
     expect(state.revealed).toBe(1)
     expect(state.active).toHaveLength(0)
     expect(events.some((e) => e.kind === 'revealed')).toBe(true)
-    // Base value, plus a promptness bonus of up to half again.
     expect(state.score).toBeGreaterThanOrEqual(pointsFor(SPECS[0]!))
     expect(state.score).toBeLessThanOrEqual(Math.round(pointsFor(SPECS[0]!) * 1.5))
   })
 
+  it('progress drains when sight is lost, rather than resetting', () => {
+    // A flicker from the tracker must not wipe a second of held position, and in
+    // poor light flickers happen.
+    const { state } = run([
+      tick(0, [false, false]),
+      ...span(0.05, 0.6, [true, false]),
+      tick(0.65, [false, false]),
+      ...span(0.7, 1.2, [true, false]),
+    ])
+    expect(state.revealed).toBe(1)
+  })
+
+  it('but a long interruption really does lose it', () => {
+    const { state } = run([
+      tick(0, [false, false]),
+      ...span(0.05, 0.6, [true, false]),
+      ...span(0.65, 2.5, [false, false]),
+      tick(2.55, [true, false]),
+    ])
+    expect(state.revealed).toBe(0)
+    expect(state.active[0]!.heldS).toBeLessThan(0.2)
+  })
+
   it('finding it sooner is worth more than finding it late', () => {
-    const quick = run([tick(0, [false, false]), tick(0.2, [true, false])])
+    const quick = run([tick(0, [false, false]), ...span(0.05, cfg.holdS + 0.2, [true, false])])
     const slow = run([
       tick(0, [false, false]),
-      tick(cfg.targetLifeS - 0.3, [false, false]),
-      tick(cfg.targetLifeS - 0.2, [true, false]),
+      ...span(0.05, cfg.targetLifeS - cfg.holdS - 0.5, [false, false]),
+      ...span(cfg.targetLifeS - cfg.holdS - 0.45, cfg.targetLifeS - 0.1, [true, false]),
     ])
     expect(quick.state.score).toBeGreaterThan(slow.state.score)
   })
@@ -100,13 +140,18 @@ describe('targets', () => {
   })
 
   it('works through the targets rather than repeating one', () => {
+    // Note the gap of nothing-visible between the two: a target that is already
+    // in view when its turn comes is skipped, so the script has to look like
+    // real play — the next one appears while you are not looking at it.
     const { events } = run([
       tick(0, [false, false]),
-      tick(0.1, [true, false]),
-      tick(0.6, [false, false]),
-      tick(0.7, [false, true]),
+      ...span(0.05, cfg.holdS + 0.2, [true, false]),
+      ...span(cfg.holdS + 0.3, cfg.holdS + 1.0, [false, false]),
+      ...span(cfg.holdS + 1.05, cfg.holdS * 2 + 1.5, [false, true]),
     ])
-    const indices = events.filter((e) => e.kind === 'revealed').map((e) => (e as { index: number }).index)
+    const indices = events
+      .filter((e) => e.kind === 'revealed')
+      .map((e) => (e as { index: number }).index)
     expect(indices).toEqual([0, 1])
   })
 })
@@ -207,6 +252,34 @@ describe('the round ends', () => {
   it('immediately, if the engine shipped no targets — a refusal is not a round', () => {
     const state = step(start(newRound(cfg), cfg), cfg, [], tick(0, []))
     expect(state.phase).toBe('over')
+  })
+})
+
+describe('threats can be aimed at the place the player needs to be', () => {
+  it('aimAt overrides the eye, so the safe place and the scoring place differ', () => {
+    const peek: Point3 = { x: 18, y: 0, z: 60 }
+    const ticks = []
+    for (let t = 0; t <= 20; t += 0.2) {
+      ticks.push({ tS: t, eye: EYE, visible: [false, false], maySpawn: always, aimAt: peek })
+    }
+    let state = start(newRound(cfg), cfg)
+    let landed: { x: number; y: number } | null = null
+    for (const t of ticks) {
+      state = step(state, cfg, SPECS, t)
+      if (state.threat) landed = { x: state.threat.to.x, y: state.threat.to.y }
+    }
+    expect(landed).toEqual({ x: peek.x, y: peek.y })
+  })
+
+  it('and standing at that place when it lands is a hit', () => {
+    const peek: Point3 = { x: 18, y: 0, z: 60 }
+    const ticks = []
+    for (let t = 0; t <= 20; t += 0.2) {
+      ticks.push({ tS: t, eye: peek, visible: [false, false], maySpawn: always, aimAt: peek })
+    }
+    let state = start(newRound(cfg), cfg)
+    for (const t of ticks) state = step(state, cfg, SPECS, t)
+    expect(state.hits).toBeGreaterThan(0)
   })
 })
 

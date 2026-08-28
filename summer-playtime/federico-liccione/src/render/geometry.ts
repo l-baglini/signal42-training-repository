@@ -120,6 +120,12 @@ export function frameMesh(
   ])
 }
 
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+]
+
 export const PALETTE = {
   occluder: [0.16, 0.18, 0.24] as Rgb,
   target: [0.32, 0.88, 0.68] as Rgb,
@@ -137,6 +143,8 @@ export interface SceneInput {
   readonly targets: readonly Target[]
   /** Parallel to `targets`: whether each is currently visible from the eye. */
   readonly revealed?: readonly boolean[]
+  /** Parallel to `targets`: how much of the required hold is accumulated, 0..1. */
+  readonly hold?: readonly number[] | undefined
   /**
    * Which targets are in play. Everything else is drawn dim: a target that is
    * not being hunted must still occlude and still be *there*, or the room stops
@@ -177,9 +185,15 @@ export function buildScene(input: SceneInput): Mesh {
   input.targets.forEach((t, i) => {
     const on = input.revealed?.[i] ?? false
     const inPlay = input.active ? input.active.includes(i) : true
-    parts.push(
-      targetMesh(t, on ? PALETTE.targetRevealed : inPlay ? PALETTE.target : PALETTE.targetIdle),
-    )
+    const base = on ? PALETTE.target : inPlay ? PALETTE.target : PALETTE.targetIdle
+    // Filling towards the scoring colour as the hold accumulates: the player has
+    // to know the position is *counting*, not merely correct.
+    //
+    // Number.isFinite first, because Math.max(0, Math.min(1, NaN)) is NaN and a
+    // NaN channel silently paints nothing at all. A test found this.
+    const raw = input.hold?.[i] ?? 0
+    const f = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0
+    parts.push(targetMesh(t, mix(base, PALETTE.targetRevealed, f)))
   })
   if (input.threatMarker) {
     const { at, radius } = input.threatMarker

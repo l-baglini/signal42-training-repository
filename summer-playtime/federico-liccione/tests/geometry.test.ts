@@ -94,11 +94,39 @@ describe('buildScene', () => {
     for (const t of targets) expect(depths.has(t.at.z)).toBe(true)
   })
 
-  it('a revealed target is coloured differently from a hidden one', () => {
-    const hidden = buildScene({ occluders: room.occluders, targets, revealed: [false, false, false] })
-    const shown = buildScene({ occluders: room.occluders, targets, revealed: [true, false, false] })
-    expect(hidden.colors).not.toEqual(shown.colors)
-    expect(hidden.positions).toEqual(shown.positions)
+  it('a target fills towards the scoring colour as it is held', () => {
+    /**
+     * The colour tracks the hold, not mere visibility — and that is the point.
+     * A hidden target's colour is irrelevant because it cannot be seen; the only
+     * moment the player is looking at one, what matters is whether the position
+     * is *counting*.
+     */
+    const none = buildScene({ occluders: room.occluders, targets, hold: [0, 0, 0] })
+    const half = buildScene({ occluders: room.occluders, targets, hold: [0.5, 0, 0] })
+    const full = buildScene({ occluders: room.occluders, targets, hold: [1, 0, 0] })
+    expect(none.colors).not.toEqual(half.colors)
+    expect(half.colors).not.toEqual(full.colors)
+    expect(none.positions).toEqual(half.positions)
+
+    // Monotone: partway through must sit between the two ends on every channel.
+    const at = (m: typeof none, i: number) => m.colors[m.colors.length - targets.length * 12 + i]!
+    for (let c = 0; c < 3; c++) {
+      const lo = Math.min(at(none, c), at(full, c))
+      const hi = Math.max(at(none, c), at(full, c))
+      expect(at(half, c)).toBeGreaterThanOrEqual(lo - 1e-6)
+      expect(at(half, c)).toBeLessThanOrEqual(hi + 1e-6)
+    }
+  })
+
+  it('a hold value out of range cannot produce a colour out of range', () => {
+    for (const h of [-5, 2, NaN]) {
+      const m = buildScene({ occluders: room.occluders, targets, hold: [h, h, h] })
+      for (const v of m.colors) {
+        expect(Number.isFinite(v)).toBe(true)
+        expect(v).toBeGreaterThanOrEqual(0)
+        expect(v).toBeLessThanOrEqual(1)
+      }
+    }
   })
 
   it('a target not in play is drawn dim, but is still drawn', () => {

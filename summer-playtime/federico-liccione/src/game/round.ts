@@ -18,6 +18,17 @@ export interface RoundConfig {
   readonly durationS: number
   /** How long a target stays live before it counts as missed. */
   readonly targetLifeS: number
+  /**
+   * How long the target must be held in view to score.
+   *
+   * The single most important number in the game. With an instantaneous reveal,
+   * a peek window 1.8 cm wide and one 5 cm wide play identically — you sweep
+   * through both — so the difficulty the engine measures is never felt. Holding
+   * makes narrowness physical.
+   */
+  readonly holdS: number
+  /** How fast progress drains when the target is lost, as a multiple of real time. */
+  readonly holdDecay: number
   readonly threatEveryS: number
   readonly threatFlightS: number
   readonly threatRadiusCm: number
@@ -28,7 +39,11 @@ export interface RoundConfig {
 
 export const DEFAULT_CONFIG: RoundConfig = {
   durationS: 90,
-  targetLifeS: 7,
+  targetLifeS: 9,
+  holdS: 1.0,
+  // Draining rather than resetting: a flicker from the tracker must not wipe a
+  // second of held position, and in poor light flickers happen.
+  holdDecay: 1.6,
   threatEveryS: 11,
   threatFlightS: 1.8,
   threatRadiusCm: 8,
@@ -46,6 +61,8 @@ export interface ActiveTarget {
   readonly index: number
   readonly bornS: number
   readonly deadlineS: number
+  /** Seconds of continuous sight accumulated, drained when sight is lost. */
+  readonly heldS: number
 }
 
 export type RoundEvent =
@@ -76,6 +93,13 @@ export interface RoundState {
 
 export interface Tick {
   readonly tS: number
+  /**
+   * Where a threat should be aimed, when the game wants it aimed somewhere other
+   * than the player. The app passes the viewpoint that reveals the current
+   * target, which is what makes holding a position a decision rather than a
+   * formality — the safe place and the scoring place stop being the same place.
+   */
+  readonly aimAt?: Point3 | null
   readonly eye: Point3
   /** Per target index: is it visible from the eye right now. */
   readonly visible: readonly boolean[]
@@ -140,6 +164,7 @@ export function step(
   if (specs.length === 0) return { ...state, phase: 'over', events: [{ kind: 'over' }] }
 
   const events: RoundEvent[] = []
+  const dtS = Math.max(0, Math.min(0.25, tick.tS - state.tS))
   let { score, revealed, missed, hits, dodged, cursor, nextTargetAtS, nextThreatAtS, endsAtS } = state
   let threat = state.threat
   const tS = tick.tS
@@ -147,7 +172,11 @@ export function step(
   // --- targets: revealed, or expired
   const active: ActiveTarget[] = []
   for (const a of state.active) {
-    if (tick.visible[a.index]) {
+    const heldS = tick.visible[a.index]
+      ? a.heldS + dtS
+      : Math.max(0, a.heldS - dtS * cfg.holdDecay)
+
+    if (heldS >= cfg.holdS) {
       // Promptness bonus: finding it in the first second is worth half again as
       // much as finding it on the last. It rewards committing to a lean instead
       // of sweeping the room.
@@ -165,7 +194,7 @@ export function step(
       nextTargetAtS = tS + 0.4
       continue
     }
-    active.push(a)
+    active.push({ ...a, heldS })
   }
 
   // --- introduce the next target, skipping any already visible from here:
@@ -174,7 +203,7 @@ export function step(
     for (let attempt = 0; attempt < specs.length; attempt++) {
       const index = (cursor + attempt) % specs.length
       if (tick.visible[index]) continue
-      active.push({ index, bornS: tS, deadlineS: tS + cfg.targetLifeS })
+      active.push({ index, bornS: tS, deadlineS: tS + cfg.targetLifeS, heldS: 0 })
       cursor = index + 1
       break
     }
@@ -204,7 +233,10 @@ export function step(
       // Aimed at where you are now, and it stops at the glass. Travelling all
       // the way to the eye is what made it fill the screen and become
       // unreadable — at the window plane its size is bounded by the screen.
-      to: { x: tick.eye.x, y: tick.eye.y, z: 0 },
+      // Aimed at where the player NEEDS to be when the game supplies it, and at
+      // where they are otherwise. Either way it stops at the glass, and either
+      // way the gate below decides whether it may exist at all.
+      to: { x: (tick.aimAt ?? tick.eye).x, y: (tick.aimAt ?? tick.eye).y, z: 0 },
       tSpawn: tS,
       tImpact: tS + cfg.threatFlightS,
       radius: cfg.threatRadiusCm,
