@@ -15,7 +15,12 @@ import type { Billboard, Point3, RoomScan, ScanSource } from '../engine'
 /** Limits are stated here, once, and are the only place clamping happens. */
 export const LIMITS = {
   maxOccluders: 24,
-  maxAnchors: 64,
+  /**
+   * Generous on purpose. Perception should propose freely and let the engine
+   * judge — a scan that offers 180 candidate positions and has 12 accepted is
+   * the pipeline working, not the pipeline being wasteful.
+   */
+  maxAnchors: 256,
   maxNoSpawn: 12,
   /** cm behind the window. Nothing usable sits closer than 5 cm or past 6 m. */
   zNear: -5,
