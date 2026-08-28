@@ -8,9 +8,13 @@ import {
   backdropHalfExtent,
   backdropMesh,
   buildScene,
+  contactShadowMesh,
+  coverMesh,
   enemyMesh,
+  environmentMesh,
   merge,
   quad,
+  quad3,
   targetMesh,
 } from '../src/render/geometry'
 import type { EnemyView } from '../src/render/geometry'
@@ -322,5 +326,139 @@ describe('room texturing', () => {
       // 0 flat, 1 textured, 2 sky: a mode rather than a boolean.
       for (const v of m.textured) expect([0, 1, 2]).toContain(v)
     }
+  })
+})
+
+describe('the place the cover stands in', () => {
+  const env = environmentMesh()
+
+  it('is real 3D, not screen-parallel', () => {
+    /**
+     * The point of it. The rectangle constraint applies to the *solver*, and only
+     * to cover — I had been applying it to the whole renderer, which is why the
+     * levels looked like floating cards for so long. A floor whose vertices all
+     * shared one z would mean nothing had changed.
+     */
+    const zs = new Set<number>()
+    for (let i = 2; i < env.positions.length; i += 3) zs.add(Math.round(env.positions[i]!))
+    expect(zs.size).toBeGreaterThan(8)
+  })
+
+  it('encloses the play space on four sides', () => {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (let i = 0; i < env.positions.length; i += 3) {
+      minX = Math.min(minX, env.positions[i]!)
+      maxX = Math.max(maxX, env.positions[i]!)
+      minY = Math.min(minY, env.positions[i + 1]!)
+      maxY = Math.max(maxY, env.positions[i + 1]!)
+    }
+    expect(minX).toBeLessThan(-80)
+    expect(maxX).toBeGreaterThan(80)
+    expect(minY).toBeLessThan(-40)
+    expect(maxY).toBeGreaterThan(40)
+  })
+
+  it('brightens with distance, which is what does the lighting', () => {
+    // The far end is bright because the sky is behind it; the near end is nearly
+    // black. That gradient is the whole lighting rig.
+    let nearest = { z: -Infinity, lum: 0 }
+    let furthest = { z: Infinity, lum: 0 }
+    for (let v = 0; v < env.positions.length / 3; v++) {
+      const z = env.positions[v * 3 + 2]!
+      const lum = env.colors[v * 3]! + env.colors[v * 3 + 1]! + env.colors[v * 3 + 2]!
+      if (z > nearest.z) nearest = { z, lum }
+      if (z < furthest.z) furthest = { z, lum }
+    }
+    expect(furthest.lum).toBeGreaterThan(nearest.lum * 1.5)
+  })
+
+  it('every index points at a vertex it has', () => {
+    const vertices = env.positions.length / 3
+    for (const i of env.indices) expect(i).toBeLessThan(vertices)
+  })
+
+  it('quad3 accepts four arbitrary points', () => {
+    const m = quad3(
+      { x: 0, y: 0, z: -10 }, { x: 5, y: 0, z: -20 },
+      { x: 0, y: 5, z: -30 }, { x: 5, y: 5, z: -40 },
+      [1, 0, 0],
+    )
+    expect(m.positions.length).toBe(12)
+    expect(m.indices.length).toBe(6)
+    expect([...new Set([...m.positions].filter((_, i) => i % 3 === 2))].length).toBe(4)
+  })
+})
+
+describe('cover as a silhouette', () => {
+  const b = { z: -50, x0: -30, x1: 10, y0: -25, y1: 35, label: 'a wall' }
+
+  it('never draws outside the rectangle the solver reasons about', () => {
+    /**
+     * The rule the art is not allowed to break, and the reason there is no rock
+     * silhouette with transparent corners anywhere in this project: the solver
+     * treats the rectangle as solid, so anything drawn outside it — or any gap
+     * left inside it — is the picture lying about the rules.
+     */
+    for (const mesh of [coverMesh(b), coverMesh(b, { u0: 0, v0: 0, u1: 1, v1: 1 })]) {
+      for (let i = 0; i < mesh.positions.length; i += 3) {
+        expect(mesh.positions[i]!).toBeGreaterThanOrEqual(b.x0 - 1e-6)
+        expect(mesh.positions[i]!).toBeLessThanOrEqual(b.x1 + 1e-6)
+        expect(mesh.positions[i + 1]!).toBeGreaterThanOrEqual(b.y0 - 1e-6)
+        expect(mesh.positions[i + 1]!).toBeLessThanOrEqual(b.y1 + 1e-6)
+        expect(mesh.positions[i + 2]!).toBe(b.z)
+      }
+    }
+  })
+
+  it('covers the rectangle completely, top to bottom', () => {
+    const m = coverMesh(b)
+    const ys = [...m.positions].filter((_, i) => i % 3 === 1)
+    expect(Math.min(...ys)).toBeCloseTo(b.y0, 6)
+    expect(Math.max(...ys)).toBeCloseTo(b.y1, 6)
+  })
+
+  it('is lighter at the top than at the bottom', () => {
+    const m = coverMesh(b)
+    const lumAt = (targetY: number) => {
+      for (let v = 0; v < m.positions.length / 3; v++) {
+        if (Math.abs(m.positions[v * 3 + 1]! - targetY) < 1e-6) {
+          return m.colors[v * 3]! + m.colors[v * 3 + 1]! + m.colors[v * 3 + 2]!
+        }
+      }
+      return 0
+    }
+    expect(lumAt(b.y1)).toBeGreaterThan(lumAt(b.y0) * 3)
+  })
+
+  it('drops the gradient when given a texture, because a photo fights it', () => {
+    const plain = coverMesh(b)
+    const textured = coverMesh(b, { u0: 0, v0: 0, u1: 1, v1: 1 })
+    expect([...textured.textured].every((v) => v === 1)).toBe(true)
+    expect([...plain.textured].every((v) => v === 0)).toBe(true)
+  })
+})
+
+describe('contact shadows', () => {
+  const b = { z: -50, x0: -20, x1: 20, y0: -10, y1: 30, label: 'block' }
+
+  it('lie on the floor and reach away from the viewer', () => {
+    const m = contactShadowMesh(b, -64)
+    const ys = [...m.positions].filter((_, i) => i % 3 === 1)
+    for (const y of ys) expect(y).toBeCloseTo(-63.6, 5)
+    const zs = [...m.positions].filter((_, i) => i % 3 === 2)
+    expect(Math.min(...zs)).toBeLessThan(b.z)
+    expect(Math.max(...zs)).toBe(b.z)
+  })
+
+  it('are widest away from the object, as a soft shadow is', () => {
+    const m = contactShadowMesh(b, -64)
+    const near = [m.positions[0]!, m.positions[3]!]
+    const far = [m.positions[6]!, m.positions[9]!]
+    expect(Math.max(...far) - Math.min(...far)).toBeGreaterThan(
+      Math.max(...near) - Math.min(...near),
+    )
   })
 })

@@ -11,7 +11,6 @@ import { assessEnemies, onScreen, visible } from './engine'
 import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView, type UvRect } from './render/geometry'
-import { buildMaterialAtlas, materialFor, materialUv } from './render/materials'
 import { Renderer } from './render/renderer'
 import { offAxis, project, symmetric, type Screen } from './render/projection'
 import { createSfx } from './render/sound'
@@ -94,29 +93,11 @@ let scanning = false
 const geomKey = (b: Billboard): string => `${b.z}|${b.x0}|${b.x1}|${b.y0}|${b.y1}`
 let roomUv = new Map<string, UvRect>()
 let occluderLabels = new Map<string, string>()
-/**
- * Materials come from the labels, and the labels come from three writers: the
- * hand-authored levels, the vision model naming a scanned room, and the language
- * model laying one out. So the semantic layer that already exists is also the art
- * direction, and a scanned room is drawn as stone and wood and glass rather than
- * as a grainy photograph of itself.
- */
-const materialAtlas = buildMaterialAtlas()
-/** True when showing the webcam frame instead. Off by default; `t` toggles. */
+/** The scanned frame, once there is one. `t` switches to it. */
 let showPhoto = false
 /** Set by the level's own words. See `weatherFor`. */
 let rain = 0
 
-const materialUvs = (): (UvRect | undefined)[] =>
-  room.occluders.map((o) => materialUv(materialFor(o.label)))
-
-/**
- * Weather from the level's name and blurb.
- *
- * The same trick as the materials, and for the same reason: a level that calls
- * itself rainy should be rainy without anybody adding a field for it, and the
- * model writes those words already.
- */
 function weatherFor(text: string): number {
   const t = text.toLowerCase()
   for (const w of ['rain', 'pioggia', 'storm', 'tempesta', 'downpour', 'temporale', 'wet', 'bagnat']) {
@@ -232,7 +213,7 @@ function renderScene(): void {
   renderer.upload(
     buildScene({
       occluders: room.occluders,
-      occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : materialUvs(),
+      occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : undefined,
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
       threatMarker:
@@ -804,13 +785,13 @@ addEventListener('keydown', (e) => {
      * something a stone texture cannot buy.
      */
     showPhoto = !showPhoto && photoTexture !== null
-    renderer.setRoomTexture(showPhoto ? photoTexture : materialAtlas)
+    renderer.setRoomTexture(showPhoto ? photoTexture : null)
     renderer.posterise = showPhoto
     el('tracker').textContent = showPhoto
-      ? 'showing your room'
+      ? 'showing your room on the cover'
       : photoTexture
-        ? 'showing materials'
-        : 'no scan yet — materials only (press p with the webcam on)'
+        ? 'plain silhouettes'
+        : 'no scan yet — press p with the webcam on'
   } else if (k === 'n') {
     sfx.setEnabled(!sfx.enabled)
     el('tracker').textContent = sfx.enabled ? 'sound on' : 'sound off'
@@ -842,7 +823,15 @@ el('hud').classList.add('collapsed')
  * the experience hostage to their furniture. The scan stays a capability, not the
  * game.
  */
-renderer.setRoomTexture(materialAtlas)
+/**
+ * No texture by default.
+ *
+ * A playtester's verdict on the procedural materials was that they were ugly and
+ * made the levels harder to read, which is worse than ugly. The look now comes
+ * from lighting and from a place to stand in — a graded floor, walls, a bright sky
+ * behind — rather than from surface detail on a rectangle. The scanned photograph
+ * is still one keypress away for anyone who wants to recognise their own room.
+ */
 renderer.roomLevel = 1
 renderer.posterise = false
 rain = weatherFor(`${rooms[0]!.name} ${rooms[0]!.blurb}`)

@@ -67,6 +67,30 @@ export function quad(
   return { positions, colors, uvs, textured, indices: new Uint32Array(QUAD_INDICES) }
 }
 
+/**
+ * A quad from four arbitrary points, with a colour each.
+ *
+ * The constraint that cover must be screen-parallel applies to the *solver*, not
+ * to the renderer — and only to cover. Everything that occludes nothing may be
+ * any shape at all, which is what makes a floor, side walls and a ceiling
+ * possible. Recognising that took embarrassingly long.
+ *
+ * Winding is a, b, d / a, d, c so that (a,b) is one edge and (c,d) the opposite
+ * one; back faces are not culled, so a wall is visible from either side.
+ */
+export function quad3(
+  a: Point3, b: Point3, c: Point3, d: Point3,
+  ca: Rgb, cb: Rgb = ca, cc: Rgb = ca, cd: Rgb = cb,
+): Mesh {
+  return {
+    positions: new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z]),
+    colors: new Float32Array([...ca, ...cb, ...cc, ...cd]),
+    uvs: new Float32Array(8),
+    textured: new Float32Array(4),
+    indices: new Uint32Array([0, 1, 3, 0, 3, 2]),
+  }
+}
+
 export function merge(meshes: readonly Mesh[]): Mesh {
   let nv = 0
   let ni = 0
@@ -95,6 +119,137 @@ export function merge(meshes: readonly Mesh[]): Mesh {
 
 export const occluderMesh = (b: Billboard, colour: Rgb, uv?: UvRect): Mesh =>
   quad(b.z, b.x0, b.x1, b.y0, b.y1, colour, uv)
+
+export interface EnvironmentOptions {
+  readonly nearZ?: number
+  readonly farZ?: number
+  readonly halfWidth?: number
+  readonly floorY?: number
+  readonly ceilingY?: number
+  readonly bands?: number
+}
+
+const ENV_DEFAULTS = {
+  nearZ: -14,
+  farZ: -500,
+  halfWidth: 118,
+  floorY: -64,
+  ceilingY: 66,
+  bands: 22,
+} as const
+
+/**
+ * The room the cover stands in: floor, ceiling and two side walls, in real 3D.
+ *
+ * None of it occludes anything, so none of it has to be screen-parallel — a
+ * constraint I had been applying to the whole renderer when it only ever applied
+ * to the solver, and only to cover. This is what turns a set of floating cards
+ * into a place.
+ *
+ * Colour is graded by depth rather than lit: the far end is bright because the sky
+ * is behind it, the near end is almost black. That single gradient does the work
+ * of a lighting rig, and it is what makes a rectangle read as a silhouette rather
+ * than as a placeholder.
+ */
+export function environmentMesh(opts: EnvironmentOptions = {}): Mesh {
+  const o = { ...ENV_DEFAULTS, ...opts }
+  const parts: Mesh[] = []
+  const span = o.nearZ - o.farZ
+
+  for (let i = 0; i < o.bands; i++) {
+    const z0 = o.nearZ - (span * i) / o.bands
+    const z1 = o.nearZ - (span * (i + 1)) / o.bands
+    const t0 = i / o.bands
+    const t1 = (i + 1) / o.bands
+    // Slight banding between strips, so the recession is legible as distance
+    // rather than as a smooth wash.
+    const stripe = i % 2 === 0 ? 1 : 0.88
+
+    const grade = (near: Rgb, far: Rgb, t: number): Rgb => {
+      const e = Math.pow(t, 0.72) * stripe
+      return [
+        near[0] + (far[0] - near[0]) * e,
+        near[1] + (far[1] - near[1]) * e,
+        near[2] + (far[2] - near[2]) * e,
+      ]
+    }
+
+    const fl0 = grade(PALETTE.floorNear, PALETTE.floorFar, t0)
+    const fl1 = grade(PALETTE.floorNear, PALETTE.floorFar, t1)
+    parts.push(quad3(
+      { x: -o.halfWidth, y: o.floorY, z: z0 }, { x: o.halfWidth, y: o.floorY, z: z0 },
+      { x: -o.halfWidth, y: o.floorY, z: z1 }, { x: o.halfWidth, y: o.floorY, z: z1 },
+      fl0, fl0, fl1, fl1,
+    ))
+
+    const ce0 = grade(PALETTE.ceilingNear, PALETTE.ceilingFar, t0)
+    const ce1 = grade(PALETTE.ceilingNear, PALETTE.ceilingFar, t1)
+    parts.push(quad3(
+      { x: -o.halfWidth, y: o.ceilingY, z: z0 }, { x: o.halfWidth, y: o.ceilingY, z: z0 },
+      { x: -o.halfWidth, y: o.ceilingY, z: z1 }, { x: o.halfWidth, y: o.ceilingY, z: z1 },
+      ce0, ce0, ce1, ce1,
+    ))
+
+    const wa0 = grade(PALETTE.wallNear, PALETTE.wallFar, t0)
+    const wa1 = grade(PALETTE.wallNear, PALETTE.wallFar, t1)
+    for (const sx of [-1, 1]) {
+      parts.push(quad3(
+        { x: sx * o.halfWidth, y: o.floorY, z: z0 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z0 },
+        { x: sx * o.halfWidth, y: o.floorY, z: z1 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z1 },
+        wa0, wa0, wa1, wa1,
+      ))
+    }
+  }
+  return merge(parts)
+}
+
+/**
+ * A piece of cover, as a silhouette.
+ *
+ * Still one screen-parallel rectangle, because the solver's exactness depends on
+ * it — but graded from a lifted top edge to a near-black bottom, with a thin bright
+ * rim along the top. Nothing here leaves the rectangle, so the picture cannot
+ * promise solidity the engine does not believe in.
+ */
+export function coverMesh(b: Billboard, uv?: UvRect): Mesh {
+  // With a texture rect it is a plain textured quad: that path exists so the
+  // player can see their own room on the cover, and a gradient over a photograph
+  // fights the photograph. Without one it is the silhouette treatment below.
+  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, PALETTE.coverTop, uv)
+  const rimHeight = Math.min(2.2, (b.y1 - b.y0) * 0.06)
+  const body: Mesh = {
+    positions: new Float32Array([
+      b.x0, b.y0, b.z, b.x1, b.y0, b.z,
+      b.x0, b.y1 - rimHeight, b.z, b.x1, b.y1 - rimHeight, b.z,
+    ]),
+    colors: new Float32Array([
+      ...PALETTE.coverBottom, ...PALETTE.coverBottom,
+      ...PALETTE.coverTop, ...PALETTE.coverTop,
+    ]),
+    uvs: new Float32Array(8),
+    textured: new Float32Array(4),
+    indices: new Uint32Array([0, 1, 2, 2, 1, 3]),
+  }
+  const rim = quad(b.z, b.x0, b.x1, b.y1 - rimHeight, b.y1, PALETTE.coverRim)
+  return merge([body, rim])
+}
+
+/**
+ * The dark patch where a piece of cover meets the floor.
+ *
+ * Contact shadows are the cheapest way to stop objects looking like stickers, and
+ * this one is floor geometry — it occludes nothing and is therefore unconstrained.
+ */
+export function contactShadowMesh(b: Billboard, floorY: number, depth = 34): Mesh {
+  const y = floorY + 0.4
+  const pad = 6
+  return quad3(
+    { x: b.x0 - pad, y, z: b.z }, { x: b.x1 + pad, y, z: b.z },
+    { x: b.x0 - pad * 2, y, z: b.z - depth }, { x: b.x1 + pad * 2, y, z: b.z - depth },
+    PALETTE.contactShadow, PALETTE.contactShadow,
+    PALETTE.floorFar, PALETTE.floorFar,
+  )
+}
 
 /** A target, drawn as a square facing the window at its own depth. */
 export const targetMesh = (t: Target, colour: Rgb): Mesh =>
@@ -169,21 +324,40 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
   a[2] + (b[2] - a[2]) * t,
 ]
 
+/**
+ * A backlit palette.
+ *
+ * The problem with rectangles was never that they are rectangles: it was that
+ * flat front-lighting makes any shape look like a placeholder. Lit from behind —
+ * bright hazy sky, near-black cover, one thin rim of light along a top edge —
+ * a rectangle reads as a deliberate silhouette. It is also the cheapest dramatic
+ * lighting there is, since none of it needs a light source, only an ordering of
+ * greys.
+ */
 export const PALETTE = {
-  occluder: [0.16, 0.18, 0.24] as Rgb,
+  coverTop: [0.085, 0.10, 0.135] as Rgb,
+  coverBottom: [0.022, 0.028, 0.042] as Rgb,
+  coverRim: [0.52, 0.60, 0.70] as Rgb,
+  contactShadow: [0.012, 0.016, 0.028] as Rgb,
+  floorNear: [0.055, 0.065, 0.088] as Rgb,
+  floorFar: [0.16, 0.19, 0.245] as Rgb,
+  wallNear: [0.038, 0.046, 0.065] as Rgb,
+  wallFar: [0.13, 0.155, 0.20] as Rgb,
+  ceilingNear: [0.028, 0.034, 0.050] as Rgb,
+  ceilingFar: [0.10, 0.12, 0.16] as Rgb,
   target: [0.32, 0.88, 0.68] as Rgb,
   targetIdle: [0.14, 0.28, 0.26] as Rgb,
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
+  enemySocket: [0.05, 0.03, 0.04] as Rgb,
+  enemyLid: [0.52, 0.16, 0.19] as Rgb,
+  enemySclera: [0.98, 0.95, 0.90] as Rgb,
+  enemyIris: [0.94, 0.22, 0.26] as Rgb,
+  enemyPupil: [0.03, 0.02, 0.03] as Rgb,
+  enemyFiring: [1.0, 0.94, 0.60] as Rgb,
+  enemyAimed: [1.0, 0.66, 0.32] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
   hiding: [0.42, 0.95, 0.78] as Rgb,
-  enemySocket: [0.22, 0.07, 0.10] as Rgb,
-  enemyLid: [0.52, 0.16, 0.19] as Rgb,
-  enemySclera: [0.97, 0.93, 0.88] as Rgb,
-  enemyIris: [0.90, 0.20, 0.24] as Rgb,
-  enemyPupil: [0.04, 0.02, 0.03] as Rgb,
-  enemyFiring: [1.0, 0.92, 0.55] as Rgb,
-  enemyAimed: [1.0, 0.62, 0.30] as Rgb,
   hidingCold: [0.18, 0.34, 0.32] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
@@ -326,6 +500,8 @@ export interface SceneInput {
   readonly occluderUvs?: readonly (UvRect | undefined)[] | undefined
   /** False falls back to the checkerboard, which is what the geometry tests use. */
   readonly sky?: boolean | undefined
+  /** False leaves out the floor, walls and ceiling. */
+  readonly environment?: boolean | undefined
   readonly enemies?: readonly EnemyView[] | undefined
   readonly backdropZ?: number
 }
@@ -340,15 +516,19 @@ export function backdropHalfExtent(backdropZ: number, screenHalf: number, eyeZ: 
 }
 
 export function buildScene(input: SceneInput): Mesh {
-  const backdropZ = input.backdropZ ?? -420
+  const backdropZ = input.backdropZ ?? -540
+  const floorY = ENV_DEFAULTS.floorY
   const parts: Mesh[] = [
     input.sky === false
-      ? backdropMesh(backdropZ, 420, 280, 16, 11, PALETTE.backdropA, PALETTE.backdropB)
-      : skyMesh(backdropZ, 420, 280),
+      ? backdropMesh(backdropZ, 460, 320, 16, 11, PALETTE.backdropA, PALETTE.backdropB)
+      : skyMesh(backdropZ, 460, 320),
   ]
-  input.occluders.forEach((o, i) =>
-    parts.push(occluderMesh(o, PALETTE.occluder, input.occluderUvs?.[i])),
-  )
+  if (input.environment !== false) parts.push(environmentMesh())
+
+  // Shadows before the cover, so a piece of cover always wins its own footing.
+  for (const o of input.occluders) parts.push(contactShadowMesh(o, floorY))
+  input.occluders.forEach((o, i) => parts.push(coverMesh(o, input.occluderUvs?.[i])))
+
   for (const o of input.hiding ?? []) {
     const g = Number.isFinite(input.hidingGlow ?? 0)
       ? Math.max(0, Math.min(1, input.hidingGlow ?? 0))
@@ -358,19 +538,16 @@ export function buildScene(input: SceneInput): Mesh {
       frameMesh(o.z + 0.4, o.x0, o.x1, o.y0, o.y1, 2.2, mix(PALETTE.hidingCold, PALETTE.hiding, g)),
     )
   }
+
   input.targets.forEach((t, i) => {
     const on = input.revealed?.[i] ?? false
     const inPlay = input.active ? input.active.includes(i) : true
     const base = on ? PALETTE.target : inPlay ? PALETTE.target : PALETTE.targetIdle
-    // Filling towards the scoring colour as the hold accumulates: the player has
-    // to know the position is *counting*, not merely correct.
-    //
-    // Number.isFinite first, because Math.max(0, Math.min(1, NaN)) is NaN and a
-    // NaN channel silently paints nothing at all. A test found this.
     const raw = input.hold?.[i] ?? 0
     const f = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0
     parts.push(targetMesh(t, mix(base, PALETTE.targetRevealed, f)))
   })
+
   for (const e of input.enemies ?? []) {
     parts.push(enemyMesh(e))
     if (e.aimed && e.exposed) {
