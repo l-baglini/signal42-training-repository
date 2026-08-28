@@ -42,6 +42,16 @@ the index.
    the fact.
 6. **The room texture is gone**, along with the drawing of the scanned frame onto
    the cover. Rejected in playtesting as unreadable.
+7. **Smoothing is a One Euro filter, not an exponential average with forward
+   prediction.** §7.1 specifies the latter and it is the worst possible pair in
+   poor light: the average is too slow to hide the jitter and the prediction
+   *multiplies* what is left. Do not implement §7.1's sentence.
+8. **The game's own rules were never in this document.** §1 describes finding a
+   hidden target; what ships is a cover shooter with a derived fuse, a standing
+   lineup and a selection step. That was the largest gap between this spec and the
+   build, and **§15 closes it** — it specifies the game as shipped, with the
+   formulas and the constants, so that this document plus CLAUDE.md is enough to
+   rebuild the project rather than merely to recognise it.
 
 Everything else below still describes the build, and §6.7's invariants are all
 tested. Where this document and the code disagree about anything not on this list,
@@ -729,8 +739,11 @@ right.
 
 ## 9. Fixtures and the no-camera path
 
-Three room scans ship as checked-in `RoomScan` JSON, plus a spread of synthetic
-envelopes including the degenerate ones.
+Four levels ship as checked-in `RoomScan` JSON — Doorway, Shelves, Parapet and The
+desk — plus a spread of synthetic envelopes including the degenerate ones. Their
+cover layouts are hand-designed and their enemy positions are **swept**: see §15.7,
+which is also the story of what happened to the one level whose positions were
+placed by hand.
 
 Consequences, all of them deliberate:
 
@@ -820,7 +833,7 @@ boundary validator in `src/boundary/`.
 
 The build is done when:
 
-1. All ten invariants in §6.7 hold, under test, across every fixture crossed
+1. All eleven invariants in §6.7 hold, under test, across every level crossed
    with every synthetic envelope.
 2. The game is playable start to finish with no camera and no API key.
 3. A live scan produces a playable level from a real room, with the cost shown.
@@ -853,3 +866,299 @@ Cuts happen from the bottom up. Everything above the line survives.
    option **from the set the solver has already validated as fair**. The engine
    guarantees correctness; the model only adds taste, and never the reverse.
    First thing to cut.
+
+---
+
+## 15. The game as shipped
+
+Written at the end, and kept apart from §1–§14 for the same reason §0 is: this
+document's value as evidence is that it reads as what was written *before* the
+code. What follows is what the code turned out to be, specified to the same
+standard, because §0's list tells a reader that the game changed without telling
+them what it changed *into* — and that was the difference between a document you
+can recognise the project from and one you can rebuild it from.
+
+### 15.1 The verb, and the symmetry it rests on
+
+An enemy stands at a position in the room. From the rest position it is hidden.
+To see it the player must move their head to a position from which the sightline
+clears the cover — and **that is also the only position from which it can shoot
+them**, because a sightline has no direction. One boolean per enemy per frame is
+therefore simultaneously *I can shoot it* and *it can shoot me*, and the game
+never computes two.
+
+That symmetry is the whole design and it must not be softened. It is why the enemy
+is drawn as an eye that opens, why a covered enemy draws **nothing at all**, and
+why there is no separate "enemy line of fire" anywhere in the code.
+
+The mask the game uses is **not** the visibility footprint of §6.3. It is
+
+```
+engageable(t) = { e in E : visible(e, t) and onScreen(e, t, viewport, radius) }
+```
+
+A viewpoint with a clear sightline to something off the edge of the glass is not a
+firing position, and by the symmetry it is not a position the enemy may fire from
+either. Both halves of that were found by playtesting rather than derived: a
+player was being shot by enemies off the bottom of the screen, and the `radius`
+term was added after a second report, because an enemy whose *centre* has cleared
+the edge while nine tenths of its body is still off the glass is not something
+anybody can answer. **Point-versus-extent is the single most repeated bug class in
+this project** — three separate instances — and the rule that came out of it is:
+if the drawing has extent, the test must have extent.
+
+### 15.2 The fuse, derived
+
+Each enemy has a fuse: the seconds of continuous exposure it tolerates before it
+fires. It is **derived from the measured body**, never authored:
+
+```
+fuse(enemy) = REACTION + latency + retreat / vmax + margin
+  REACTION = 0.25 s              stated human constant
+  latency                        measured, per tracker, live
+  retreat                        cm from the enemy's exposure region to its cover,
+                                 via the distance transform
+  vmax                           the body's measured 95th-percentile speed
+  margin                         the only tuned number
+```
+
+So no enemy is ever given a fuse this player cannot beat, and the direction of
+every failure is the same one as everywhere else in this design: a slower body, or
+a noisier tracker, or a slower machine is given **more time**, never a worse game.
+
+Two consequences that are easy to get wrong:
+
+- The fuse charges only while the player is exposed to *that* enemy, and drains at
+  3× in cover. Reaching the end therefore means they were still out.
+- Switching tracker **re-derives every fuse**, because `latency` is a term in the
+  formula and a webcam's is tens of milliseconds where a keyboard's is none. A
+  lineup built against one and played through the other hands out fuses shorter
+  than the derivation allows. The frame loop also re-derives on a 20 ms drift, and
+  both skip mid-round because a rebuild restarts it.
+
+### 15.3 The round
+
+Ninety seconds. Being hit costs six of them (four on easy, eight on advanced), and
+the clock is the only resource.
+
+**The room stands full from the first tick.** The lineup does not arrive on a
+timer, and the reason is a playtest finding worth stating as a rule: with a timer,
+*the most likely thing to happen when you lean out is nothing*, so the verb the
+whole project is built on degenerates into a polling loop. Enemies never leave.
+A kill is permanent and is replaced, after a beat, by the next position in the
+engine's order — never by the one just vacated, which is a mistake this
+implementation made twice, one tick apart, because the vacated position is at the
+front of that order.
+
+An enemy nobody has looked at for `repositionAfterS` **steps to another position
+the solver has already judged**, while unobserved and with a cold fuse. This is
+the honest form of "moving enemies": fairness here is a claim about a *position*,
+and a trajectory would need a different theorem, so nothing moves to anywhere that
+was not proved fair, escapable and on screen before the round began.
+
+One hit per tick, and it **resets every fuse**. With eight standing, a lean can
+open three sightlines at once, and without this a single moment of over-exposure
+bills the player three times in three consecutive frames. Resetting says the
+obvious thing instead — you were hit, everyone who had a shot took it, they are
+all starting over — and buys exactly one fuse of grace to get back behind cover.
+
+### 15.4 Which enemies stand: the selection step
+
+§6 judges candidates one at a time and this document assumed that was enough. It
+is not. A set of individually fair enemies can be a bad round, and it can be an
+unfair lineup — see I11 for the second half. `src/engine/lineup.ts` is the answer
+to the first.
+
+The quantity to maximise is not the count of enemies. It is **how much of the
+space the body can move through has a threat visible from it** — greedy maximum
+coverage over the same lattice and the same masks the fairness solver already
+builds, run repeatedly so that each successive block of the order is itself a
+covering set, which is what makes a replacement the next best choice rather than
+whatever was left.
+
+Two corrections that a rebuild will otherwise repeat:
+
+- **Weight the coverage by where the body actually spends its time.** Counting
+  cells prefers the *widest* footprints, and those belong to the long-lean enemies
+  whose exposure region is a swathe at the edge of the envelope. Measured, the
+  unweighted version produced levels where a full commit found a threat 93–100% of
+  the time and a half-committed lean found one a third of the time — the algorithm
+  was biased against exactly the enemies that make a modest peek worth making. A
+  Cauchy kernel on distance from rest, at half weight by a third of the reach.
+- **The ordering criterion comes from the game, not the engine.** Coverage is
+  geometry and difficulty is taste, so `LineupCandidate.cost` is supplied by the
+  caller — the game passes `pointsFor`, which already weighs how far you must lean
+  against how precisely you must hold it. A difficulty setting flips its sign.
+
+Ordering is O(candidates × cells) per pick, so it takes a `limit`: the game only
+ever stands the front of the list, and ordering past it is quadratic work for
+nothing.
+
+### 15.5 The play envelope
+
+Calibration measures what a body **can** do — §6.1 asks the player to reach as far
+as they are able — and a level laid out against that maximum is a level nobody
+plays, because nobody sits at their own extreme for ninety seconds. Measured in
+centimetres of lean, the first six centimetres of movement found a threat 0–2% of
+the time.
+
+The level is therefore solved inside `playEnvelope(env)`, and it needs **two**
+ceilings:
+
+```
+factor = min( 0.68, 14 cm / reach(E) )
+```
+
+The fraction handles a small envelope: someone who can only move eight centimetres
+should have the level built inside five or six of them. The absolute ceiling
+handles a large one, and it is the half that was wrong first — a fraction *scales
+with the calibration*, so a player who calibrated at thirty-six centimetres still
+had every threat placed past fifteen. The number that should have been bounding it
+is a property of necks rather than of calibration.
+
+This is the only bet about bodies in the solver and it is labelled as one. It is
+cheap to be wrong about: it moves difficulty, not fairness. Everything shipped
+inside the smaller envelope is judged fair inside it, the body's own measurements
+are untouched, and leaning past the edge keeps every sightline the edge had.
+
+### 15.6 Difficulty
+
+Three settings, and the rule is more important than the numbers: **a difficulty
+may only move what is not fairness.** Reaching into the lean floor, the jitter
+multiplier or the fuse *derivation* would not make the game harder, it would make
+the guarantees conditional on a radio button.
+
+What it may move: how many stand at once (5 / 8 / 11), what a hit costs, how long
+an enemy holds a position, which end of the cost range the round opens with, and
+the **fuse margin** (0.95 / 0.55 / 0.32 s) — legitimate precisely because the
+margin is slack over a derived floor rather than a number in place of one.
+
+Not the round length, which is a constraint about necks and not a dial. And not
+the score: `pointsFor` already pays for lean and precision, and a global
+multiplier would pretend three modes are comparable when easy simply gives you
+longer to shoot more things. The end screen names the setting instead.
+
+### 15.7 Levels: layouts by hand, positions by sweep
+
+What a room looks like is taste and is written by hand. **Where an enemy may stand
+is measured**, by sweeping several hundred candidate positions through the solver
+and keeping what it can prove — because the one level whose positions were placed
+by hand had four usable ones out of twenty-one, and a playtester found that before
+any test did. `npm run author` is that sweep. Two findings from iterating the
+layouts against it, both worth more than the layouts themselves:
+
+- **Cover belongs near the window, and by more than §6.3's identity suggests at a
+  glance.** Moving one level's jambs from z = −46 to z = −22 took the fraction of
+  positions with a threat visible at six centimetres of lean from 18% to 54%, and
+  the count of fair positions from 38 to 108. Same layout, twenty-four centimetres
+  nearer.
+- **Edges matter more than area.** Two large slabs give two edges; seven narrow
+  uprights crossed by three horizontal shelves give thirty, and reach 67% at six
+  centimetres and 93% at nine. It is also the only layout that ever produced
+  vertical peeking — 58 positions of 200, against 0 for two slabs.
+
+And the metric to iterate against: **threat coverage binned by distance from rest,
+in centimetres of lean.** The aggregate average is useless, because a lattice has
+far more cells in the middle of an envelope than at its edge, so a mean over cells
+is dominated by the middle and says nothing about either end. The innermost band
+must read 0%: that is the cover, and the game needs it.
+
+Two selection traps, both of which this implementation fell into:
+
+- Thinning a swept candidate list by taking **every nth** lands on a regular
+  sublattice. Let the coverage objective choose the prefix instead.
+- Filtering to positions fair for **all** reference bodies deletes the *easy*
+  enemies, because "requires a lean" scales with reach, so a larger body's
+  threshold rejects precisely the shortest-lean candidates. Take the union: a level
+  stores *candidates*, and the solver re-judges every one against the body actually
+  playing.
+
+### 15.8 The tracker, when it cannot see the head
+
+An eye leaving the frame is **information, not the absence of it** — it says the
+head went that way. Three estimators, in order of preference:
+
+1. both irises — position and metric depth;
+2. one iris plus the last known separation — lateral position measured, depth
+   held;
+3. dead reckoning along the last measured velocity, bounded to 10 cm and 0.30 s,
+   then a hold.
+
+Never a jump to an extreme, however tempting: exposure is symmetric, so guessing
+further out is as likely to walk into a sightline as out of one.
+
+Three estimators means **three seams**, and they need one rule between them rather
+than three local smoothings. Each estimates the same quantity differently, so every
+switch steps the reported position; on each switch the disagreement is recorded as
+a bias — clamped to 6 cm, because absorbing more than that is a plausible untruth
+about where the player's head is, and a visible jump is better — and decayed to
+nothing over 120 ms, by elapsed time rather than by frames, because a webcam's
+frame rate collapses in exactly the poor light that makes the head hard to find.
+The One Euro filter is reset when the gap exceeded 120 ms: its state describes
+where the head *was*, and feeding it the truth would rubber-band the viewpoint.
+
+The status line distinguishes all four states. That is not polish: three of them
+are the tracker reporting something it did not measure, and this project does not
+lie about perception.
+
+### 15.9 Aiming
+
+The head does slow positional work; the **mouse** does fast precision. That split
+is the answer to the one piece of published evidence against this whole design
+(PRIOR-ART §2, Kulshreshth & LaViola on head tracking degrading performance in
+fast-paced tasks): do not give the head the fast job.
+
+Two regimes. Between rounds the crosshair is the operating system's cursor, one to
+one, because the panel has controls in it. Inside a round the pointer is
+**captured** and the crosshair moves by accumulated deltas — which is the only
+thing a sensitivity setting can act on, since an absolute cursor already has the
+OS's acceleration applied. Refusal to capture is not an error: absolute aiming
+keeps working and the slider marks itself inert.
+
+### 15.10 The look
+
+Flat, bright, hard-edged. Two earlier looks were rejected in playtesting —
+procedural materials, then a backlit silhouette look with haze, light shafts and
+grain — and the reference that finally landed was Minecraft and Geometry Dash. The
+rule that follows: **a face is one flat colour, the shading is which face you are
+looking at, every edge is hard, and nothing carries a depth cue by removing
+contrast.** Distance is carried by a checkered floor in perspective and by nothing
+else; aerial perspective sits at 0.14 where it was 0.72, and it was doing its job
+in exactly the half of the corridor where reading an enemy is hardest.
+
+One geometric point that took far too long to see. §5's screen-parallel constraint
+does **not** forbid cover from looking like a solid block. It forbids the
+**extrusion**: a box with depth has a silhouette wider than its own front face
+from any off-axis eye, so drawing one promises cover the sightline test does not
+grant. Bevel *inwards* and the block is free — a bright outline on the rectangle
+itself, four bevel faces lit from the upper left, a flat front face, every vertex
+inside the rectangle and at exactly its depth. The constraint cost nothing;
+misreading it cost weeks.
+
+Palettes are chosen by the level's **own words**, because all three writers who
+produce level text — the fixtures, the vision model naming a room, the language
+model laying one out — already write the words that should decide how it looks.
+
+### 15.11 Build order, for a rebuild
+
+§14's order is the hunt's. This is the one that produces what ships, and the
+property worth preserving is that the game is provably fair long before it is
+playable.
+
+1. Types, units, the boundary validator.
+2. The engine: sightlines, footprints, the lattice, the distance transform, the
+   predicates — with §6.7's invariants written as tests **first**.
+3. Exposure: `engageableMask`, cover, the retreat gap, the derived fuse.
+4. One hand-authored layout and one synthetic body. Provably fair, unplayable.
+5. `playEnvelope`, then the selection step and I11. Do these before the renderer:
+   they are what make a level worth looking at, and they are pure.
+6. The off-axis projection and I10. Then the flat renderer.
+7. The round as a pure state machine, tested as one.
+8. The keyboard tracker, then the webcam one, then the calibration, then the
+   recovery of §15.8.
+9. `npm run author`, and iterate the layouts against banded threat coverage.
+10. Difficulty.
+    ────────── everything above ships; everything below is upside ──────────
+11. The depth scan of the player's room.
+12. The semantic call, the cost panel.
+13. The language model as level designer, behind the same boundary.

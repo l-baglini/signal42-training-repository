@@ -86,7 +86,9 @@ fairness — whatever it produces still has to survive the solver.
 
 ## What to look at, in order
 
-**Play it first.** Press space. Then press `H` and play again: the panel expands
+**Play it first.** Press space. Easy, Standard and Advanced are in the panel, and
+what a difficulty is *allowed* to change is itself a design constraint here — it
+may move pressure, never fairness. Then press `H` and play again: the panel expands
 into the instrument, and every enemy shows the lean it demands in centimetres, the
 window you must hold it in, and the fuse it has derived for your body.
 
@@ -94,7 +96,7 @@ Then:
 
 | File | Why |
 |---|---|
-| **SPEC.md** | Directed the build; §0 lists the six things it got wrong. Read §6.7 (the invariants) and §6.3 (the leverage identity, which decides where cover may sit). |
+| **SPEC.md** | Directed the build. **§0** lists the eight things it got wrong and **§15** specifies the game as it actually shipped — the fuse derivation, the standing lineup, the selection step, the play envelope. §6.7 is the invariants; §6.3 is the leverage identity, which decides where cover may sit. |
 | **DEVLOG.md** | Every finding that contradicted the spec, and every process failure — including the two commits that shipped with a red test and how the habit changed. |
 | **PRIOR-ART.md** | Written before implementation. It refuted the original novelty claim, which is why it exists. §6 was added afterwards and narrows the claim further. |
 | **REVIEW.md** | The author's own review pass. Not written by a model — the brief asks for the author's, and it would be worth nothing otherwise. |
@@ -112,13 +114,13 @@ fixtures/       hand-designed layouts, engine-swept anchors, synthetic bodies.
 ```
 
 ```
-npm test         529 tests. No network, no clock, no RNG.
+npm test         561 tests. No network, no clock, no RNG.
 npm run levels   what the engine makes of every level, per body. Read this before
                  changing a layout.
 npm run author   regenerates the levels: layouts by hand, anchors by sweep.
 npm run probe    what the solver thinks of a fixture room.
 npm run sweep    which candidate positions are fair.
-npm run build    tsc, then vite. ~70 kB.
+npm run build    tsc, then vite. ~74 kB.
 ```
 
 ---

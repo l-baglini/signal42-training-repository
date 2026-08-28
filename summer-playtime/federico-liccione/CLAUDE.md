@@ -5,11 +5,21 @@ off-axis projection (the screen behaves like a window, not a picture) and the
 core verb: an enemy is only visible from a position you have to move your head to
 reach, and that is also the only position it can shoot you from.
 
-README.md is the front door. Read **SPEC §0 before SPEC** — it lists the six
-things the specification got wrong, because SPEC directed the build and has
-deliberately not been edited to look right afterwards. PRIOR-ART.md records what
-was already taken (§6 narrows the claim after implementation), and DEVLOG.md
-records what the build discovered the spec had wrong, plus the process failures.
+README.md is the front door. Then, in this order:
+
+- **SPEC §0** — the eight things the specification got wrong. Read it before the
+  rest of SPEC, which directed the build and has deliberately *not* been edited to
+  look right afterwards.
+- **SPEC §15** — the game as shipped: the fuse derivation, the standing lineup, the
+  selection step, the play envelope, difficulty, the levels, the tracker's recovery,
+  the look. §1–§14 describe the game as *planned*, and the two differ. §15 exists so
+  that this file plus SPEC is enough to **rebuild** the project rather than merely
+  to recognise it; §15.11 is the build order that produces what ships.
+- **PRIOR-ART.md** — what was already taken. §6 narrows the claim after
+  implementation, because the pivot to a shooter moved this *closer* to the prior
+  art on the verb.
+- **DEVLOG.md** — what the build discovered the spec had wrong, and the process
+  failures. The recurring ones are worth reading before writing any code here.
 
 ## The one line that must not be crossed
 
@@ -168,6 +178,20 @@ enemy with a cold fuse to another position **the solver has already judged**. Do
 not make them move freely: fairness here is a claim about a position, and a
 trajectory would need a different theorem.
 
+### Difficulty
+
+**A difficulty may only move what is not fairness.** That is the rule, and it is
+load-bearing: reaching into the lean floor, the jitter multiplier or the fuse
+*derivation* would make "every enemy can be escaped" conditional on a radio button.
+`src/game/difficulty.ts` moves how many stand, what a hit costs, how long an enemy
+holds a position, which end of the cost range opens the round, and the fuse
+**margin** — legitimate because the margin is slack over a derived floor rather
+than a number in place of one. Not the round length (a constraint about necks) and
+not the score (`pointsFor` already pays for lean and precision; a multiplier would
+pretend the modes are comparable). `tests/difficulty.test.ts` asserts that no
+setting makes a shipped enemy unfair, and that advanced is *genuinely* tighter
+rather than merely labelled so. `DIFF=advanced npm run levels` measures it.
+
 **One verb ships.** The engine can also ship enemies that already see the rest
 position (`verb: 'duck'`, `allowInTheOpen`, `inTheOpenShare`) — tested,
 documented, and shipping at 0, because the playtester played both and preferred
@@ -189,13 +213,14 @@ at 0%: that is the cover.
 
 ## State — resume here
 
-`npm test` is green at **529 tests**, `npx tsc --noEmit` is clean, `npm run build`
-is clean and the bundle is ~70 kB. Every commit leaves the suite green, so
+`npm test` is green at **561 tests**, `npx tsc --noEmit` is clean, `npm run build`
+is clean and the bundle is ~74 kB. Every commit leaves the suite green, so
 `git log --oneline` is a reliable account of what exists — and each commit message
 quotes the playtest complaint it answers, which makes it a better design history
 than any summary.
 
-**What ships.** Cover combat, ninety seconds, four authored levels. Lean out to
+**What ships.** Cover combat, ninety seconds, four authored levels, three
+difficulties. Lean out to
 see an enemy — which is also the only way for it to see you — aim and shoot with
 the mouse, be back behind cover before its fuse completes. Eight enemies stand in
 the room from the first tick. The webcam tracker, a real calibration, the off-axis
@@ -208,8 +233,10 @@ calls.
 `tests/invariants.test.ts` and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`,
 I10 in `tests/projection.test.ts`, I11 in `tests/lineup.test.ts`.
 
-**Read SPEC §0 before SPEC.** It lists the six things the specification got wrong,
-with pointers into DEVLOG. The rest of the document still describes the build.
+**SPEC §0 lists what the spec got wrong; SPEC §15 says what the game actually is.**
+Together with this file they are meant to be sufficient to rebuild the project from
+nothing — if you find something you needed and could not find, that is a bug in
+these two documents and worth fixing while you still remember what was missing.
 
 **Present but not wired, on purpose, and not dead weight:**
 
@@ -247,9 +274,33 @@ axis mix, the warmth gradient, and hold-to-score all came from someone playing
 this and saying what was wrong. Read those commit messages before changing any of
 them — each one records the complaint it answers.
 
-The tuning knobs, in the order they are worth turning: `PLAY_FRACTION` and
-`COMFORT_CM` in `src/main.ts`, `waveSize` and `repositionAfterS` in
-`src/game/combat.ts`, the layouts in `tools/author.test.ts`, and `leanFraction` /
-`jitterK` in `src/engine/level.ts`. Change those, not the invariants.
+The tuning knobs, in the order they are worth turning: the three settings in
+`src/game/difficulty.ts`, `PLAY_FRACTION` and `COMFORT_CM` in `src/main.ts`, the
+layouts in `tools/author.test.ts`, `BIAS_TAU_S` and `DEFAULT_LIMITS` in
+`src/perceive/reacquire.ts`, and `minCutoff` / `beta` in `src/perceive/oneEuro.ts`.
+Change those, not the invariants — and not `leanFraction` or `jitterK`, which look
+like tuning knobs and are fairness thresholds.
+
+## If you are rebuilding this from scratch
+
+SPEC §15.11 is the build order. Four things are worth knowing before you start,
+because each cost this build real time:
+
+1. **Write §6.7's invariants as tests before the solver.** They are what decides
+   whether this is a game or a toy, and two of them (I3's *non*-monotonicity, I11)
+   are statements you will not arrive at by writing the obvious code first.
+2. **Everything metric comes from measurement, and every failure direction is the
+   same one.** A slower body, a noisier tracker, a slower machine: fewer enemies or
+   more time, never a harder game. If you find yourself writing a constant where a
+   measurement belongs, that is the mistake this project is organised to avoid.
+3. **Build the pure parts first and instrument them.** `tools/` prints numbers, and
+   more than half the findings in DEVLOG came from a seven-line probe rather than
+   from reasoning. Anything you cannot measure you will get wrong in a way tests do
+   not catch — the anchor-sampling aliasing took three attempts, and each wrong
+   version was plausible.
+4. **Extract the decision from the wiring.** `isTypingIn`, `reacquire.ts`,
+   `combat.ts`, `lineup.ts` are all pure because the alternative is behaviour that
+   only exists in an event handler — and this project has silently deleted three
+   features that way, with the tests staying green throughout.
 
 
