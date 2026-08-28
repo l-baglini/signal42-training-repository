@@ -11,6 +11,7 @@
  */
 import type { Point3 } from '../engine'
 import type { Tracker } from './tracker'
+import { isTyping } from './typing'
 
 export interface KeyboardTrackerOptions {
   readonly xRangeCm?: number
@@ -45,6 +46,7 @@ export function keyboardTracker(opts: KeyboardTrackerOptions = {}): Tracker {
   let lastT = 0
 
   const down = (e: KeyboardEvent) => {
+    if (isTyping()) return
     const k = e.key.toLowerCase()
     if (KEYS[k]) {
       held.add(KEYS[k]!)
@@ -54,6 +56,11 @@ export function keyboardTracker(opts: KeyboardTrackerOptions = {}): Tracker {
   const up = (e: KeyboardEvent) => {
     const k = e.key.toLowerCase()
     if (KEYS[k]) held.delete(KEYS[k]!)
+  }
+  // Focus can move while a key is held: release everything rather than leaving
+  // the head drifting into a wall while somebody types.
+  const focusIn = () => {
+    if (isTyping()) held.clear()
   }
   const blur = () => held.clear()
 
@@ -90,11 +97,13 @@ export function keyboardTracker(opts: KeyboardTrackerOptions = {}): Tracker {
       addEventListener('keydown', down)
       addEventListener('keyup', up)
       addEventListener('blur', blur)
+      addEventListener('focusin', focusIn)
     },
     stop() {
       removeEventListener('keydown', down)
       removeEventListener('keyup', up)
       removeEventListener('blur', blur)
+      removeEventListener('focusin', focusIn)
     },
   }
 }

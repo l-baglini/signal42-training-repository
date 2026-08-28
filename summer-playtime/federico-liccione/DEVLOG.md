@@ -137,6 +137,30 @@ depth model in the browser, WebGPU versus WASM. Every published figure found
 during verification traced back to a content farm, one of which also carried a
 false release date. It gets measured on the target machine and recorded here.
 
+## A guard that vanished
+
+Worth recording because it is a failure of process rather than of reasoning, and
+because it is the second time the same shape of mistake got through.
+
+Typing in the level-description box moved the player's head and space started the
+round. The fix had been written: a loop over every input installing
+`stopPropagation`. A later edit to the same region of `main.ts` replaced the block
+that contained it, the loop went with it, and **typecheck and 393 tests stayed
+green** — because nothing in a test suite can see an `addEventListener` that is no
+longer there.
+
+Two things came out of it. The guard now asks the document who has focus, which
+depends on nothing: not on propagation, not on registration order, not on a field
+existing at load. And the *decision* is a pure function, `isTypingIn`, separate
+from the wiring that calls it — which is the only reason there is now a test file
+for it. The lesson generalises: a behaviour that lives entirely in event wiring is
+a behaviour no test can defend.
+
+The related process failure, twice in one session: committing while a check was
+red, because `npm test 2>&1 | grep -E 'Tests'` succeeds on a *failing* run too —
+grep found its pattern. Both commits were amended, and the habit changed to
+running the checks and reading their exit codes before staging anything.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

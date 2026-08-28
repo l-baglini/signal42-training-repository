@@ -19,6 +19,7 @@ import { mouseTracker } from './perceive/mouse'
 import { calibrate, type Sample } from './perceive/calibrate'
 import { referenceBody } from './perceive/reference'
 import type { Tracker } from './perceive/tracker'
+import { isTyping } from './perceive/typing'
 import type { CameraModel } from './perceive/roomGeometry'
 import { applyInventory } from './perceive/inventory'
 import type { InventoryCost } from './perceive/inventory'
@@ -595,6 +596,9 @@ canvas.addEventListener('pointerdown', (e) => {
 
 let roundStartedAt = 0
 addEventListener('keydown', (e) => {
+  // Typing is not playing. Checked here as well as in the tracker, because both
+  // listen on the window and either one stealing a keystroke ruins the other.
+  if (isTyping()) return
   const k = e.key.toLowerCase()
   if (k === ' ') {
     e.preventDefault()
