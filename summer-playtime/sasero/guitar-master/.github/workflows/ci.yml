@@ -1,0 +1,103 @@
+name: CI
+
+# The whole suite is designed to run with no camera, no GPU and no guitar, which
+# is what makes CI possible for a computer-vision project at all. What CI cannot
+# check -- whether a dot lands on your actual fret -- is a manual check, and it
+# is written down in QUICKSTART.md rather than pretended at here.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install runtime and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,score]"
+          # NOT [audio]: a runner has no sound device, and fretguide/audio.py
+          # imports sounddevice lazily inside Player() so nothing in tests/
+          # touches it. Adding the extra here would install PortAudio to cover
+          # exactly nothing. What audio CAN be checked without a device --
+          # every waveform assertion in tests/test_synth.py -- runs above.
+
+      - name: Install torch (CPU build)
+        # From PyTorch's CPU index deliberately: the default PyPI wheel drags in
+        # the full CUDA stack (~2 GB) that a GitHub runner has no GPU for. Torch
+        # is needed only so the FretNet tests actually run instead of skipping
+        # past pytest.importorskip.
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Confirm the optional deps really installed
+        # tests/test_model.py and tests/test_score.py guard their imports with
+        # pytest.importorskip, so a failed install would turn those tests
+        # green-by-skipping instead of red. Assert the dependencies here, where
+        # it cannot be missed.
+        run: python -c "import torch, openvino, cv2, guitarpro; print(torch.__version__, openvino.__version__, cv2.__version__)"
+
+      - name: Tests
+        # -rs reports the reason for any skip in the log, so a suite that shrinks
+        # is visible rather than silent.
+        run: pytest tests/ -q -rs
+
+  shell:
+    name: native shell (GL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The video path cannot be covered by pytest: it needs the [gui] extra and a real GL
+    # context, and CLAUDE.md would rather have an honest external gate than a test that
+    # skips itself into a false green. tools/probe_gl.py is that gate — it renders through
+    # the shipped shader and the real widget, and exits non-zero on failure.
+    #
+    # This runs on llvmpipe (software GL) under Xvfb, which is a different renderer from
+    # the Intel Arc iGPU the shell is developed on. That is the point: if the shaders rely
+    # on anything vendor-specific, this is where it shows.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Qt runtime libraries
+        # PySide6 wheels bundle Qt itself but not these system libraries.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libdbus-1-3 libglx-mesa0
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[gui]"
+
+      - name: Probe the video path
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          QT_QPA_PLATFORM: xcb
+        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" python tools/probe_gl.py --verbose
