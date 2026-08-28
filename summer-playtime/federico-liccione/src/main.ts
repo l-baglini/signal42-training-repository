@@ -33,7 +33,6 @@ import type { CameraModel } from './perceive/roomGeometry'
 import { applyInventory } from './perceive/inventory'
 import type { InventoryCost } from './perceive/inventory'
 import {
-  DEFAULT_COMBAT,
   pointsFor,
   accuracy,
   newCombat,
@@ -41,6 +40,9 @@ import {
   step as stepCombat,
 } from './game/combat'
 import type { CombatState, EnemySpec } from './game/combat'
+import {
+  DEFAULT_DIFFICULTY, DIFFICULTIES, combatConfigFor, difficultyById, type Difficulty,
+} from './game/difficulty'
 import { LEVELS } from '../fixtures/levels/authored'
 import type { AuthoredLevel } from '../fixtures/levels/authored'
 
@@ -163,7 +165,17 @@ let enemies: EnemyEntry[] = []
 let rejectCounts: Record<string, number> = {}
 /** Fraction of the body's range with a threat visible from it. See `chooseLineup`. */
 let threatened = 0
-let combat: CombatState = newCombat(DEFAULT_COMBAT)
+/**
+ * The difficulty, and the round settings it implies.
+ *
+ * A difficulty here only ever moves things that are not fairness — see
+ * `game/difficulty.ts` for the rule and why the fuse *margin* is on the list while
+ * the fuse is not. Changing it re-derives the level, because the margin feeds
+ * `assessEnemies` and the cost sign feeds `chooseLineup`.
+ */
+let difficulty: Difficulty = DEFAULT_DIFFICULTY
+let cfg = combatConfigFor(difficulty)
+let combat: CombatState = newCombat(cfg)
 let exposed: boolean[] = []
 let aimed: boolean[] = []
 let firing = false
@@ -210,6 +222,12 @@ function rebuildLineup(): void {
   const { assessments, lattice } = assessEnemies(room, play, {
     viewport,
     /**
+     * The difficulty's one contribution to the solver, and the only kind it is
+     * allowed: slack over the *derived* minimum fuse. The derivation is still
+     * underneath it, so an advanced enemy is uncomfortable rather than unbeatable.
+     */
+    fuseMarginS: difficulty.fuseMarginS,
+    /**
      * Enemies that can already see the rest position may ship.
      *
      * They were the largest rejected class in every room — 75 to 176 candidates per
@@ -239,7 +257,13 @@ function rebuildLineup(): void {
     radius: a.enemy.radius,
     // The game's own difficulty measure, so the lineup opens with the enemies it
     // scores lowest and saves the long, precise ones for later in the round.
-    cost: pointsFor({
+    /**
+     * The game's own difficulty measure, signed by the difficulty setting:
+     * `+1` opens the round with the shortest leans and loosest windows, `-1` opens
+     * with the long reaches held to a centimetre. Same positions, all of them
+     * already proved fair, presented from the opposite end.
+     */
+    cost: difficulty.costSign * pointsFor({
       leanCm: a.leanCm,
       windowCm: a.windowCm,
       fuseS: a.enemy.fuseS,
@@ -268,7 +292,7 @@ function rebuildLineup(): void {
   // covering set.
   const chosen = order.slice(0, LINEUP_DEPTH).map((i) => fair[i]!)
   threatened = threatCoverage(
-    lattice, room.occluders, cands, order, DEFAULT_COMBAT.waveSize, { viewport },
+    lattice, room.occluders, cands, order, cfg.waveSize, { viewport },
   )
 
   enemies = chosen.map((a) => ({
@@ -289,7 +313,7 @@ function rebuildLineup(): void {
   aimed = enemies.map(() => false)
   // Nothing from the last round survives into this one, markers included.
   shotFrom = null
-  combat = newCombat(DEFAULT_COMBAT)
+  combat = newCombat(cfg)
   /**
    * The scene has to be re-uploaded here, not only while a round is running.
    * Without this a new level — designed, scanned, or switched with the bracket
@@ -401,7 +425,7 @@ function renderRound(): void {
   const panel = el('round')
   const remaining = Math.max(0, combat.endsAtS - combat.tS)
   el('clock').textContent =
-    combat.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_COMBAT.durationS.toFixed(1)
+    combat.phase === 'playing' ? remaining.toFixed(1) : cfg.durationS.toFixed(1)
   el('scoreValue').textContent = String(combat.score)
   el('tally').textContent =
     `${combat.killed} killed · ${combat.timesShot} times hit · ` +
@@ -438,21 +462,21 @@ function renderRound(): void {
    * to make a round" is a refusal, and saying so with the counts is more use than
    * playing a broken round.
    */
-  if (enemies.length < DEFAULT_COMBAT.waveSize) {
+  if (enemies.length < cfg.waveSize) {
     el('roundTitle').textContent = 'No round to play'
     el('roundBody').textContent =
       (enemies.length === 0
         ? 'Nothing in this room can be fought fairly. '
         : `Only ${enemies.length} position${enemies.length === 1 ? '' : 's'} in this room ` +
-          `can be fought fairly, and a round needs ${DEFAULT_COMBAT.waveSize}. `) +
+          `can be fought fairly, and a round needs ${cfg.waveSize}. `) +
       `${Object.entries(rejectCounts).map(([k, n]) => `${n} ${k}`).join(', ')}.`
     return
   }
   if (combat.phase === 'ready') {
-    el('roundTitle').textContent = rooms[roomIndex]!.name
+    el('roundTitle').textContent = `${rooms[roomIndex]!.name} · ${difficulty.name}`
     el('roundBody').textContent =
-      `${rooms[roomIndex]!.blurb}\n\n` +
-      `${DEFAULT_COMBAT.waveSize} enemies are already standing in this room, and ` +
+      `${rooms[roomIndex]!.blurb}\n${difficulty.blurb}\n\n` +
+      `${cfg.waveSize} enemies are already standing in this room, and ` +
       'you cannot see any of them from here. Each one is visible only from a ' +
       'position you have to move ' +
       'your head to reach — which is also the only position it can shoot you from. ' +
@@ -477,7 +501,13 @@ function renderRound(): void {
     el('roundTitle').textContent = `${combat.score} points`
     el('roundBody').textContent =
       `${combat.killed} killed, ${combat.timesShot} times hit, ` +
-      `${(accuracy(combat) * 100).toFixed(0)}% accuracy.`
+      `${(accuracy(combat) * 100).toFixed(0)}% accuracy — on ` +
+      `${difficulty.name.toLowerCase()}.\n\n` +
+      // Named rather than multiplied. A global score multiplier would pretend the
+      // three modes are comparable, and they are not: easy gives you longer to
+      // shoot more things. `pointsFor` already pays for lean and precision.
+      'Scores are not comparable between difficulties — nothing is multiplied, so ' +
+      'the setting is part of the result rather than hidden inside it.'
   }
 
   /**
@@ -1034,6 +1064,42 @@ function releasePointer(): void {
 // Wired after the declarations above rather than beside the other sliders: this
 // handler assigns `sensitivity`, and dispatching the initial event before that
 // `let` is evaluated would throw on a temporal dead zone.
+/**
+ * The difficulty control.
+ *
+ * Buttons rather than a `<select>`, for a reason that is not aesthetic: a focused
+ * select swallows the space bar, and the space bar starts the round. Each one blurs
+ * itself after the click for the same reason.
+ *
+ * Changing it re-derives the level — the fuse margin feeds `assessEnemies` and the
+ * cost sign feeds `chooseLineup` — and does nothing mid-round, because a rebuild
+ * would restart it.
+ */
+const diffSeg = el('diffSeg')
+for (const d of DIFFICULTIES) {
+  const b = document.createElement('button')
+  b.type = 'button'
+  b.textContent = d.name
+  b.dataset.id = d.id
+  b.title = d.blurb
+  b.addEventListener('click', () => {
+    b.blur()
+    if (combat.phase === 'playing' || d.id === difficulty.id) return
+    difficulty = difficultyById(d.id)
+    cfg = combatConfigFor(difficulty)
+    renderDifficulty()
+    rebuildLineup()
+  })
+  diffSeg.append(b)
+}
+
+function renderDifficulty(): void {
+  for (const b of Array.from(diffSeg.querySelectorAll('button'))) {
+    b.setAttribute('aria-pressed', String(b.dataset.id === difficulty.id))
+  }
+}
+renderDifficulty()
+
 const sensInput = el<HTMLInputElement>('sens')
 sensInput.addEventListener('input', () => {
   sensitivity = parseFloat(sensInput.value)
@@ -1058,10 +1124,10 @@ addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase()
   if (k === ' ') {
     e.preventDefault()
-    if (combat.phase !== 'playing' && enemies.length >= DEFAULT_COMBAT.waveSize) {
+    if (combat.phase !== 'playing' && enemies.length >= cfg.waveSize) {
       roundSeed++
       rebuildLineup()
-      combat = startCombat(DEFAULT_COMBAT)
+      combat = startCombat(cfg)
       roundStartedAt = performance.now() / 1000
       grabPointer()
       renderRound()
@@ -1148,7 +1214,7 @@ function frame(now: number): void {
     const before = combat.phase
     const wasKilled = combat.killed
     const wasShot = combat.timesShot
-    combat = stepCombat(combat, DEFAULT_COMBAT, enemies.map((e) => e.spec), {
+    combat = stepCombat(combat, cfg, enemies.map((e) => e.spec), {
       tS: now / 1000 - roundStartedAt,
       eye,
       exposed,

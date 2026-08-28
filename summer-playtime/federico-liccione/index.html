@@ -68,6 +68,15 @@
   .row input[type=text], .row input[type=password] { background: rgba(255,255,255,.07);
     border: 1px solid rgba(255,255,255,.14); border-radius: 5px; color: #e7edf8;
     padding: 4px 7px; font-size: 11px; font-family: inherit; }
+  /* Buttons rather than a select: a focused select swallows the space bar, which
+     is the key that starts the round. */
+  .seg { flex: 1; display: flex; gap: 4px; min-width: 0; }
+  .seg button { flex: 1; padding: 4px 2px; font: inherit; font-size: 11px;
+    color: #cfd8e8; background: rgba(255,255,255,.06); cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14); border-radius: 5px; }
+  .seg button:hover { background: rgba(255,255,255,.12); }
+  .seg button[aria-pressed="true"] { background: rgba(124,224,192,.20);
+    border-color: rgba(124,224,192,.55); color: #bff0e0; }
   .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
   /* Sensitivity acts on captured pointer deltas, so it needs the capture. If the
      browser refuses, say so rather than leaving a slider that does nothing. */
@@ -185,6 +194,10 @@
       <label>Your screen's width</label>
       <input id="width" type="range" min="12" max="80" step="0.5" value="34">
       <span class="val" id="widthVal"></span>
+    </div>
+    <div class="row" id="diffRow">
+      <label>Difficulty</label>
+      <div class="seg" id="diffSeg"></div>
     </div>
     <div class="row" id="sensRow">
       <label>Aim sensitivity, in a round</label>

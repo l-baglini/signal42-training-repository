@@ -16,6 +16,7 @@ import {
 } from '../src/engine'
 import type { Point3 } from '../src/engine'
 import { pointsFor } from '../src/game/combat'
+import { difficultyById } from '../src/game/difficulty'
 import { LEVELS } from '../fixtures/levels/authored'
 
 /**
@@ -35,6 +36,8 @@ import { frozen, noisy, roomy, seated } from '../fixtures/envelopes'
 const PLAY = Number(process.env.PLAY ?? 0.68)
 const COMFORT = Number(process.env.COMFORT ?? 14)
 const OPEN = (process.env.OPEN ?? '0') !== '0'
+/** `DIFF=advanced npm run levels` — difficulty is measurable like everything else. */
+const DIFF = difficultyById(process.env.DIFF ?? 'standard')
 const MAXOPEN = Number(process.env.MAXOPEN ?? 0)
 
 const bodies = [
@@ -49,7 +52,10 @@ it('levels', () => {
     console.log(`\n=== ${level.name} (${level.scan.occluders.length} cover, ${level.scan.anchors.length} candidates)`)
     for (const [bodyName, env] of bodies) {
       const play = playEnvelope(env, { fraction: PLAY, comfortCm: COMFORT })
-      const { assessments, lattice } = assessEnemies(level.scan, play, { allowInTheOpen: OPEN })
+      const { assessments, lattice } = assessEnemies(level.scan, play, {
+        allowInTheOpen: OPEN,
+        fuseMarginS: DIFF.fuseMarginS,
+      })
       const fair = assessments.filter((a) => a.fair)
       const rejects: Record<string, number> = {}
       for (const a of assessments) if (a.reject) rejects[a.reject] = (rejects[a.reject] ?? 0) + 1
@@ -77,7 +83,7 @@ it('levels', () => {
       const cands = fair.map((a) => ({
         at: a.enemy.at,
         radius: a.enemy.radius,
-        cost: pointsFor({
+        cost: DIFF.costSign * pointsFor({
           leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS,
           verb: a.verb, retreatCm: a.retreatCm,
         }),
@@ -143,9 +149,12 @@ it('levels', () => {
       )
       if (fair.length > 0) {
         console.log(
-          `          threat, 8 standing: ${cover(order, 8)}  (reach ${reach.toFixed(0)}cm)` +
-            `   duck ${order.slice(0, 8).filter((i) => fair[i]!.verb === 'duck').length}/8\n` +
-            `          peek only, 8 standing: ${peekCover(8)}`,
+          `          threat, ${DIFF.waveSize} standing (${DIFF.id}): ` +
+            `${cover(order, DIFF.waveSize)}  (reach ${reach.toFixed(0)}cm)` +
+            `   duck ${
+              order.slice(0, DIFF.waveSize).filter((i) => fair[i]!.verb === 'duck').length
+            }/${DIFF.waveSize}\n` +
+            `          peek only: ${peekCover(DIFF.waveSize)}`,
         )
       }
     }
