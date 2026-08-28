@@ -19,6 +19,8 @@ import { calibrate, type Sample } from './perceive/calibrate'
 import { referenceBody } from './perceive/reference'
 import type { Tracker } from './perceive/tracker'
 import type { CameraModel } from './perceive/roomGeometry'
+import { applyInventory } from './perceive/inventory'
+import type { InventoryCost } from './perceive/inventory'
 import {
   DEFAULT_COMBAT,
   accuracy,
@@ -62,6 +64,8 @@ let room = fixtureRoom
 let roomSource = 'hand-authored fixture'
 let farWallCm = 320
 let scanning = false
+let sessionCents = 0
+let costLines: string[] = []
 let mode: 'window' | 'dolly' = 'window'
 let widthCm = 34
 let roundSeed = 1
@@ -230,6 +234,23 @@ function renderExposure(): void {
   el('holdLabel').textContent = f > 0.75 ? 'GET BACK INTO COVER' : 'EXPOSED'
 }
 
+/**
+ * The visible cost the brief asks for. Measured from the response's own usage
+ * figures rather than estimated, and a running session total — which normally
+ * reads as one call, because the scan is per room and not per level.
+ */
+function recordCost(cost: InventoryCost, ms: number, dropped: number, typeErrors: number): void {
+  sessionCents += cost.cents
+  costLines = [
+    `${cost.model}`,
+    `in ${cost.inputTokens} tok · out ${cost.outputTokens} tok · ${ms.toFixed(0)} ms`,
+    `this call ${cost.cents.toFixed(3)}¢ · session ${sessionCents.toFixed(3)}¢`,
+    dropped || typeErrors ? `guards: ${dropped} dropped, ${typeErrors} type errors` : 'guards: clean',
+  ]
+  el('cost').style.display = 'block'
+  el('costBody').textContent = costLines.join('\n')
+}
+
 function flash(colour: string): void {
   const f = el('flash')
   f.style.background = colour
@@ -322,6 +343,36 @@ async function runScan(): Promise<void> {
         `${room.occluders.length} pieces of cover, ${room.anchors.length} candidates proposed — ` +
         `the engine kept ${enemies.length} as fair enemies.`
       el('scanMeta').textContent = meta
+
+      const key = el<HTMLInputElement>('apikey').value
+      if (key.trim() && report.canvas) {
+        el('scanStage').textContent = 'asking what the objects are…'
+        const { semanticScan } = await import('./perceive/semanticScan')
+        const named = await semanticScan({
+          apiKey: key,
+          canvas: report.canvas,
+          regions: report.outcome.regions,
+          frameWidth: report.outcome.frameWidth,
+          frameHeight: report.outcome.frameHeight,
+        })
+        if (named.ok) {
+          // Names and hazards only. It cannot add a candidate, move a rectangle
+          // or make a position playable — the engine judges again, unchanged.
+          room = applyInventory(room, named.inventory)
+          roomSource = `your room, named`
+          rebuildLineup()
+          recordCost(named.cost, named.ms, named.dropped, named.typeErrors)
+          el('scanStage').textContent =
+            named.inventory.regions
+              .map((r) => `${r.index}: ${r.label} → ${r.use}`)
+              .join('  ·  ') || 'the model named nothing it could see'
+          el('scanMeta').textContent =
+            `${meta}\nnamed    ${named.inventory.regions.length} of ${report.outcome.regions.length} regions` +
+            `   ${named.cost.cents.toFixed(3)} cents`
+        } else {
+          el('scanMeta').textContent = `${meta}\nnaming failed: ${named.reason}`
+        }
+      }
     }
   } catch (err) {
     el('scanTitle').textContent = 'The scan failed'

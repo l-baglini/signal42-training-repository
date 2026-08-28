@@ -33,6 +33,8 @@ export interface ScanReport {
   readonly ms: number
   /** Wall-clock of loading the weights. Zero on every scan after the first. */
   readonly loadMs: number
+  /** The frame it captured, so the semantic pass can annotate the same pixels. */
+  readonly canvas: HTMLCanvasElement | null
 }
 
 let estimator: DepthEstimator | null = null
@@ -69,6 +71,7 @@ export async function scanRoom(input: ScanRoomInput): Promise<ScanReport> {
       dtype: estimator.dtype,
       ms: 0,
       loadMs,
+      canvas: null,
     }
   }
   ctx.drawImage(input.video, 0, 0, width, height)
@@ -104,5 +107,6 @@ export async function scanRoom(input: ScanRoomInput): Promise<ScanReport> {
     dtype: estimator.dtype,
     ms: performance.now() - t1,
     loadMs,
+    canvas,
   }
 }

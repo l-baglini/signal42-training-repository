@@ -29,6 +29,11 @@
     white-space: pre-line; }
   #keys { margin-top: 10px; font-size: 11px; opacity: .55; }
   kbd { background: rgba(255,255,255,.1); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
+  #cost { bottom: 12px; left: 12px; max-width: 330px; display: none;
+    font-family: ui-monospace, monospace; font-size: 11px; }
+  #cost .lbl { font-family: ui-sans-serif, system-ui, sans-serif; opacity: .5;
+    margin-bottom: 5px; letter-spacing: .04em; }
+  #cost #costBody { white-space: pre-line; opacity: .85; }
   #score { top: 12px; right: 12px; text-align: right; font-variant-numeric: tabular-nums; }
   #score .big { font-size: 26px; font-weight: 600; line-height: 1.1; }
   #score .lbl { font-size: 11px; opacity: .55; }
@@ -105,6 +110,12 @@
     <div id="stats"></div>
     <div id="tracker"></div>
     <div class="row">
+      <label>Claude API key</label>
+      <input id="apikey" type="password" placeholder="optional · never stored"
+        autocomplete="off" spellcheck="false">
+      <span class="val"></span>
+    </div>
+    <div class="row">
       <label>Far wall (prior)</label>
       <input id="farwall" type="range" min="120" max="600" step="10" value="320">
       <span class="val" id="farwallVal"></span>
@@ -121,6 +132,11 @@
       &nbsp; <kbd>o</kbd> window / dolly &nbsp; <kbd>m</kbd> pointer head &nbsp;
       <kbd>r</kbd> ruler
     </div>
+  </div>
+
+  <div class="panel" id="cost">
+    <div class="lbl">runtime AI</div>
+    <div id="costBody"></div>
   </div>
 
   <div class="panel" id="score">

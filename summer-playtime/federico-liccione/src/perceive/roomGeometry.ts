@@ -270,12 +270,27 @@ const FIT_DEFAULTS = {
  * size. Fairness is unaffected, because the engine computes it on the geometry it
  * is handed, whatever that geometry means.
  */
+export interface FittedRegion {
+  readonly bill: Billboard
+  /** Where it came from in the frame. Needed to number it for the semantic pass. */
+  readonly box: Component
+}
+
 export function fitBillboards(
   depth: DepthField,
   mask: PersonMask,
   fit: ScaleFit,
   opts: FitOptions = {},
 ): Billboard[] {
+  return fitRegions(depth, mask, fit, opts).map((r) => r.bill)
+}
+
+export function fitRegions(
+  depth: DepthField,
+  mask: PersonMask,
+  fit: ScaleFit,
+  opts: FitOptions = {},
+): FittedRegion[] {
   const o = { ...FIT_DEFAULTS, ...opts }
   const cam = opts.camera ?? DEFAULT_CAMERA
   const { width, height, values } = depth
@@ -323,7 +338,7 @@ export function fitBillboards(
     edges.push(-(o.nearestCm + ((o.furthestCm - o.nearestCm) * k) / o.bands))
   }
 
-  const found: Array<{ bill: Billboard; pixels: number }> = []
+  const found: Array<{ bill: Billboard; box: Component; pixels: number }> = []
   for (let k = 0; k < o.bands; k++) {
     const hi = edges[k]!
     const lo = edges[k + 1]!
@@ -359,6 +374,7 @@ export function fitBillboards(
       if (!(x1 > x0) || !(y1 > y0)) continue
       found.push({
         bill: { z: bandZ, x0, x1, y0, y1, label: `band-${k}` },
+        box: c,
         pixels: c.pixels,
       })
     }
@@ -367,7 +383,7 @@ export function fitBillboards(
   return found
     .sort((p, q) => q.pixels - p.pixels)
     .slice(0, o.maxOccluders)
-    .map((f) => f.bill)
+    .map((f) => ({ bill: f.bill, box: f.box }))
 }
 
 /* -------------------------------------------------------------- bright ---- */
@@ -500,7 +516,15 @@ export interface ScanInput {
 }
 
 export type ScanOutcome =
-  | { readonly ok: true; readonly scan: RoomScan; readonly fit: ScaleFit }
+  | {
+      readonly ok: true
+      readonly scan: RoomScan
+      readonly fit: ScaleFit
+      /** Frame boxes for each occluder, in scan order. For the semantic pass. */
+      readonly regions: readonly Component[]
+      readonly frameWidth: number
+      readonly frameHeight: number
+    }
   | { readonly ok: false; readonly reason: string }
 
 /**
@@ -516,10 +540,11 @@ export function buildRoomScan(input: ScanInput): ScanOutcome {
   if (!isFit(fit)) return { ok: false, reason: fit.error }
 
   const cam = input.camera ?? DEFAULT_CAMERA
-  const occluders = fitBillboards(input.depth, input.mask, fit, { camera: cam })
-  if (occluders.length === 0) {
+  const fitted = fitRegions(input.depth, input.mask, fit, { camera: cam })
+  if (fitted.length === 0) {
     return { ok: false, reason: 'nothing in this frame reads as cover' }
   }
+  const occluders = fitted.map((f) => f.bill)
 
   const noSpawn = input.rgba
     ? brightRegions(input.rgba, input.depth.width, input.depth.height, { camera: cam })
@@ -528,6 +553,9 @@ export function buildRoomScan(input: ScanInput): ScanOutcome {
   return {
     ok: true,
     fit,
+    regions: fitted.map((f) => f.box),
+    frameWidth: input.depth.width,
+    frameHeight: input.depth.height,
     scan: {
       source: 'depth',
       occluders,
