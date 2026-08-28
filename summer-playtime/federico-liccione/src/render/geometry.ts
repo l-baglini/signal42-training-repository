@@ -203,29 +203,44 @@ export function enemyMesh(e: EnemyView): Mesh {
   const f = Number.isFinite(e.fuse) ? Math.max(0, Math.min(1, e.fuse)) : 0
 
   /**
-   * Nudges go *towards the viewer*, which in this frame means **larger** z: the
-   * scene sits at z < 0 and the player at z > 0. The first version of this
-   * function subtracted, so every part of the eye was drawn behind its own socket
-   * and the depth test hid all of it — a playtester reported "a dark square and
-   * no eye", which was exactly right. There is now a test on the ordering.
+   * A covered enemy draws **nothing at all**.
+   *
+   * It used to draw a dark socket with a closed slit, and a playtester hit the
+   * consequence from both sides: an enemy whose *centre* was occluded showed the
+   * edge of its socket, so it looked visible while being unshootable; and one
+   * whose centre had just cleared was firing while almost all of it was still
+   * behind cover, so the shot seemed to come from nothing.
+   *
+   * The engagement test is on the centre point and the drawing was a rectangle,
+   * and no amount of colour reconciles those. Drawing nothing does: **you see it
+   * exactly when you can shoot it, and it can shoot you exactly when you see
+   * it** — which is the symmetry the whole design already rests on, applied to
+   * the pixels as well as to the rules.
+   */
+  if (!e.exposed) return { positions: new Float32Array(0), colors: new Float32Array(0),
+    uvs: new Float32Array(0), textured: new Float32Array(0), indices: new Uint32Array(0) }
+
+  /**
+   * Nudges go towards the viewer, which in this frame means **larger** z: the
+   * scene sits at z < 0 and the player at z > 0. An earlier version subtracted,
+   * so every part of the eye was drawn behind its own socket and the depth test
+   * hid all of it. There is a test on the ordering.
    */
   const layer = (n: number) => e.at.z + n * 0.3
 
-  const parts: Mesh[] = [quad(layer(0), cx - r, cx + r, cy - r, cy + r, PALETTE.enemySocket)]
-
-  if (!e.exposed) {
-    // A closed eye: one dark slit, so a covered enemy still reads as being there
-    // without reading as a threat.
-    parts.push(quad(layer(1), cx - r * 0.86, cx + r * 0.86, cy - r * 0.07, cy + r * 0.07,
-      PALETTE.enemyLid))
-    return merge(parts)
-  }
+  const parts: Mesh[] = [
+    // A ring wider than the eye, so an enemy at the edge of vision is noticed
+    // peripherally rather than found by being shot.
+    frameMesh(layer(0), cx - r * 1.7, cx + r * 1.7, cy - r * 1.7, cy + r * 1.7, 1.4,
+      mix(PALETTE.enemyIris, PALETTE.enemyFiring, f)),
+    quad(layer(1), cx - r, cx + r, cy - r, cy + r, PALETTE.enemySocket),
+  ]
 
   /**
    * The lens shape, as three stacked bands. An eye has to be wider than it is
-   * tall or it reads as a square, and three rectangles of decreasing width are
-   * enough to say "lens" while staying inside the one hard constraint of the
-   * project: screen-parallel quads, the reason the sightline solver is exact.
+   * tall or it reads as a square, and three rectangles of decreasing width say
+   * "lens" while staying inside the one hard constraint of the project:
+   * screen-parallel quads, the reason the sightline solver is exact.
    */
   const bands: Array<[number, number, number]> = [
     [0.52, 0.30, 0.42],
@@ -234,7 +249,7 @@ export function enemyMesh(e: EnemyView): Mesh {
   ]
   for (const [halfW, offY, halfH] of bands) {
     parts.push(quad(
-      layer(1),
+      layer(2),
       cx - r * halfW, cx + r * halfW,
       cy + r * offY - r * halfH, cy + r * offY + r * halfH,
       PALETTE.enemySclera,
@@ -242,10 +257,10 @@ export function enemyMesh(e: EnemyView): Mesh {
   }
 
   const ir = r * (0.34 - 0.05 * f)
-  parts.push(quad(layer(2), cx - ir, cx + ir, cy - ir, cy + ir,
+  parts.push(quad(layer(3), cx - ir, cx + ir, cy - ir, cy + ir,
     mix(PALETTE.enemyIris, PALETTE.enemyFiring, f)))
   const pr = r * (0.15 + 0.06 * f)
-  parts.push(quad(layer(3), cx - pr, cx + pr, cy - pr, cy + pr,
+  parts.push(quad(layer(4), cx - pr, cx + pr, cy - pr, cy + pr,
     mix(PALETTE.enemyPupil, PALETTE.enemyFiring, f * f)))
 
   return merge(parts)

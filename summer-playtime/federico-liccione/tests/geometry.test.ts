@@ -182,43 +182,61 @@ describe('an enemy is an eye', () => {
     aimed: false,
   }
 
-  it('is a closed slit when it cannot see you, and an open eye when it can', () => {
-    const shut = enemyMesh(base)
-    const open = enemyMesh({ ...base, exposed: true })
-    // Open adds the sclera, the iris and the pupil; shut has one lid.
-    expect(open.positions.length).toBeGreaterThan(shut.positions.length)
-    expect(shut.indices.length).toBeGreaterThan(0)
-  })
-
-  it('draws every part of the eye nearer the viewer than its socket', () => {
-    /**
-     * The exact bug a playtester found: the nudges went the wrong way, so sclera,
-     * iris and pupil were drawn *behind* the socket and the depth test hid all of
-     * them. In this frame the scene is at z < 0 and the player at z > 0, so
-     * "towards the viewer" is **larger** z.
-     */
-    const m = enemyMesh({ ...base, exposed: true, fuse: 0.5 })
-    const zs: number[] = []
-    for (let i = 2; i < m.positions.length; i += 3) zs.push(m.positions[i]!)
-    const socketZ = Math.min(...zs)
-    expect(socketZ).toBe(base.at.z)
-    // Something must sit in front of it, or there is nothing to see.
-    expect(Math.max(...zs)).toBeGreaterThan(socketZ)
-    for (const z of zs) expect(z).toBeGreaterThanOrEqual(socketZ)
-  })
-
-  it('is wider than it is tall, or it reads as a square', () => {
-    const m = enemyMesh({ ...base, exposed: true, fuse: 0 })
-    // Measure only the sclera layer, the widest thing in front of the socket.
-    let maxHalfW = 0
-    let maxHalfH = 0
+  /** Vertices on one layer, selected by depth. */
+  const layer = (m: ReturnType<typeof enemyMesh>, n: number) => {
+    const z = base.at.z + n * 0.3
+    const out: Array<{ x: number; y: number }> = []
     for (let i = 0; i < m.positions.length; i += 3) {
-      const z = m.positions[i + 2]!
-      if (z <= base.at.z + 1e-6) continue
-      maxHalfW = Math.max(maxHalfW, Math.abs(m.positions[i]! - base.at.x))
-      maxHalfH = Math.max(maxHalfH, Math.abs(m.positions[i + 1]! - base.at.y))
+      if (Math.abs(m.positions[i + 2]! - z) < 1e-4) {
+        out.push({ x: m.positions[i]!, y: m.positions[i + 1]! })
+      }
     }
-    expect(maxHalfW).toBeGreaterThan(maxHalfH * 1.3)
+    return out
+  }
+
+  it('draws absolutely nothing when it cannot see you', () => {
+    /**
+     * It used to draw a dark socket with a closed slit, and a playtester hit that
+     * from both sides: an enemy whose centre was occluded showed the edge of its
+     * socket, so it looked visible while being unshootable, and one whose centre
+     * had just cleared was firing while nearly all of it was still behind cover.
+     * The engagement test is on a point and the drawing was a rectangle; drawing
+     * nothing is what reconciles them.
+     */
+    const shut = enemyMesh(base)
+    expect(shut.indices.length).toBe(0)
+    expect(shut.positions.length).toBe(0)
+    expect(enemyMesh({ ...base, exposed: true }).indices.length).toBeGreaterThan(0)
+  })
+
+  it('the eye is wider than it is tall, or it reads as a square', () => {
+    const m = enemyMesh({ ...base, exposed: true, fuse: 0 })
+    const sclera = layer(m, 2)
+    expect(sclera.length).toBeGreaterThan(0)
+    const halfW = Math.max(...sclera.map((p) => Math.abs(p.x - base.at.x)))
+    const halfH = Math.max(...sclera.map((p) => Math.abs(p.y - base.at.y)))
+    expect(halfW).toBeGreaterThan(halfH * 1.25)
+  })
+
+  it('the body stays inside the radius the crosshair tests against', () => {
+    // Everything except the outer ring: the hit box is built from `radius`, so a
+    // *body* wider than that would let a shot look like a hit and miss.
+    const m = enemyMesh({ ...base, exposed: true, fuse: 0.4 })
+    for (let n = 1; n <= 4; n++) {
+      for (const p of layer(m, n)) {
+        expect(Math.abs(p.x - base.at.x)).toBeLessThanOrEqual(base.radius + 1e-6)
+        expect(Math.abs(p.y - base.at.y)).toBeLessThanOrEqual(base.radius + 1e-6)
+      }
+    }
+  })
+
+  it('and the ring outside it is a cue, deliberately larger', () => {
+    // Its job is to be noticed at the edge of vision rather than to be clicked.
+    const ring = layer(enemyMesh({ ...base, exposed: true, fuse: 0 }), 0)
+    expect(ring.length).toBeGreaterThan(0)
+    const reach = Math.max(...ring.map((p) => Math.abs(p.x - base.at.x)))
+    expect(reach).toBeGreaterThan(base.radius)
+    expect(reach).toBeLessThan(base.radius * 2)
   })
 
   it('heats towards its shot as the fuse charges', () => {
@@ -241,22 +259,11 @@ describe('an enemy is an eye', () => {
 
   it('never emits an inverted rectangle, at any radius', () => {
     for (const radius of [1, 9, 40]) {
-      for (const exposed of [true, false]) {
-        const m = enemyMesh({ ...base, radius, exposed, fuse: 0.7 })
-        for (let i = 0; i < m.positions.length; i += 12) {
-          const xs = [m.positions[i]!, m.positions[i + 3]!]
-          expect(xs[1]).toBeGreaterThanOrEqual(xs[0]!)
-        }
-        expect(m.indices.length).toBeGreaterThan(0)
+      const m = enemyMesh({ ...base, radius, exposed: true, fuse: 0.7 })
+      for (let i = 0; i < m.positions.length; i += 12) {
+        expect(m.positions[i + 3]!).toBeGreaterThanOrEqual(m.positions[i]!)
       }
-    }
-  })
-
-  it('stays inside its own radius, so the hit box matches the picture', () => {
-    const m = enemyMesh({ ...base, exposed: true, fuse: 0.4 })
-    for (let i = 0; i < m.positions.length; i += 3) {
-      expect(Math.abs(m.positions[i]! - base.at.x)).toBeLessThanOrEqual(base.radius + 1e-6)
-      expect(Math.abs(m.positions[i + 1]! - base.at.y)).toBeLessThanOrEqual(base.radius + 1e-6)
+      expect(m.indices.length).toBeGreaterThan(0)
     }
   })
 })

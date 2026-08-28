@@ -756,6 +756,14 @@ addEventListener('resize', updateRuler)
 
 /* ---------------- the loop ---------------- */
 
+/**
+ * The engine has to judge against the *real* display, not a nominal one. The
+ * first line-up used to run before any frame had measured the canvas, so it was
+ * deciding what is in frame from a guessed aspect ratio and could disagree with
+ * the game about the same enemy.
+ */
+viewport = renderer.resize(widthCm)
+
 let lastStatus = 0
 // Collapsed by default: it plays as a game and expands into an instrument.
 el('hud').classList.add('collapsed')
