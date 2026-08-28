@@ -124,6 +124,16 @@ rectangle and at exactly its depth.
   in the frame loop exist for that, and both skip mid-round because a rebuild
   restarts the round.
 
+- **Losing the head is not the same as having no information.** A snap that takes
+  one eye out of frame used to freeze the viewpoint until both came back.
+  `src/perceive/reacquire.ts` holds the answers, pure and tested: one eye out means
+  keep tracking laterally with the depth held; both out means dead reckon along the
+  last measured velocity, bounded to 10 cm and 0.30 s, then hold. Do not replace
+  that with a jump to an extreme — exposure here is symmetric, so guessing further
+  out is as likely to walk into a sightline as out of one. And `status()` must keep
+  distinguishing the four states: three of them are the tracker reporting something
+  it did not measure.
+
 - **Aiming has two regimes and the split is on purpose.** Outside a round the
   crosshair *is* the OS cursor, one to one, because the panel has sliders and a
   text box in it. Inside a round the pointer is **locked** and the crosshair moves

@@ -641,6 +641,61 @@ answers — so the honest question a reviewer can ask of this project is *how ma
 of these findings needed a human to notice?* The answer is most of them, and that
 is the interesting result rather than an embarrassing one.
 
+## The frozen head
+
+*"Se nel tentativo di coprirsi da un colpo nemico lo scatto con la testa verso un
+lato è molto rapido, ed un occhio finisce fuori dalla webcam, si ottiene una sorta
+di blocco fintantoché gli occhi non ritornano entrambi visibili dalla cam."*
+
+Exactly right, and the mechanism was one line: on losing the landmarks the tracker
+set `state = 'no-face'` and *held* `smoothed`. The comment above it even defended
+the choice — "snapping the viewpoint to nothing is worse than a stale frame" —
+which is true, and was the wrong pair of options to be choosing between. The
+viewpoint freezes at the moment the player is moving fastest and cares most.
+
+The principle that fixes it points the opposite way to the obvious fix: **an eye
+leaving the frame is information, not the absence of it.** It says the head went
+that way. Two situations, and the first one turned out to be recoverable in a way
+I had not considered:
+
+**One eye out of frame is still a measurement.** The separation between the eyes is
+what gives this pipeline its metric scale, so losing one loses the *depth* — but
+not the lateral position, which is what the game is played with. Carrying the last
+known separation forward keeps the head tracked at a held depth. That covers most
+of the reported case outright: a sideways snap loses one eye well before it loses
+the face.
+
+**Both gone is dead reckoning, bounded twice, and then a stop.** The suggestion was
+to jump to the furthest point from centre, and I did not take it, for a reason
+worth writing down: exposure in this game is *symmetric*, so guessing further out
+is as likely to walk into a sightline as out of one, and which one depends on level
+geometry a tracker cannot see. Continuing the measured velocity is the only claim a
+tracker is entitled to make — and when the snap was fast, which is the case that
+prompted this, it arrives at almost the same place. Two bounds because one is not
+enough: 10 cm because a head at 200 cm/s that vanishes for a third of a second has
+plausibly travelled 60 cm and reporting that is a guess, and 0.30 s to catch the
+slow drift out of frame that would otherwise creep forever without hitting the
+distance bound. The distance bound scales the vector rather than clamping each
+axis, because clamping separately would bend a diagonal snap into an axis-aligned
+one — a lie about the one thing the function actually knows.
+
+Two things fell out of building it that were not in the complaint.
+
+The filter has to be **reset** when coming back from a gap. Its whole job is to lag
+a noisy signal, so after a gap its state describes where the head *was*, and
+feeding it the truth would rubber-band the viewpoint into place — a second
+complaint waiting to be made.
+
+And `status()` now distinguishes four states rather than two: tracking, one eye
+with the depth held, carrying, and holding. That is not polish. The project's rule
+is that it never lies about perception, and three of those four are the tracker
+reporting something it did not measure.
+
+The decisions live in `src/perceive/reacquire.ts` and are pure, with eleven tests.
+Same split as `isTypingIn`: the decision can be tested, the thing holding a video
+element cannot — and every one of the interesting cases here (the margin, the
+direction-preserving clamp, a negative timestamp gap) is a decision.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
