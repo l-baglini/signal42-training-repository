@@ -92,6 +92,79 @@ export function orientMask(depth: DepthField, mask: PersonMask, threshold = 0.6)
   return { width: mask.width, height: mask.height, values: flipped }
 }
 
+/**
+ * Smear the player out of the frame before it becomes level art.
+ *
+ * Excluding the person from the depth fitting is not enough, and a playtester
+ * found out why: an occluder is a **bounding box**, and the wall behind a seated
+ * person is one connected region that *surrounds* them — so its box spans the
+ * whole frame, and its texture is the whole frame, face and all. The geometry was
+ * right the entire time; the picture was not.
+ *
+ * The fill is a horizontal smear from the nearest non-person pixel on each row.
+ * Crude, and far better than the alternatives: a black hole reads as a bug, and
+ * anything cleverer is an inpainting model to solve a problem that is one row of
+ * pixels wide.
+ */
+export function removePerson(
+  rgba: Uint8ClampedArray | Uint8Array,
+  mask: PersonMask,
+  threshold = 0.55,
+): Uint8ClampedArray {
+  const { width, height, values } = mask
+  const out = new Uint8ClampedArray(rgba.length)
+  out.set(rgba)
+
+  for (let v = 0; v < height; v++) {
+    const row = v * width
+    let u = 0
+    while (u < width) {
+      if ((values[row + u] ?? 0) < threshold) {
+        u++
+        continue
+      }
+      // Found a run of person pixels: [start, end).
+      const start = u
+      while (u < width && (values[row + u] ?? 0) >= threshold) u++
+      const end = u
+
+      const leftIdx = start - 1
+      const rightIdx = end
+      const hasLeft = leftIdx >= 0
+      const hasRight = rightIdx < width
+      for (let x = start; x < end; x++) {
+        // Nearer edge wins, so a wall on one side does not stretch across a face.
+        const from =
+          hasLeft && (!hasRight || x - leftIdx <= rightIdx - x) ? leftIdx
+          : hasRight ? rightIdx
+          : hasLeft ? leftIdx
+          : -1
+        const dst = (row + x) * 4
+        if (from < 0) {
+          out[dst] = 12
+          out[dst + 1] = 14
+          out[dst + 2] = 20
+          out[dst + 3] = 255
+          continue
+        }
+        const src = (row + from) * 4
+        out[dst] = rgba[src]!
+        out[dst + 1] = rgba[src + 1]!
+        out[dst + 2] = rgba[src + 2]!
+        out[dst + 3] = 255
+      }
+    }
+  }
+  return out
+}
+
+/** How much of the frame the mask claims, for the diagnostics panel. */
+export function maskCoverage(mask: PersonMask, threshold = 0.55): number {
+  let n = 0
+  for (const v of mask.values) if (v >= threshold) n++
+  return mask.values.length === 0 ? 0 : n / mask.values.length
+}
+
 /* ---------------------------------------------------------------- scale ---- */
 
 export interface ScaleFit {

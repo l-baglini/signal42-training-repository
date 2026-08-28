@@ -384,7 +384,9 @@ async function runScan(): Promise<void> {
       `backend  ${report.device} / ${report.dtype}\n` +
       `scan     ${report.ms.toFixed(0)} ms` +
       (report.loadMs > 0 ? `   (weights loaded in ${(report.loadMs / 1000).toFixed(1)} s)` : '') +
-      `\nhead     ${head.z.toFixed(0)} cm, measured   far wall ${farWallCm} cm, assumed`
+      `\nhead     ${head.z.toFixed(0)} cm, measured   far wall ${farWallCm} cm, assumed` +
+      `\nmask     ${(report.maskCoverage * 100).toFixed(0)}% of frame is you` +
+      (report.maskFlipped ? ' (flipped: the segmenter had it backwards)' : '')
 
     if (!report.outcome.ok) {
       el('scanTitle').textContent = 'The scan found nothing to play with'
@@ -407,7 +409,8 @@ async function runScan(): Promise<void> {
           v1: (box.v1 + 1) / found.frameHeight,
         })
       })
-      if (report.canvas) renderer.setRoomTexture(report.canvas)
+      // The cleaned frame, not the raw one: the raw one has the player in it.
+      if (report.textureCanvas) renderer.setRoomTexture(report.textureCanvas)
       roomSource = `your room, ${report.device}/${report.dtype}`
       roundSeed++
       rebuildLineup()
