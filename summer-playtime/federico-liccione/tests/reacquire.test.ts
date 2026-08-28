@@ -10,8 +10,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  BIAS_MAX_CM,
+  BIAS_TAU_S,
   DEFAULT_LIMITS,
   deadReckon,
+  decayBias,
+  handoffBias,
   inFrame,
   midpointFromOneEye,
 } from '../src/perceive/reacquire'
@@ -114,5 +118,75 @@ describe('deadReckon', () => {
   it('treats a negative gap as no gap rather than reversing', () => {
     // Timestamps come from a clock this module does not own.
     expect(deadReckon(at, right, -1).at).toEqual(at)
+  })
+})
+
+describe('handing over between estimators', () => {
+  /**
+   * The residual complaint after the freeze was fixed. This tracker has three
+   * estimators of the same quantity, and every switch between them steps the
+   * reported position — coming back from a gap is only the largest of the three.
+   */
+  const reported: Point3 = { x: 10, y: 2, z: 60 }
+
+  it('cancels the step exactly, so a switch moves nothing at all', () => {
+    const measured: Point3 = { x: 6, y: 1, z: 58 }
+    const bias = handoffBias(reported, measured)
+    expect(measured.x + bias.x).toBeCloseTo(reported.x, 9)
+    expect(measured.y + bias.y).toBeCloseTo(reported.y, 9)
+    expect(measured.z + bias.z).toBeCloseTo(reported.z, 9)
+  })
+
+  it('refuses to absorb more than it is allowed to', () => {
+    /**
+     * The honest bound, and the reason it exists: absorbing a discontinuity means
+     * reporting a position the tracker knows is wrong. Smoothing a 30 cm
+     * disagreement over a third of a second is a 30 cm lie about where the head
+     * is, which in this game decides whether the player is behind cover. Past the
+     * bound the remainder snaps.
+     */
+    const far: Point3 = { x: -30, y: 2, z: 60 }
+    const bias = handoffBias(reported, far)
+    expect(Math.hypot(bias.x, bias.y, bias.z)).toBeCloseTo(BIAS_MAX_CM, 6)
+  })
+
+  it('shortens a correction without bending it', () => {
+    const diagonal: Point3 = { x: -20, y: -28, z: 60 }
+    const bias = handoffBias(reported, diagonal)
+    const dx = reported.x - diagonal.x
+    const dy = reported.y - diagonal.y
+    // Same direction as the disagreement it is standing in for.
+    expect(bias.y / bias.x).toBeCloseTo(dy / dx, 6)
+  })
+
+  it('is nothing when the two estimators agree', () => {
+    expect(handoffBias(reported, reported)).toEqual({ x: 0, y: 0, z: 0 })
+  })
+
+  it('decays to nothing, and reaches 1/e in one time constant', () => {
+    const bias: Point3 = { x: 4, y: -2, z: 1 }
+    const once = decayBias(bias, BIAS_TAU_S)
+    expect(once.x).toBeCloseTo(4 / Math.E, 6)
+    expect(once.y).toBeCloseTo(-2 / Math.E, 6)
+    expect(Math.abs(decayBias(bias, 10).x)).toBeLessThan(1e-6)
+  })
+
+  it('decays by elapsed time, not by frames', () => {
+    /**
+     * A webcam's frame rate collapses in exactly the poor light that makes the head
+     * hard to find, so a per-frame decay would converge slowly at the precise
+     * moment it is needed most. Two steps of half the interval must land where one
+     * step of the whole interval does.
+     */
+    const bias: Point3 = { x: 4, y: 0, z: 0 }
+    const oneStep = decayBias(bias, 0.2)
+    const twoSteps = decayBias(decayBias(bias, 0.1), 0.1)
+    expect(twoSteps.x).toBeCloseTo(oneStep.x, 9)
+  })
+
+  it('leaves the bias alone for a zero or negative interval', () => {
+    const bias: Point3 = { x: 4, y: 0, z: 0 }
+    expect(decayBias(bias, 0)).toEqual(bias)
+    expect(decayBias(bias, -1)).toEqual(bias)
   })
 })

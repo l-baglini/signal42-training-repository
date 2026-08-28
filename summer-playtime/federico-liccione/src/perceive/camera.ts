@@ -17,7 +17,13 @@ import type { Point3 } from '../engine'
 import type { Tracker } from './tracker'
 import { oneEuro3 } from './oneEuro'
 import {
-  DEFAULT_LIMITS, deadReckon, inFrame, midpointFromOneEye, type DeadReckonLimits,
+  DEFAULT_LIMITS,
+  deadReckon,
+  decayBias,
+  handoffBias,
+  inFrame,
+  midpointFromOneEye,
+  type DeadReckonLimits,
 } from './reacquire'
 
 export interface CameraTrackerOptions {
@@ -109,6 +115,39 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
   let lastMeasured: Point3 | null = null
   /** Reported position while extrapolating. Kept out of the filter's state. */
   let carried: Point3 | null = null
+  /**
+   * Which of the three estimators produced the last reading, and the bias that
+   * makes switching between them continuous.
+   *
+   * Three estimators — both irises, one iris plus the last known separation, dead
+   * reckoning — each a different estimator of the same quantity, so each switch
+   * steps the reported position. Coming back from a gap is the largest of those
+   * steps and was reported as jerky; it is not a special case, it is the same
+   * hand-off. `reacquire.ts` holds the rule.
+   */
+  let estimator: 'two-eye' | 'one-eye' | 'carried' = 'two-eye'
+  let bias: Point3 = { x: 0, y: 0, z: 0 }
+  let reported: Point3 | null = null
+  let lastReportAt = 0
+
+  /**
+   * The one place an estimate becomes the position the game sees.
+   *
+   * Everything upstream — the filter, the one-eye reconstruction, the
+   * extrapolation — feeds this, and it is the only writer of `reported`. Three code
+   * paths each publishing their own answer is what produced three discontinuities
+   * in the first place.
+   */
+  function publish(estimate: Point3, from: typeof estimator, now: number): void {
+    if (from !== estimator) {
+      bias = handoffBias(reported ?? estimate, estimate)
+      estimator = from
+    } else if (lastReportAt > 0) {
+      bias = decayBias(bias, now - lastReportAt)
+    }
+    lastReportAt = now
+    reported = { x: estimate.x + bias.x, y: estimate.y + bias.y, z: estimate.z + bias.z }
+  }
   let detectMsEma = 0
   let frameSEma = 1 / 60
   /** True camera frame rate, which is what collapses in low light. */
@@ -253,6 +292,7 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
     }
     lastMeasured = smoothed
     lastMeasuredAt = now
+    publish(smoothed, state === 'one-eye' ? 'one-eye' : 'two-eye', now)
     detail = degraded ? ' · degraded (no iris)' : ''
   }
 
@@ -272,6 +312,7 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
     }
     const out = deadReckon(lastMeasured, velocity, now - lastMeasuredAt, o.limits)
     carried = out.at
+    publish(out.at, 'carried', now)
     state = out.holding ? 'no-face' : 'reacquiring'
   }
 
@@ -293,7 +334,7 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
        * position — the one place the player was trying to leave. `status()` says
        * which of the three it is, every time.
        */
-      return carried ?? smoothed
+      return reported ?? carried ?? smoothed
     },
 
     /**
@@ -367,8 +408,11 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
       state = 'idle'
       smoothed = null
       carried = null
+      reported = null
       lastMeasured = null
       lastHalfPx = null
+      bias = { x: 0, y: 0, z: 0 }
+      lastReportAt = 0
       filter.reset()
     },
   }

@@ -134,6 +134,14 @@ rectangle and at exactly its depth.
   distinguishing the four states: three of them are the tracker reporting something
   it did not measure.
 
+- **Three estimators means three seams, and they share one rule.** Both irises, one
+  iris plus the last separation, and dead reckoning all estimate the same quantity
+  differently, so every switch steps the reported position. `publish()` in
+  `camera.ts` is the only writer of the reported position for that reason: it takes
+  a `handoffBias` on every switch and decays it. Do not add a fourth estimator
+  without routing it through there, and do not smooth a seam locally — that is what
+  turned a rubber band into a jump and produced a second complaint.
+
 - **Aiming has two regimes and the split is on purpose.** Outside a round the
   crosshair *is* the OS cursor, one to one, because the panel has sliders and a
   text box in it. Inside a round the pointer is **locked** and the crosshair moves

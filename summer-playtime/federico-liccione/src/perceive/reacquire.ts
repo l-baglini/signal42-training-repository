@@ -119,3 +119,76 @@ export function deadReckon(
     holding: holding || k < 1,
   }
 }
+
+/* ---------------- handing over between estimators ---------------- */
+
+/**
+ * The residual complaint after the freeze was fixed: *"rimane forse ancora un po'
+ * scattoso quando entrambi gli occhi ritornano visibili."*
+ *
+ * Fixing the freeze left three discontinuities behind, and they are all the same
+ * shape. This tracker does not have one estimator, it has three — both irises,
+ * one iris plus the last known separation, and dead reckoning — and every switch
+ * between them steps the reported position, because they are different estimators
+ * of the same quantity and they disagree by a centimetre or two. Coming back from
+ * a gap is the largest of the three steps, since the extrapolation and the truth
+ * have had up to a third of a second to diverge, but it is not a special case: it
+ * is the same hand-off.
+ *
+ * So instead of three ad-hoc smoothings there is one rule. On every switch, record
+ * the disagreement as a **bias**, so the reported position does not move at the
+ * instant of the switch; then decay that bias to nothing. What the player sees is
+ * continuous, and it converges on the measurement.
+ *
+ * Kept separate from the One Euro filter on purpose. That filter's job is jitter
+ * on a *measured* signal, and it is swept against tests for that; this is a
+ * discontinuity in *which measurement is being made*, and the two want different
+ * time constants.
+ */
+
+/** How fast a hand-off bias is given up. Seconds to fall to 1/e of it. */
+export const BIAS_TAU_S = 0.12
+
+/**
+ * And the most it is allowed to absorb, in centimetres.
+ *
+ * The honest bound. Absorbing a discontinuity means reporting a position the
+ * tracker knows is wrong, briefly — and a 30 cm disagreement smoothed over a third
+ * of a second is a 30 cm lie about where the player's head is, which in this game
+ * decides whether they are behind cover. Past this bound the remainder snaps: a
+ * visible jump is better than a plausible untruth.
+ */
+export const BIAS_MAX_CM = 6
+
+/**
+ * The bias that makes a switch of estimator invisible at the instant it happens.
+ *
+ * Clamped as a vector rather than per axis, for the same reason `deadReckon` scales
+ * rather than clamps: bending the direction of a correction is a worse lie than
+ * shortening it.
+ */
+export function handoffBias(
+  prevReported: Point3,
+  estimate: Point3,
+  maxCm = BIAS_MAX_CM,
+): Point3 {
+  const dx = prevReported.x - estimate.x
+  const dy = prevReported.y - estimate.y
+  const dz = prevReported.z - estimate.z
+  const d = Math.hypot(dx, dy, dz)
+  if (d <= 1e-9) return { x: 0, y: 0, z: 0 }
+  const k = Math.min(1, maxCm / d)
+  return { x: dx * k, y: dy * k, z: dz * k }
+}
+
+/**
+ * Exponential decay towards zero. Driven by elapsed time rather than by frames, so
+ * a camera running at fifteen frames a second and one running at sixty converge in
+ * the same wall clock — which matters here, because a webcam's frame rate collapses
+ * in exactly the poor light that makes the head hard to find.
+ */
+export function decayBias(bias: Point3, dtS: number, tauS = BIAS_TAU_S): Point3 {
+  if (!(dtS > 0) || !(tauS > 0)) return bias
+  const k = Math.exp(-dtS / tauS)
+  return { x: bias.x * k, y: bias.y * k, z: bias.z * k }
+}

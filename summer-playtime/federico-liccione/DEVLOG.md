@@ -696,6 +696,46 @@ Same split as `isTypingIn`: the decision can be tested, the thing holding a vide
 element cannot — and every one of the interesting cases here (the margin, the
 direction-preserving clamp, a negative timestamp gap) is a decision.
 
+## Three estimators, three seams
+
+*"Meglio, però rimane forse ancora un po' scattoso quando entrambi gli occhi
+ritornano visibili."*
+
+Fixing the freeze created this, and diagnosing it was more useful than the fix.
+The tracker does not have one estimator any more — it has three: both irises, one
+iris plus the last known separation, and dead reckoning. They estimate the same
+quantity by different means, so they disagree by a centimetre or two, and **every
+switch between them steps the reported position**. Coming back from a gap is the
+largest of the three steps, because the extrapolation and the truth have had up to
+a third of a second to diverge, but it is not a special case. It is the same seam,
+and I had reached for the special case first: reset the filter on a long gap. That
+turned a rubber band into a jump, which is what the second complaint was about.
+
+One rule instead of three smoothings. On every switch, record the disagreement as
+a **bias** so the reported position does not move at the instant of the switch,
+then decay the bias to nothing with a 120 ms time constant. Continuous to look at,
+and it converges on the measurement.
+
+Two things about it that are not incidental:
+
+The bias is bounded at 6 cm. Absorbing a discontinuity means reporting a position
+the tracker knows is wrong, and smoothing a 30 cm disagreement over a third of a
+second is a 30 cm lie about where the player's head is — which in this game decides
+whether they are behind cover. Past the bound the remainder snaps. **A visible jump
+is better than a plausible untruth**, and that is the same trade as everywhere else
+here: the status line says which of four states the tracker is in precisely so the
+player is never misled about what was measured.
+
+And the decay is driven by elapsed time rather than by frames, which has a specific
+reason: a webcam's frame rate collapses in exactly the poor light that makes the
+head hard to find, so a per-frame decay would converge slowest at the moment it is
+needed most. There is a test that two half-steps land where one whole step does.
+
+The general lesson, and it is one I would not have got to from the first complaint
+alone: **when a fix adds a second estimator, it adds a seam.** Adding a third
+without noticing that they all need one hand-off rule is how a jitter fix becomes a
+jitter report.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
