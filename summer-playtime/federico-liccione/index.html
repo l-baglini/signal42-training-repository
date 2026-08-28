@@ -54,6 +54,9 @@
   .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .row label { flex: 0 0 130px; opacity: .7; font-size: 11px; }
   .row input { flex: 1; min-width: 0; }
+  .row input[type=text], .row input[type=password] { background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 5px; color: #e7edf8;
+    padding: 4px 7px; font-size: 11px; font-family: inherit; }
   .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
   #fatal { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 520px;
     border-color: rgba(255,140,140,.4); }
@@ -118,6 +121,12 @@
     <div id="stats"></div>
     <div id="tracker"></div>
     <div class="row">
+      <label>Describe a level</label>
+      <input id="describe" type="text" autocomplete="off"
+        placeholder="a corridor with pillars and a low wall on the right">
+      <span class="val"></span>
+    </div>
+    <div class="row">
       <label>Claude API key</label>
       <input id="apikey" type="password" placeholder="optional · never stored"
         autocomplete="off" spellcheck="false">
@@ -136,7 +145,7 @@
     <div id="keys">
       <kbd>space</kbd> play &nbsp; <kbd>WASD</kbd> lean &nbsp; <kbd>Q</kbd>/<kbd>E</kbd> depth
       &nbsp; <kbd>click</kbd> shoot<br>
-      <kbd>[</kbd> <kbd>]</kbd> level &nbsp; <kbd>c</kbd> webcam head &nbsp; <kbd>k</kbd> calibrate &nbsp; <kbd>p</kbd> scan the room
+      <kbd>[</kbd> <kbd>]</kbd> level &nbsp; <kbd>enter</kbd> in the box: build one &nbsp; <kbd>c</kbd> webcam head &nbsp; <kbd>k</kbd> calibrate &nbsp; <kbd>p</kbd> scan the room
       &nbsp; <kbd>o</kbd> window / dolly &nbsp; <kbd>m</kbd> pointer head &nbsp;
       <kbd>t</kbd> room texture &nbsp; <kbd>h</kbd> hide numbers &nbsp; <kbd>n</kbd> sound &nbsp; <kbd>r</kbd> ruler
     </div>

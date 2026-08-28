@@ -1,0 +1,166 @@
+/**
+ * A level from a sentence — the call.
+ *
+ * The prompt below is part of the craft rather than an afterthought. The model is
+ * *taught* the coordinate frame and the one geometric constraint that decides
+ * whether a layout can be played at all, because leaving it to infer that from
+ * nothing would be asking it to rediscover the leverage identity by guesswork.
+ * What it is not told is where enemies go: it lays out walls, and the engine
+ * decides what can be fought from where.
+ */
+import { costOf, type InventoryCost } from './inventory'
+import { COVER_BAND, EXTENT, MAX_COVER, levelFromRects, type DesignReport } from './levelDesign'
+
+const ENDPOINT = 'https://api.anthropic.com/v1/messages'
+const MODEL = 'claude-sonnet-5'
+const PRICE = { input: 2, output: 10 } as const
+
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    blurb: { type: 'string' },
+    cover: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          label: { type: 'string' },
+          z: { type: 'number' },
+          x0: { type: 'number' },
+          x1: { type: 'number' },
+          y0: { type: 'number' },
+          y1: { type: 'number' },
+        },
+        required: ['label', 'z', 'x0', 'x1', 'y0', 'y1'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['name', 'blurb', 'cover'],
+  additionalProperties: false,
+} as const
+
+const SYSTEM = `You lay out levels for a cover shooter played by leaning your head.
+
+THE WORLD. Centimetres. The screen is the plane z = 0; the player's eye sits at
+about z = +60 and can lean roughly 20 cm left or right, 11 cm up or down. The
+level lives at z < 0, beyond the screen. x is right, y is up, both measured from
+the centre of the screen.
+
+WHAT YOU PLACE. Only cover: axis-aligned rectangles parallel to the screen. Give
+between 2 and ${MAX_COVER} of them. You do NOT place enemies — enemies go behind
+the cover you place, and the game works out for itself which positions are fair.
+
+THE ONE RULE THAT MATTERS. Cover must sit between z = ${COVER_BAND.nearest} and
+z = ${COVER_BAND.furthest}. This is not a preference. A player's influence over
+where their line of sight crosses an obstacle falls off with the obstacle's
+distance, so cover further away than about a metre cannot be leaned around by any
+human at all, and a level built from it is unplayable.
+
+WHAT MAKES A GOOD LAYOUT.
+- Leave gaps. A player who cannot see anything from anywhere has no level, and
+  cover that spans the whole view is a blindfold. Keep the visible span roughly
+  within x from -${EXTENT.x} to ${EXTENT.x} and y from -${EXTENT.y} to ${EXTENT.y}.
+- Vary the axis. A tall narrow upright makes the player lean sideways; a wide low
+  wall makes them rise up over it. A level of only uprights is a level of only
+  one movement, and a neck has about half the vertical range it has lateral, so
+  vertical peeks are rarer and more valuable.
+- Vary the depth. Cover nearer the screen gives the player more leverage, so it
+  makes the easier positions; cover near the far end of the band makes the harder
+  ones.
+- Overlap deliberately. Two rectangles that between them wall off one side create
+  a genuinely hard corner, but check you have not walled off every side.
+
+Answer with the geometry only. The name and blurb are shown to the player.`
+
+export type LevelDesignResult =
+  | { readonly ok: true; readonly report: DesignReport; readonly name: string
+      readonly blurb: string; readonly cost: InventoryCost; readonly ms: number }
+  | { readonly ok: false; readonly reason: string }
+
+export async function askForLevel(
+  apiKey: string,
+  description: string,
+): Promise<LevelDesignResult> {
+  if (!apiKey.trim()) return { ok: false, reason: 'no API key given' }
+  if (!description.trim()) return { ok: false, reason: 'describe a level first' }
+
+  const t0 = performance.now()
+  let res: Response
+  try {
+    res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey.trim(),
+        'anthropic-version': '2023-06-01',
+        // Required for a browser request, and its name is the warning. The key
+        // lives in page memory only. SPEC §7.6.
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 2048,
+        system: SYSTEM,
+        messages: [{ role: 'user', content: description.trim().slice(0, 600) }],
+        output_config: { format: { type: 'json_schema', schema: SCHEMA } },
+      }),
+    })
+  } catch (err) {
+    return { ok: false, reason: `network: ${err instanceof Error ? err.message : String(err)}` }
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}` }
+  }
+
+  const payload = (await res.json().catch(() => null)) as {
+    stop_reason?: string
+    usage?: { input_tokens?: number; output_tokens?: number }
+    content?: Array<{ type: string; text?: string }>
+  } | null
+  if (!payload) return { ok: false, reason: 'the response was not JSON' }
+  if (payload.stop_reason === 'max_tokens') {
+    return { ok: false, reason: 'the reply was cut off by max_tokens' }
+  }
+  if (payload.stop_reason === 'refusal') {
+    return { ok: false, reason: 'the model declined' }
+  }
+
+  const text = payload.content?.find((b) => b.type === 'text')?.text
+  if (!text) return { ok: false, reason: 'the response carried no text block' }
+
+  let parsed: { name?: unknown; blurb?: unknown; cover?: unknown }
+  try {
+    parsed = JSON.parse(text) as typeof parsed
+  } catch {
+    return { ok: false, reason: 'the reply was not valid JSON despite the schema' }
+  }
+
+  const name = typeof parsed.name === 'string' && parsed.name.trim()
+    ? parsed.name.trim().slice(0, 40)
+    : 'Untitled'
+  const blurb = typeof parsed.blurb === 'string' ? parsed.blurb.trim().slice(0, 220) : ''
+  const cover = Array.isArray(parsed.cover) ? parsed.cover : []
+
+  const report = levelFromRects(cover, name, MODEL, new Date().toISOString())
+  if (report.kept === 0) {
+    return { ok: false, reason: `nothing usable came back: ${report.dropped} rectangles dropped` }
+  }
+
+  return {
+    ok: true,
+    report,
+    name,
+    blurb,
+    ms: performance.now() - t0,
+    cost: costOf(
+      MODEL,
+      payload.usage?.input_tokens ?? 0,
+      payload.usage?.output_tokens ?? 0,
+      PRICE,
+    ),
+  }
+}
