@@ -126,80 +126,84 @@ export interface EnvironmentOptions {
   readonly farZ?: number
   readonly halfWidth?: number
   readonly floorY?: number
-  readonly ceilingY?: number
-  readonly bands?: number
+  readonly wallTopY?: number
+  /** Side of one floor tile, cm. The unit the eye measures distance in. */
+  readonly tileCm?: number
 }
 
 const ENV_DEFAULTS = {
   nearZ: -14,
-  // The corridor stops short of the sky so that the far end is an *opening*, with
-  // a skyline standing in the gap. A closed tube has nothing to be backlit by.
+  // The corridor stops short of the sky so that the far end is an *opening*.
   farZ: -430,
   halfWidth: 118,
   floorY: -64,
-  ceilingY: 66,
-  bands: 22,
+  /**
+   * Low walls, not a tube. There used to be a ceiling and the corridor was a
+   * closed box graded from near-black to bright; it read as a tunnel of fog. Open
+   * it to the sky and every block has something bright to be an outline against,
+   * which is the whole reason a voxel game is readable at a glance.
+   */
+  wallTopY: 26,
+  tileCm: 26,
 } as const
 
 /**
- * The room the cover stands in: floor, ceiling and two side walls, in real 3D.
+ * The place the cover stands in: a checkered floor, two low side walls, open sky.
  *
  * None of it occludes anything, so none of it has to be screen-parallel — a
  * constraint I had been applying to the whole renderer when it only ever applied
- * to the solver, and only to cover. This is what turns a set of floating cards
- * into a place.
+ * to the solver, and only to cover.
  *
- * Colour is graded by depth rather than lit: the far end is bright because the sky
- * is behind it, the near end is almost black. That single gradient does the work
- * of a lighting rig, and it is what makes a rectangle read as a silhouette rather
- * than as a placeholder.
+ * **Distance is carried by the tiles, not by colour.** The previous version graded
+ * every surface from near-black to bright and leaned on aerial perspective, and a
+ * playtester's verdict was that it confused rather than helped. A checkerboard in
+ * perspective states depth without touching contrast: the tiles get smaller, and
+ * that is the whole cue. It also gives the head-tracked parallax something with
+ * hard edges to slide against, which a smooth gradient cannot do.
  */
 export function environmentMesh(mood: Mood = DEFAULT_MOOD, opts: EnvironmentOptions = {}): Mesh {
   const o = { ...ENV_DEFAULTS, ...opts }
   const parts: Mesh[] = []
-  const span = o.nearZ - o.farZ
+  const tile = Math.max(4, o.tileCm)
 
-  for (let i = 0; i < o.bands; i++) {
-    const z0 = o.nearZ - (span * i) / o.bands
-    const z1 = o.nearZ - (span * (i + 1)) / o.bands
-    const t0 = i / o.bands
-    const t1 = (i + 1) / o.bands
-    // Slight banding between strips, so the recession is legible as distance
-    // rather than as a smooth wash.
-    const stripe = i % 2 === 0 ? 1 : 0.88
+  const cols = Math.max(1, Math.round((o.halfWidth * 2) / tile))
+  const rows = Math.max(1, Math.round((o.nearZ - o.farZ) / tile))
+  const dx = (o.halfWidth * 2) / cols
+  const dz = (o.nearZ - o.farZ) / rows
 
-    const grade = (near: readonly [number, number, number], far: readonly [number, number, number], t: number): Rgb => {
-      const e = Math.pow(t, 0.72) * stripe
-      return [
-        near[0] + (far[0] - near[0]) * e,
-        near[1] + (far[1] - near[1]) * e,
-        near[2] + (far[2] - near[2]) * e,
-      ]
+  for (let j = 0; j < rows; j++) {
+    const z0 = o.nearZ - dz * j
+    const z1 = o.nearZ - dz * (j + 1)
+    for (let i = 0; i < cols; i++) {
+      const x0 = -o.halfWidth + dx * i
+      const x1 = x0 + dx
+      const tone = (i + j) % 2 === 0 ? mood.floorA : mood.floorB
+      parts.push(quad3(
+        { x: x0, y: o.floorY, z: z0 }, { x: x1, y: o.floorY, z: z0 },
+        { x: x0, y: o.floorY, z: z1 }, { x: x1, y: o.floorY, z: z1 },
+        tone,
+      ))
     }
 
-    const fl0 = grade(mood.floorNear, mood.floorFar, t0)
-    const fl1 = grade(mood.floorNear, mood.floorFar, t1)
-    parts.push(quad3(
-      { x: -o.halfWidth, y: o.floorY, z: z0 }, { x: o.halfWidth, y: o.floorY, z: z0 },
-      { x: -o.halfWidth, y: o.floorY, z: z1 }, { x: o.halfWidth, y: o.floorY, z: z1 },
-      fl0, fl0, fl1, fl1,
-    ))
-
-    const ce0 = grade(mood.ceilingNear, mood.ceilingFar, t0)
-    const ce1 = grade(mood.ceilingNear, mood.ceilingFar, t1)
-    parts.push(quad3(
-      { x: -o.halfWidth, y: o.ceilingY, z: z0 }, { x: o.halfWidth, y: o.ceilingY, z: z0 },
-      { x: -o.halfWidth, y: o.ceilingY, z: z1 }, { x: o.halfWidth, y: o.ceilingY, z: z1 },
-      ce0, ce0, ce1, ce1,
-    ))
-
-    const wa0 = grade(mood.wallNear, mood.wallFar, t0)
-    const wa1 = grade(mood.wallNear, mood.wallFar, t1)
+    // The walls take the same courses, so the two surfaces agree about where one
+    // step of depth is.
+    const shade = j % 2 === 0 ? 1 : 0.88
+    const body: Rgb = [mood.wall[0] * shade, mood.wall[1] * shade, mood.wall[2] * shade]
+    const capH = Math.min(6, (o.wallTopY - o.floorY) * 0.12)
     for (const sx of [-1, 1]) {
       parts.push(quad3(
-        { x: sx * o.halfWidth, y: o.floorY, z: z0 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z0 },
-        { x: sx * o.halfWidth, y: o.floorY, z: z1 }, { x: sx * o.halfWidth, y: o.ceilingY, z: z1 },
-        wa0, wa0, wa1, wa1,
+        { x: sx * o.halfWidth, y: o.floorY, z: z0 },
+        { x: sx * o.halfWidth, y: o.wallTopY - capH, z: z0 },
+        { x: sx * o.halfWidth, y: o.floorY, z: z1 },
+        { x: sx * o.halfWidth, y: o.wallTopY - capH, z: z1 },
+        body,
+      ))
+      parts.push(quad3(
+        { x: sx * o.halfWidth, y: o.wallTopY - capH, z: z0 },
+        { x: sx * o.halfWidth, y: o.wallTopY, z: z0 },
+        { x: sx * o.halfWidth, y: o.wallTopY - capH, z: z1 },
+        { x: sx * o.halfWidth, y: o.wallTopY, z: z1 },
+        mood.wallCap,
       ))
     }
   }
@@ -207,96 +211,130 @@ export function environmentMesh(mood: Mood = DEFAULT_MOOD, opts: EnvironmentOpti
 }
 
 /**
- * A skyline standing in the far opening.
+ * Clouds, as flat blocks in the sky.
  *
- * Towers, or trees, or whatever the eye decides they are: flat silhouettes at four
- * depths, dark against a bright sky. They occlude nothing and are the cheapest
- * possible statement that the corridor is somewhere rather than nowhere.
+ * Literally rectangles, which is what a voxel game's clouds are: no noise, no
+ * softness, nothing that has to be sampled. They sit beyond the corridor and
+ * above the walls, so they occlude nothing and cannot be mistaken for cover.
  *
  * Seeded, so a level looks the same every time it is played — the seed comes from
  * the level, not from the clock.
  */
-export function skylineMesh(mood: Mood = DEFAULT_MOOD, seed = 1): Mesh {
+export function cloudMesh(mood: Mood = DEFAULT_MOOD, seed = 1): Mesh {
   let s = (seed * 2654435761) >>> 0
   const rnd = () => {
     s = (s * 1664525 + 1013904223) >>> 0
     return s / 4294967296
   }
   const parts: Mesh[] = []
-  const layers = [
-    { z: -452, scale: 1.0, tint: 0.55 },
-    { z: -472, scale: 0.82, tint: 0.75 },
-    { z: -492, scale: 0.66, tint: 0.95 },
-  ]
-  for (const layer of layers) {
+  for (const layer of [
+    { z: -466, y: 96, tint: 1.0 },
+    { z: -498, y: 168, tint: 0.86 },
+  ]) {
     const tone: Rgb = [
-      mood.skyline[0] * layer.tint + mood.haze[0] * (1 - layer.tint) * 0.25,
-      mood.skyline[1] * layer.tint + mood.haze[1] * (1 - layer.tint) * 0.25,
-      mood.skyline[2] * layer.tint + mood.haze[2] * (1 - layer.tint) * 0.25,
+      mood.cloud[0] * layer.tint, mood.cloud[1] * layer.tint, mood.cloud[2] * layer.tint,
     ]
     let x = -430
     while (x < 430) {
-      const w = 26 + rnd() * 74
-      const h = (34 + rnd() * 190) * layer.scale
-      const gap = 8 + rnd() * 46
-      // Rooted below the corridor floor so no gap shows under a tower.
-      parts.push(quad(layer.z, x, x + w, -300, -60 + h, tone))
-      x += w + gap
+      const w = 40 + rnd() * 110
+      const h = 14 + rnd() * 20
+      const y = layer.y + (rnd() - 0.5) * 60
+      parts.push(quad(layer.z, x, x + w, y, y + h, tone))
+      x += w + 40 + rnd() * 120
     }
   }
   return merge(parts)
 }
 
 /**
- * A piece of cover, as a silhouette.
+ * A piece of cover, as a block.
  *
- * Still one screen-parallel rectangle, because the solver's exactness depends on
- * it — but graded from a lifted top edge to a near-black bottom, with a thin bright
- * rim along the top. Nothing here leaves the rectangle, so the picture cannot
- * promise solidity the engine does not believe in.
+ * Still one screen-parallel rectangle at one depth, because the solver's
+ * exactness depends on it — and yet it reads as a solid block, because the
+ * constraint never forbade the block. It forbade the **extrusion**: a box with
+ * depth has a silhouette wider than its own front face, so drawing one would
+ * promise the eye a piece of cover wider than the one the sightline test uses,
+ * and the promise would break in the player's favour and then against them.
+ *
+ * So the extrusion is drawn *inwards*. A bright outline, then four bevel faces
+ * shaded as if lit from the upper left — top brightest, left mid, right dark,
+ * bottom darkest — then a flat front face. Every vertex is inside the rectangle
+ * and at exactly its depth, which `tests/geometry.test.ts` asserts, so the
+ * picture cannot promise solidity the engine does not believe in.
  */
 export function coverMesh(b: Billboard, mood: Mood = DEFAULT_MOOD, uv?: UvRect): Mesh {
   // With a texture rect it is a plain textured quad: that path exists so the
-  // player can see their own room on the cover, and a gradient over a photograph
-  // fights the photograph. Without one it is the silhouette treatment below.
-  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, mood.coverTop as Rgb, uv)
-  const rimHeight = Math.min(2.2, (b.y1 - b.y0) * 0.06)
-  const body: Mesh = {
-    positions: new Float32Array([
-      b.x0, b.y0, b.z, b.x1, b.y0, b.z,
-      b.x0, b.y1 - rimHeight, b.z, b.x1, b.y1 - rimHeight, b.z,
-    ]),
-    colors: new Float32Array([
-      ...mood.coverBottom, ...mood.coverBottom,
-      ...mood.coverTop, ...mood.coverTop,
-    ]),
-    uvs: new Float32Array(8),
-    textured: new Float32Array(4),
-    indices: new Uint32Array([0, 1, 2, 2, 1, 3]),
+  // player can see their own room on the cover, and shading over a photograph
+  // fights the photograph.
+  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, mood.blockFace as Rgb, uv)
+
+  const w = b.x1 - b.x0
+  const h = b.y1 - b.y0
+  const edge = Math.max(0.6, Math.min(1.8, w * 0.05, h * 0.05))
+  const ix0 = b.x0 + edge
+  const ix1 = b.x1 - edge
+  const iy0 = b.y0 + edge
+  const iy1 = b.y1 - edge
+  const parts: Mesh[] = [frameMesh(b.z, b.x0, b.x1, b.y0, b.y1, edge, mood.blockEdge)]
+
+  const bevel = Math.min(7, (ix1 - ix0) * 0.22, (iy1 - iy0) * 0.22)
+  const cx0 = ix0 + bevel
+  const cx1 = ix1 - bevel
+  const cy0 = iy0 + bevel
+  const cy1 = iy1 - bevel
+  if (!(cx1 > cx0 && cy1 > cy0)) {
+    // Too small to bevel. One flat face, which is still a block.
+    parts.push(quad(b.z, ix0, ix1, iy0, iy1, mood.blockFace as Rgb))
+    return merge(parts)
   }
-  const rim = quad(b.z, b.x0, b.x1, b.y1 - rimHeight, b.y1, mood.coverRim as Rgb)
-  return merge([body, rim])
+
+  const left = mix(mood.blockFace, mood.blockTop, 0.45)
+  const right = mix(mood.blockFace, mood.blockSide, 0.55)
+  const z = b.z
+  // Top, bottom, left, right: the outer edge of each bevel is on the inset
+  // rectangle and the inner edge on the face rectangle.
+  parts.push(quad3(
+    { x: ix0, y: iy1, z }, { x: ix1, y: iy1, z },
+    { x: cx0, y: cy1, z }, { x: cx1, y: cy1, z },
+    mood.blockTop,
+  ))
+  parts.push(quad3(
+    { x: ix0, y: iy0, z }, { x: ix1, y: iy0, z },
+    { x: cx0, y: cy0, z }, { x: cx1, y: cy0, z },
+    mood.blockSide,
+  ))
+  parts.push(quad3(
+    { x: ix0, y: iy0, z }, { x: ix0, y: iy1, z },
+    { x: cx0, y: cy0, z }, { x: cx0, y: cy1, z },
+    left,
+  ))
+  parts.push(quad3(
+    { x: ix1, y: iy0, z }, { x: ix1, y: iy1, z },
+    { x: cx1, y: cy0, z }, { x: cx1, y: cy1, z },
+    right,
+  ))
+  parts.push(quad(z, cx0, cx1, cy0, cy1, mood.blockFace as Rgb))
+  return merge(parts)
 }
 
 /**
  * The dark patch where a piece of cover meets the floor.
  *
- * Contact shadows are the cheapest way to stop objects looking like stickers, and
- * this one is floor geometry — it occludes nothing and is therefore unconstrained.
+ * Flat and hard-edged like everything else — a voxel game's shadow is a shape,
+ * not a falloff. It is floor geometry, occludes nothing, and is therefore
+ * unconstrained.
  */
 export function contactShadowMesh(
   b: Billboard,
   floorY: number,
   mood: Mood = DEFAULT_MOOD,
-  depth = 34,
+  depth = 26,
 ): Mesh {
   const y = floorY + 0.4
-  const pad = 6
   return quad3(
-    { x: b.x0 - pad, y, z: b.z }, { x: b.x1 + pad, y, z: b.z },
-    { x: b.x0 - pad * 2, y, z: b.z - depth }, { x: b.x1 + pad * 2, y, z: b.z - depth },
-    PALETTE.contactShadow, PALETTE.contactShadow,
-    mood.floorFar, mood.floorFar,
+    { x: b.x0, y, z: b.z }, { x: b.x1, y, z: b.z },
+    { x: b.x0, y, z: b.z - depth }, { x: b.x1, y, z: b.z - depth },
+    mood.shadow,
   )
 }
 
@@ -374,26 +412,14 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
 ]
 
 /**
- * A backlit palette.
+ * The colours that are not the level's own.
  *
- * The problem with rectangles was never that they are rectangles: it was that
- * flat front-lighting makes any shape look like a placeholder. Lit from behind —
- * bright hazy sky, near-black cover, one thin rim of light along a top edge —
- * a rectangle reads as a deliberate silhouette. It is also the cheapest dramatic
- * lighting there is, since none of it needs a light source, only an ordering of
- * greys.
+ * Everything a level chooses — sky, floor, walls, blocks — lives in `mood.ts`.
+ * What is left here is what must never change with the level, because the player
+ * reads a rule off it: an enemy, a threat, a piece of cover you are safe behind.
+ * Those are loud and saturated, and they are the same loud in every mood.
  */
 export const PALETTE = {
-  coverTop: [0.085, 0.10, 0.135] as Rgb,
-  coverBottom: [0.022, 0.028, 0.042] as Rgb,
-  coverRim: [0.52, 0.60, 0.70] as Rgb,
-  contactShadow: [0.012, 0.016, 0.028] as Rgb,
-  floorNear: [0.055, 0.065, 0.088] as Rgb,
-  floorFar: [0.16, 0.19, 0.245] as Rgb,
-  wallNear: [0.038, 0.046, 0.065] as Rgb,
-  wallFar: [0.13, 0.155, 0.20] as Rgb,
-  ceilingNear: [0.028, 0.034, 0.050] as Rgb,
-  ceilingFar: [0.10, 0.12, 0.16] as Rgb,
   target: [0.32, 0.88, 0.68] as Rgb,
   targetIdle: [0.14, 0.28, 0.26] as Rgb,
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
@@ -577,7 +603,7 @@ export function buildScene(input: SceneInput): Mesh {
   ]
   const mood = input.mood ?? DEFAULT_MOOD
   if (input.environment !== false) {
-    parts.push(skylineMesh(mood, input.skylineSeed ?? 1))
+    parts.push(cloudMesh(mood, input.skylineSeed ?? 1))
     parts.push(environmentMesh(mood))
   }
 

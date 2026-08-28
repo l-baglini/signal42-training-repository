@@ -13,12 +13,13 @@ import {
   enemyMesh,
   environmentMesh,
   merge,
-  skylineMesh,
+  cloudMesh,
   quad,
   quad3,
   targetMesh,
 } from '../src/render/geometry'
 import type { EnemyView } from '../src/render/geometry'
+import { DEFAULT_MOOD } from '../src/render/mood'
 import type { Billboard, Target } from '../src/engine'
 import raw from '../fixtures/desk.room.json'
 import type { RoomScan } from '../src/engine'
@@ -359,21 +360,31 @@ describe('the place the cover stands in', () => {
     expect(minX).toBeLessThan(-80)
     expect(maxX).toBeGreaterThan(80)
     expect(minY).toBeLessThan(-40)
-    expect(maxY).toBeGreaterThan(40)
+    // Low walls now, so the sky shows above them.
+    expect(maxY).toBeGreaterThan(20)
   })
 
-  it('brightens with distance, which is what does the lighting', () => {
-    // The far end is bright because the sky is behind it; the near end is nearly
-    // black. That gradient is the whole lighting rig.
-    let nearest = { z: -Infinity, lum: 0 }
-    let furthest = { z: Infinity, lum: 0 }
+  it('does NOT grade brightness with distance', () => {
+    /**
+     * This test used to assert the opposite, and the reversal is the whole point
+     * of the current look. Grading the room from near-black to bright was doing
+     * the depth cue by *destroying contrast* in the far half of the corridor —
+     * which is exactly the half where deciding whether an enemy is exposed is
+     * hardest. Perspective and the tiles carry distance now; brightness carries
+     * nothing, so the same tone must be found at both ends.
+     */
+    const key = (v: number) =>
+      `${env.colors[v * 3]!.toFixed(3)},${env.colors[v * 3 + 1]!.toFixed(3)},` +
+      `${env.colors[v * 3 + 2]!.toFixed(3)}`
+    const near = new Set<string>()
+    const far = new Set<string>()
     for (let v = 0; v < env.positions.length / 3; v++) {
-      const z = env.positions[v * 3 + 2]!
-      const lum = env.colors[v * 3]! + env.colors[v * 3 + 1]! + env.colors[v * 3 + 2]!
-      if (z > nearest.z) nearest = { z, lum }
-      if (z < furthest.z) furthest = { z, lum }
+      ;(env.positions[v * 3 + 2]! > -200 ? near : far).add(key(v))
     }
-    expect(furthest.lum).toBeGreaterThan(nearest.lum * 1.5)
+    const shared = [...near].filter((k) => far.has(k))
+    expect(shared.length).toBeGreaterThanOrEqual(4)
+    // And only a handful of tones in the whole room, not a continuum.
+    expect(new Set([...near, ...far]).size).toBeLessThan(12)
   })
 
   it('every index points at a vertex it has', () => {
@@ -424,17 +435,55 @@ describe('cover as a silhouette', () => {
     expect(Math.max(...ys)).toBeCloseTo(b.y1, 6)
   })
 
-  it('is lighter at the top than at the bottom', () => {
+  it('is bevelled inwards, which is how it reads as a block without being one', () => {
+    /**
+     * The whole trick. A box with real depth has a silhouette wider than its own
+     * front face, so drawing one would promise cover the sightline test does not
+     * grant. Bevelling *inwards* buys the block for free: the lit face sits above
+     * the middle and the dark one below it, and the eye reconstructs a solid out
+     * of five coplanar quads.
+     */
     const m = coverMesh(b)
-    const lumAt = (targetY: number) => {
+    const mid = (b.y0 + b.y1) / 2
+    const meanYOf = (tone: readonly number[]) => {
+      let sum = 0
+      let n = 0
       for (let v = 0; v < m.positions.length / 3; v++) {
-        if (Math.abs(m.positions[v * 3 + 1]! - targetY) < 1e-6) {
-          return m.colors[v * 3]! + m.colors[v * 3 + 1]! + m.colors[v * 3 + 2]!
-        }
+        const same =
+          Math.abs(m.colors[v * 3]! - tone[0]!) < 1e-6 &&
+          Math.abs(m.colors[v * 3 + 1]! - tone[1]!) < 1e-6 &&
+          Math.abs(m.colors[v * 3 + 2]! - tone[2]!) < 1e-6
+        if (!same) continue
+        sum += m.positions[v * 3 + 1]!
+        n++
       }
-      return 0
+      expect(n).toBeGreaterThan(0)
+      return sum / n
     }
-    expect(lumAt(b.y1)).toBeGreaterThan(lumAt(b.y0) * 3)
+    expect(meanYOf(DEFAULT_MOOD.blockTop)).toBeGreaterThan(mid)
+    expect(meanYOf(DEFAULT_MOOD.blockSide)).toBeLessThan(mid)
+  })
+
+  it('draws its outline on the rectangle itself, not outside it', () => {
+    // The bright line is what stops a block reading as a card, and it is also the
+    // one part of the drawing that touches the boundary the solver knows about —
+    // so it has to sit exactly on it and never past it.
+    const m = coverMesh(b)
+    let touching = 0
+    for (let v = 0; v < m.positions.length / 3; v++) {
+      const isEdge =
+        Math.abs(m.colors[v * 3]! - DEFAULT_MOOD.blockEdge[0]) < 1e-6 &&
+        Math.abs(m.colors[v * 3 + 1]! - DEFAULT_MOOD.blockEdge[1]) < 1e-6 &&
+        Math.abs(m.colors[v * 3 + 2]! - DEFAULT_MOOD.blockEdge[2]) < 1e-6
+      if (!isEdge) continue
+      const x = m.positions[v * 3]!
+      const y = m.positions[v * 3 + 1]!
+      if (
+        Math.abs(x - b.x0) < 1e-6 || Math.abs(x - b.x1) < 1e-6 ||
+        Math.abs(y - b.y0) < 1e-6 || Math.abs(y - b.y1) < 1e-6
+      ) touching++
+    }
+    expect(touching).toBeGreaterThanOrEqual(8)
   })
 
   it('drops the gradient when given a texture, because a photo fights it', () => {
@@ -457,46 +506,85 @@ describe('contact shadows', () => {
     expect(Math.max(...zs)).toBe(b.z)
   })
 
-  it('are widest away from the object, as a soft shadow is', () => {
+  it('are one flat tone with a hard edge, like everything else here', () => {
+    // A shadow that fades is a shadow the eye has to interpret. This one is a
+    // shape: it says where the block's foot is and nothing else.
     const m = contactShadowMesh(b, -64)
-    const near = [m.positions[0]!, m.positions[3]!]
-    const far = [m.positions[6]!, m.positions[9]!]
-    expect(Math.max(...far) - Math.min(...far)).toBeGreaterThan(
-      Math.max(...near) - Math.min(...near),
-    )
+    const first = [m.colors[0]!, m.colors[1]!, m.colors[2]!]
+    for (let v = 0; v < m.colors.length / 3; v++) {
+      expect(m.colors[v * 3]!).toBeCloseTo(first[0]!, 6)
+      expect(m.colors[v * 3 + 1]!).toBeCloseTo(first[1]!, 6)
+      expect(m.colors[v * 3 + 2]!).toBeCloseTo(first[2]!, 6)
+    }
+  })
+
+  it('sit under the block rather than spilling out from it', () => {
+    const m = contactShadowMesh(b, -64)
+    const xs = [...m.positions].filter((_, i) => i % 3 === 0)
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(b.x0)
+    expect(Math.max(...xs)).toBeLessThanOrEqual(b.x1)
   })
 })
 
-describe('the skyline in the far opening', () => {
+describe('clouds, as flat blocks in the sky', () => {
   it('is deterministic for a seed, so a level looks the same twice', () => {
-    expect(skylineMesh(undefined, 7).positions).toEqual(skylineMesh(undefined, 7).positions)
+    expect(cloudMesh(undefined, 7).positions).toEqual(cloudMesh(undefined, 7).positions)
   })
 
   it('and different for a different seed', () => {
-    expect(skylineMesh(undefined, 7).positions).not.toEqual(skylineMesh(undefined, 8).positions)
+    expect(cloudMesh(undefined, 7).positions).not.toEqual(cloudMesh(undefined, 8).positions)
   })
 
-  it('stands beyond the corridor and is rooted below its floor', () => {
-    // Rooted low so no gap can show underneath a tower.
-    const m = skylineMesh(undefined, 3)
+  it('stands beyond the corridor and above its walls', () => {
+    // Above the wall caps, or a cloud could be mistaken for something to hide
+    // behind — which is the one misreading the picture must never invite.
+    const m = cloudMesh(undefined, 3)
     for (let i = 2; i < m.positions.length; i += 3) {
       expect(m.positions[i]!).toBeLessThan(-430)
       expect(m.positions[i]!).toBeGreaterThan(-540)
     }
     const ys = [...m.positions].filter((_, i) => i % 3 === 1)
-    expect(Math.min(...ys)).toBeLessThan(-200)
+    expect(Math.min(...ys)).toBeGreaterThan(26)
   })
 
   it('spans the opening rather than a corner of it', () => {
-    const xs = [...skylineMesh(undefined, 5).positions].filter((_, i) => i % 3 === 0)
+    const xs = [...cloudMesh(undefined, 5).positions].filter((_, i) => i % 3 === 0)
     expect(Math.min(...xs)).toBeLessThan(-300)
-    expect(Math.max(...xs)).toBeGreaterThan(300)
+    expect(Math.max(...xs)).toBeGreaterThan(200)
   })
 
   it('occludes nothing, so it is allowed to be any shape it likes', () => {
     // Stated as a test because it is the licence the whole environment relies on:
     // the solver only ever sees `scan.occluders`, and none of this is in there.
-    const m = skylineMesh(undefined, 1)
-    expect(m.indices.length).toBeGreaterThan(60)
+    const m = cloudMesh(undefined, 1)
+    expect(m.indices.length).toBeGreaterThan(30)
+  })
+})
+
+describe('the checkered floor', () => {
+  it('alternates two tones, which is the only depth cue left', () => {
+    /**
+     * The fog and the gradients came out because a playtester could not read the
+     * picture through them. What replaced them is this: tiles in perspective get
+     * smaller, and that is the whole statement about distance. A floor drawn in
+     * one tone would have removed the cue rather than replacing it.
+     */
+    const m = environmentMesh()
+    const tones = new Set<string>()
+    for (let v = 0; v < m.colors.length / 3; v++) {
+      tones.add(
+        `${m.colors[v * 3]!.toFixed(4)},${m.colors[v * 3 + 1]!.toFixed(4)},` +
+          `${m.colors[v * 3 + 2]!.toFixed(4)}`,
+      )
+    }
+    expect(tones.size).toBeGreaterThan(3)
+  })
+
+  it('is open to the sky rather than a closed tube', () => {
+    // The walls stop low so a block always has something bright behind its top
+    // edge. A ceiling would take that away and the outline with it.
+    const m = environmentMesh()
+    const ys = [...m.positions].filter((_, i) => i % 3 === 1)
+    expect(Math.max(...ys)).toBeLessThan(40)
   })
 })

@@ -49,8 +49,6 @@ uniform float uPosterise;
 uniform float uRain;
 uniform vec3 uSkyLow;
 uniform vec3 uSkyHigh;
-uniform vec3 uHaze;
-uniform float uShafts;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -58,36 +56,24 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-float vnoise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
-float fbm2(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) { v += vnoise(p) * a; p *= 2.0; a *= 0.5; }
-  return v;
-}
-
-/** Horizon, gradient, and cloud that drifts. Costs nothing to occlusion. */
-vec3 skyAt(vec2 uv, float t) {
-  vec3 c = mix(uSkyLow, uSkyHigh, pow(clamp(uv.y, 0.0, 1.0), 0.75));
-  float cl = fbm2(vec2(uv.x * 3.2 + t * 0.010, uv.y * 2.2 - t * 0.003));
-  cl = smoothstep(0.46, 0.80, cl) * smoothstep(0.02, 0.45, uv.y);
-  c = mix(c, uHaze * 0.9, cl * 0.45);
-  // A band of haze at the horizon, which is what sells distance.
-  c = mix(c, uHaze, smoothstep(0.26, 0.0, uv.y) * 0.75);
-  return c;
+/**
+ * The sky: two flat bands with a hard edge between them.
+ *
+ * It used to be a gradient with drifting fbm cloud and a haze band at the
+ * horizon. All three were removed for the same reason: they are *soft*, and
+ * everything soft in this picture turned out to be something the eye had to look
+ * past to answer the only question the game asks — is that enemy exposed. Clouds
+ * are now geometry -- cloudMesh -- flat rectangles like the rest of the world.
+ */
+vec3 skyAt(vec2 uv) {
+  float y = clamp(uv.y, 0.0, 1.0);
+  return mix(uSkyLow, uSkyHigh, smoothstep(0.34, 0.42, y));
 }
 
 void main() {
   vec3 own = vColor;
   if (vTextured > 1.5) {
-    own = skyAt(vUv, uTime);
+    own = skyAt(vUv);
   } else if (vTextured > 0.5 && uHasRoom > 0.5) {
     /**
      * The room's own pixels, posterised into the game's palette.
@@ -115,31 +101,21 @@ void main() {
     own *= uRoomLevel;
   }
 
-  // Aerial perspective: a monocular depth cue that works on a flat panel.
-  float t = clamp(vDepth / uFogFar, 0.0, 1.0);
-  vec3 c = mix(own, uFog, t * 0.72);
-
-  // Vignette. Darkening the edges pushes the eye to the middle, which is where
-  // the window is, and costs one dot product.
-  float r = length(vClip);
-  c *= 1.0 - 0.42 * clamp(r * r * 0.55, 0.0, 1.0);
-
   /**
-   * Light shafts from the far opening, in screen space.
+   * Aerial perspective, kept but turned right down.
    *
-   * Radial streaks from a point just above the horizon, broken up by noise and
-   * fading with distance from it. Screen space because a volumetric pass for
-   * something with no gameplay meaning is a lot of machinery for one mood, and
-   * because the corridor's vanishing point is always the middle of the window.
+   * At 0.72 it was doing the job the checkered floor now does, and doing it by
+   * removing contrast from exactly the far half of the room where an enemy is
+   * hardest to see. At 0.14 it still separates the far wall from the near cover
+   * and no longer decides anything.
    */
-  if (uShafts > 0.001) {
-    vec2 fromSun = vClip - vec2(0.0, -0.06);
-    float ang = atan(fromSun.y, fromSun.x);
-    float rays = fbm2(vec2(ang * 3.6, uTime * 0.05));
-    rays = pow(smoothstep(0.42, 0.95, rays), 1.6);
-    float fall = 1.0 - smoothstep(0.05, 1.25, length(fromSun));
-    c += uHaze * rays * fall * uShafts * 0.5;
-  }
+  float t = clamp(vDepth / uFogFar, 0.0, 1.0);
+  vec3 c = mix(own, uFog, t * 0.14);
+
+  // A trace of vignette. Any more and it competes with the blocks for the
+  // player's attention at the edges, which is where the leaning happens.
+  float r = length(vClip);
+  c *= 1.0 - 0.12 * clamp(r * r * 0.55, 0.0, 1.0);
 
   /**
    * Rain, as columns of falling streaks. Screen-space on purpose: weather is
@@ -157,9 +133,8 @@ void main() {
     c += vec3(0.58, 0.66, 0.80) * streak * uRain * 0.32;
   }
 
-  // Grain, and a red lift while the screen is shaking from a hit.
-  float g = hash(gl_FragCoord.xy + vec2(uTime * 37.0, uTime * 17.0));
-  c += (g - 0.5) * 0.028;
+  // A red lift while the screen is shaking from a hit. The film grain that used
+  // to be here is gone: grain on flat colour is just noise on flat colour.
   c += vec3(0.20, 0.02, 0.03) * uShake;
 
   frag = vec4(c, 1.0);
@@ -189,18 +164,16 @@ export class Renderer {
   private readonly idxBuf: WebGLBuffer
   private roomTex: WebGLTexture | null = null
   /** What distance pulls colour towards. Per-level, from the mood. */
-  fog: [number, number, number] = [0.16, 0.14, 0.16]
+  fog: [number, number, number] = [0.68, 0.80, 0.94]
   /** How strongly the texture shows. 0 turns it off entirely. */
   roomLevel = 1
   /** Quantise the texture into the palette. For photographs, not for materials. */
   posterise = false
   /** 0 to 1. Weather is a per-level property. */
   rain = 0
-  /** Sky, haze and shafts, all per-level. See `render/mood.ts`. */
-  skyLow: [number, number, number] = [0.42, 0.34, 0.32]
-  skyHigh: [number, number, number] = [0.13, 0.18, 0.30]
-  haze: [number, number, number] = [0.52, 0.40, 0.34]
-  shafts = 0.45
+  /** The sky's two bands, per level. See `render/mood.ts`. */
+  skyLow: [number, number, number] = [0.62, 0.82, 0.97]
+  skyHigh: [number, number, number] = [0.29, 0.57, 0.92]
   private indexCount = 0
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -336,8 +309,6 @@ export class Renderer {
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRain'), this.rain)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyLow'), ...this.skyLow)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyHigh'), ...this.skyHigh)
-    gl.uniform3f(gl.getUniformLocation(this.prog, 'uHaze'), ...this.haze)
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'uShafts'), this.shafts)
     gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
     if (this.roomTex) {
       gl.activeTexture(gl.TEXTURE0)

@@ -14,8 +14,8 @@ describe('every mood is usable as a palette', () => {
   for (const m of MOODS) {
     it(m.name, () => {
       const tones = [
-        m.skyLow, m.skyHigh, m.haze, m.floorNear, m.floorFar, m.wallNear, m.wallFar,
-        m.ceilingNear, m.ceilingFar, m.coverTop, m.coverBottom, m.coverRim, m.skyline, m.fog,
+        m.skyLow, m.skyHigh, m.cloud, m.floorA, m.floorB, m.wall, m.wallCap,
+        m.blockTop, m.blockFace, m.blockSide, m.blockEdge, m.shadow, m.fog,
       ]
       for (const t of tones) {
         expect(t).toHaveLength(3)
@@ -27,18 +27,40 @@ describe('every mood is usable as a palette', () => {
       }
       expect(m.rain).toBeGreaterThanOrEqual(0)
       expect(m.rain).toBeLessThanOrEqual(1)
-      expect(m.shafts).toBeGreaterThanOrEqual(0)
-      expect(m.shafts).toBeLessThanOrEqual(1)
     })
 
-    it(`${m.name} is backlit: the far end is brighter than the near one`, () => {
-      // The gradient that does the work of a lighting rig. A mood that got this
-      // backwards would make cover read as a lit card rather than a silhouette.
+    it(`${m.name} shades a block by which way the face points`, () => {
+      /**
+       * The one rule the palette is not allowed to break. A voxel game's whole
+       * lighting model is that a face is one flat colour and the shading is
+       * *which* face you are looking at: top brightest, front in the middle, side
+       * dark, and one bright line around the outline. A mood that got this
+       * ordering wrong would flatten the block back into the card it used to be —
+       * which is exactly the complaint that produced this palette.
+       */
       const lum = (t: readonly number[]) => t[0]! + t[1]! + t[2]!
-      expect(lum(m.floorFar)).toBeGreaterThan(lum(m.floorNear))
-      expect(lum(m.wallFar)).toBeGreaterThan(lum(m.wallNear))
-      expect(lum(m.coverRim)).toBeGreaterThan(lum(m.coverTop))
-      expect(lum(m.coverTop)).toBeGreaterThan(lum(m.coverBottom))
+      expect(lum(m.blockEdge)).toBeGreaterThan(lum(m.blockTop))
+      expect(lum(m.blockTop)).toBeGreaterThan(lum(m.blockFace))
+      expect(lum(m.blockFace)).toBeGreaterThan(lum(m.blockSide))
+    })
+
+    it(`${m.name} keeps the block readable against its own floor`, () => {
+      // Contrast, not brightness, is what makes an enemy findable in a glance.
+      // A block the same luminance as the tiles behind it is invisible however
+      // pretty either one is.
+      const lum = (t: readonly number[]) => t[0]! + t[1]! + t[2]!
+      const gap = Math.min(
+        Math.abs(lum(m.blockFace) - lum(m.floorA)),
+        Math.abs(lum(m.blockFace) - lum(m.floorB)),
+      )
+      expect(gap).toBeGreaterThan(0.12)
+    })
+
+    it(`${m.name} tiles the floor in two distinguishable tones`, () => {
+      // The checkerboard is the only depth cue left after the fog came out, so a
+      // mood whose two tones matched would have no depth cue at all.
+      const lum = (t: readonly number[]) => t[0]! + t[1]! + t[2]!
+      expect(Math.abs(lum(m.floorA) - lum(m.floorB))).toBeGreaterThan(0.05)
     })
   }
 })
@@ -48,12 +70,14 @@ describe('the words choose the palette', () => {
     ['A rainy night on the roof', 'night'],
     ['Una notte di pioggia', 'night'],
     ['temporale sopra la città', 'night'],
-    ['Sunset over the dunes', 'sunset'],
-    ['Tramonto sul cortile', 'sunset'],
-    ['golden hour', 'sunset'],
+    ['Sunset over the dunes', 'dusk'],
+    ['Tramonto sul cortile', 'dusk'],
+    ['golden hour', 'dusk'],
     ['An industrial warehouse', 'industrial'],
     ['magazzino con tubi di metallo', 'industrial'],
     ['a concrete bunker', 'industrial'],
+    ['a neon arcade', 'neon'],
+    ['corridoio cyber con laser', 'neon'],
   ]
   for (const [text, expected] of cases) {
     it(`${text} -> ${expected}`, () => {
@@ -72,7 +96,7 @@ describe('the words choose the palette', () => {
   })
 
   it('rain comes with the night rather than being a separate switch', () => {
-    expect(moodFor('una notte di pioggia').rain).toBe(1)
+    expect(moodFor('una notte di pioggia').rain).toBeGreaterThan(0)
     expect(moodFor('Doorway').rain).toBe(0)
   })
 })

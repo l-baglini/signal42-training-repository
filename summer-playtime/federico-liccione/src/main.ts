@@ -111,9 +111,7 @@ function applyMood(text: string, seed: number): void {
   mood = moodFor(text)
   renderer.skyLow = [...mood.skyLow] as [number, number, number]
   renderer.skyHigh = [...mood.skyHigh] as [number, number, number]
-  renderer.haze = [...mood.haze] as [number, number, number]
   renderer.fog = [...mood.fog] as [number, number, number]
-  renderer.shafts = mood.shafts
   renderer.rain = mood.rain
   skylineSeed = seed
 }

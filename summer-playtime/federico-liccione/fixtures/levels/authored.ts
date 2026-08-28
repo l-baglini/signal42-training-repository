@@ -57,8 +57,8 @@ const doorway: AuthoredLevel = {
   id: 'doorway',
   name: 'Doorway',
   blurb:
-    'Two walls and a gap at dusk. The only way to look down the corridor is to ' +
-    'stand in it.',
+    'Two walls and a gap on a clear afternoon. The only way to look down the ' +
+    'corridor is to stand in it.',
   scan: {
     source: 'fixture',
     occluders: [
@@ -80,8 +80,8 @@ const shelves: AuthoredLevel = {
   id: 'shelves',
   name: 'Shelves',
   blurb:
-    'An industrial warehouse: uprights at four depths, and every one of them hides ' +
-    'a different sliver of the room.',
+    'A neon arcade: uprights at four depths, and every one of them hides a ' +
+    'different sliver of the room.',
   scan: {
     source: 'fixture',
     occluders: [
