@@ -48,7 +48,7 @@ export function mouseTracker(el: HTMLElement, opts: MouseTrackerOptions = {}): T
   }
 
   return {
-    kind: 'mouse',
+    kind: 'pointer',
     position: () => at,
     // The pointer is as immediate as the display allows; one frame is honest.
     latencyS: () => 1 / 60,

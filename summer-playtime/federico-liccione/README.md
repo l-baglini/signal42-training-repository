@@ -14,8 +14,14 @@ you would rather not be on camera.
 
 ```
 npm install
-npm run dev      # then press space
+npm run dev      # allow the camera, then press space
 ```
+
+The browser asks for the webcam once the level is drawn — the camera is the
+controller, not an option. Refuse it, or have no camera, and `WASD` stands in for
+your head with a line in the panel saying so; `C` toggles between the two. Press
+`K` to spend ten seconds measuring your range, which is what every number in the
+level is scaled to.
 
 `npm run dev` runs `npm run setup` first, which copies the MediaPipe WASM out of
 the pinned package and downloads the face model into `public/`. Nothing this app

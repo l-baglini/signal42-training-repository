@@ -50,8 +50,9 @@ npm run setup   copies the MediaPipe WASM out of the pinned package and download
                 the face model, the segmenter and 77 MB of depth weights into
                 public/. Run once; `npm run dev` does it too. Nothing the app
                 needs at runtime comes from a CDN.
-npm run dev     the app, on localhost. WASD stands in for a head; `c` for the
-                real webcam and `k` to calibrate. `h` shows the engine's numbers.
+npm run dev     the app, on localhost. The webcam starts itself after the first
+                frame; `c` toggles it against the keyboard, `k` calibrates, `h`
+                shows the engine's numbers.
 npm run build   tsc then vite. The bundle is ~70 kB; keep an eye on it.
 npm test        the invariants and the guards. No network, no clock, no RNG.
 npm run levels  what the engine makes of every level, per body, with threat
@@ -114,6 +115,14 @@ constraint forbids the extrusion, not the block: a box with depth has a silhouet
 wider than its own front face, which would promise cover the solver does not
 grant. `coverMesh` bevels *inwards*, and a test asserts every vertex is inside the
 rectangle and at exactly its depth.
+
+- **Switching tracker must re-derive the level.** Every fuse is
+  `reaction + latency + retreat/speed + margin`, and a webcam's latency is tens of
+  milliseconds where a keyboard's is none. A lineup built against one and played
+  through the other hands out fuses the body cannot beat — the one direction this
+  project's fairness may never cut. `afterTrackerChange` and the 20 ms drift check
+  in the frame loop exist for that, and both skip mid-round because a rebuild
+  restarts the round.
 
 ### The round
 

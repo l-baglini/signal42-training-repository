@@ -8,7 +8,15 @@
 import type { Point3 } from '../engine'
 
 export interface Tracker {
-  readonly kind: 'mouse' | 'camera'
+  /**
+   * Which stand-in, or the real thing.
+   *
+   * It used to be `'mouse' | 'camera'` with the keyboard reporting `'mouse'`, and
+   * the comment saying the taxonomy only distinguished "stand-in" from "camera".
+   * That stopped being true when the webcam became the default and `c` became a
+   * toggle: the app has to know which stand-in it would be going back to.
+   */
+  readonly kind: 'keyboard' | 'pointer' | 'camera'
   /** Current eye position in cm, or null when the tracker has nothing. */
   position(): Point3 | null
   /** Measured end-to-end latency in seconds. Feeds the dodge guarantee. */

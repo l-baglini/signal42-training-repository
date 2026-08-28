@@ -78,6 +78,10 @@ let roomIndex = 0
 
 let tracker: Tracker = keyboardTracker()
 void tracker.start()
+/** True once the browser or the user has said no. Changes what the panel offers. */
+let cameraDenied = false
+/** The latency the current lineup's fuses were derived from. */
+let builtForLatency = tracker.latencyS()
 
 let envelope: Envelope = referenceBody(tracker.latencyS())
 /**
@@ -438,8 +442,22 @@ function renderRound(): void {
       'position you have to move ' +
       'your head to reach — which is also the only position it can shoot you from. ' +
       'So: lean out, shoot, and be back behind cover before its shot lands.\n\n' +
-      'Lean with WASD, or press C to use your webcam and K to measure your range. ' +
-      'Aim and shoot with the mouse. Ninety seconds; being hit costs six of them.'
+      /**
+       * The controller line is written from what is actually in charge. The webcam
+       * is the default and the point of the project, but a permission prompt can be
+       * refused and a laptop can have no camera, so the panel says which of the
+       * three is driving rather than assuming.
+       */
+      (tracker.kind === 'camera'
+        ? 'Your head is the controller — move it, and the screen behaves like a ' +
+          'window rather than a picture. Press K to spend ten seconds measuring ' +
+          'your range, which is what every number in this level is scaled to.'
+        : cameraDenied
+          ? 'The webcam was not available, so WASD is standing in for your head. ' +
+            'Press C to try the camera again.'
+          : 'WASD stands in for your head while the webcam starts up. ' +
+            'Press C to switch by hand.') +
+      '\n\nAim and shoot with the mouse. Ninety seconds; being hit costs six.'
   } else {
     el('roundTitle').textContent = `${combat.score} points`
     el('roundBody').textContent =
@@ -755,28 +773,69 @@ async function runScan(): Promise<void> {
 
 /* ---------------- trackers ---------------- */
 
+/**
+ * The webcam is the point of the project, so it is what the game starts with.
+ *
+ * Not on the first frame, though. The keyboard tracker is installed
+ * synchronously so the game is playable the instant the page renders, and the
+ * camera replaces it when the permission prompt is answered and the face model
+ * has loaded. If either fails there is nothing to recover from — the keyboard is
+ * already running and says so.
+ */
 async function useCamera(): Promise<void> {
   if (tracker.kind === 'camera') return
-  el('tracker').textContent = 'loading the tracker…'
+  el('tracker').textContent = 'asking for the webcam, and loading the face model…'
   const { cameraTracker } = await import('./perceive/camera')
   const cam = cameraTracker({ mount: el('cam') })
   try {
     await cam.start()
   } catch (err) {
-    el('tracker').textContent = `webcam failed: ${err instanceof Error ? err.message : String(err)}`
+    const why = err instanceof Error ? err.message : String(err)
+    el('tracker').textContent = `no webcam (${why}) — playing with WASD instead`
+    cameraDenied = true
+    renderRound()
     return
   }
   tracker.stop()
   tracker = cam
+  afterTrackerChange()
+}
+
+/** Back to the keys. `c` toggles, because a webcam is not always welcome. */
+function useKeyboard(): void {
+  if (tracker.kind === 'keyboard') return
+  tracker.stop()
+  tracker = keyboardTracker()
+  void tracker.start()
+  afterTrackerChange()
 }
 
 function usePointerHead(): void {
   // Kept because it is still the cleanest way to judge the projection on its
   // own — but it takes the mouse away from aiming, so it is not the default.
-  if (tracker.kind === 'camera') return
+  if (tracker.kind === 'pointer') return
   tracker.stop()
   tracker = mouseTracker(canvas)
   void tracker.start()
+  afterTrackerChange()
+}
+
+/**
+ * Re-derive the level for the tracker now in charge.
+ *
+ * Latency is not a detail here: every fuse is `reaction + latency + retreat/speed
+ * + margin`, and a webcam's latency is tens of milliseconds where a keyboard's is
+ * none. A lineup built against the keyboard and then played through a camera would
+ * hand out fuses shorter than the body can beat — which is the one direction this
+ * project's fairness is never allowed to cut. Skipped mid-round, because
+ * rebuilding resets the round.
+ */
+function afterTrackerChange(): void {
+  envelope = { ...envelope, latency: tracker.latencyS() }
+  builtForLatency = envelope.latency
+  if (combat.phase === 'playing') return
+  rebuildLineup()
+  renderRound()
 }
 
 /* ---------------- calibration ---------------- */
@@ -897,7 +956,8 @@ addEventListener('keydown', (e) => {
     // the instructions every time the level changed.
     rebuildLineup()
   } else if (k === 'c') {
-    void useCamera()
+    if (tracker.kind === 'camera') useKeyboard()
+    else void useCamera()
   } else if (k === 'm') {
     usePointerHead()
   } else if (k === 'p') {
@@ -992,6 +1052,16 @@ function frame(now: number): void {
     if (Math.abs(measured - envelope.latency) > 0.008) {
       envelope = { ...envelope, latency: measured }
     }
+    /**
+     * A camera's latency is measured, so it drifts as the frame rate does, and the
+     * fuses were derived from whatever it was when the level was built. Rebuild
+     * when the drift is worth 2% of a fuse — but never mid-round, because a rebuild
+     * starts the round over.
+     */
+    if (combat.phase !== 'playing' && Math.abs(measured - builtForLatency) > 0.02) {
+      builtForLatency = measured
+      rebuildLineup()
+    }
     el('tracker').textContent = tracker.status()
     if (combat.phase !== 'playing') renderHud()
   }
@@ -1002,6 +1072,21 @@ function frame(now: number): void {
   requestAnimationFrame(frame)
 }
 requestAnimationFrame(frame)
+
+/**
+ * Start the webcam, once the page is on screen.
+ *
+ * This is the project, so it is the default rather than a keypress. Deferred by a
+ * frame on purpose: the face model is a 3.8 MB dynamic import and the permission
+ * prompt is a modal, so doing it before the first paint would open a browser
+ * dialog over a blank page and give the player nothing to look at while deciding.
+ * By the time the prompt appears the level is drawn and the panel explains what is
+ * being asked for.
+ *
+ * The keyboard tracker is already running and stays running if this fails, so
+ * there is no failure path to write — only a message.
+ */
+requestAnimationFrame(() => { void useCamera() })
 
 // Note: `game/round.ts` — the hunt mode this replaced — is no longer wired up. It
 // stays in the tree with its tests because it was a real design iteration whose

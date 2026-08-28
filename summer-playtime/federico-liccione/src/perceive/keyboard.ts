@@ -83,7 +83,7 @@ export function keyboardTracker(opts: KeyboardTrackerOptions = {}): Tracker {
   }
 
   return {
-    kind: 'mouse', // the Tracker taxonomy only distinguishes "stand-in" from "camera"
+    kind: 'keyboard',
     position(): Point3 | null {
       integrate()
       return { ...at }
