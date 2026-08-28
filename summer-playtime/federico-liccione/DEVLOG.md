@@ -222,6 +222,41 @@ produced a different and better answer — after the metric-scale plan, the mask
 orientation, and the depth model's normalisation. The plausible diagnosis and the
 correct one keep being adjacent.
 
+## The shooter that left before its own bullet
+
+"I keep getting hit by enemies that are not visible." They were not there, and the
+reason is a two-line reading of the control flow rather than anything subtle:
+`step` removes an enemy from `active` in the *same tick* it fires, and only active
+enemies are drawn. So the thing that hits you vanishes in the very frame it hits
+you. The fix marks the spot it fired from for a second.
+
+Worth pairing with the report just before it — an enemy that looked visible but
+could not be shot. Both were the same class of fault: the *rules* were consistent
+and the *picture* did not match them. A point-sized engagement test drawn as a
+rectangle, and a shooter drawn only while it still existed.
+
+## Aliasing, and two wrong fixes before the right one
+
+"Far fewer enemies than before" was true and was my doing: the on-screen rule
+correctly removed enemies off the edge of the glass, but the candidate grid was
+still spreading a fixed distance either side of the furniture, so most of what it
+proposed lived where nothing can be engaged. Fitting the grid to the visible cone
+was the fix, and it took three attempts to get the sampling right.
+
+Truncating in scan order biases the sample into a corner — already recorded above.
+Striding through the flattened grid **aliases**: a probe showed one depth whose row
+was 26 columns wide against a stride of exactly 13, so the sample used columns 0
+and 13 and nothing else, and its centroid sat 38 cm left of the room's. Coarsening
+the grid instead cannot alias, because the sample *is* a grid — but with few
+samples it piles against the start of each range, and the deepest layer came out
+27 cm low. Centring the remainder fixed that, and now every centroid lands exactly
+on the middle of its range.
+
+The lesson is about method rather than geometry: each of the three attempts was
+plausible, and the only reason the second and third happened is that a
+seven-line probe printed centroids instead of me reasoning about them. Two of the
+three wrong versions would have passed a less specific test.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

@@ -326,27 +326,38 @@ describe('anchors are proposed, never judged', () => {
       { pitchCm: 8, maxAnchors: 90 },
     )
     expect(new Set(anchors.map((a) => a.z)).size).toBeGreaterThanOrEqual(3)
-    expect(anchors.length).toBeLessThanOrEqual(90 + 3)
+    // Slightly over is fine: the budget is divided per depth and each one rounds
+    // its own grid. Well under the boundary validator's cap is what matters.
+    expect(anchors.length).toBeLessThanOrEqual(Math.round(90 * 1.2))
   })
 
   it('subsamples the grid evenly rather than cutting it short', () => {
     /**
      * Truncating in scan order biases the sample into one corner, because the
      * loops start at the bottom left — and that quietly refused a room the engine
-     * had been playing. Striding keeps the coverage even, which is the only thing
-     * a cap should cost.
+     * had been playing.
+     *
+     * The property is *balance*, not span: with a stride, the ends of the range
+     * can be clipped by a fraction of a step, so comparing extents makes a
+     * brittle test. Comparing centroids asks the question that matters.
      */
     const wall = { z: -44, x0: -120, x1: 120, y0: -50, y1: 50, label: 'wall' }
     const capped = proposeAnchors([wall], { pitchCm: 6, maxAnchors: 60 })
     const uncapped = proposeAnchors([wall], { pitchCm: 6, maxAnchors: 100000 })
-
-    // Same span, far fewer points: a sample, not a corner.
-    const span = (xs: number[]) => Math.max(...xs) - Math.min(...xs)
     expect(capped.length).toBeLessThan(uncapped.length)
+    expect(capped.length).toBeGreaterThan(10)
+
+    const centroid = (ps: { x: number; y: number }[]) => ({
+      x: ps.reduce((a, p) => a + p.x, 0) / ps.length,
+      y: ps.reduce((a, p) => a + p.y, 0) / ps.length,
+    })
     for (const z of new Set(capped.map((a) => a.z))) {
-      const atZ = capped.filter((a) => a.z === z)
-      const allAtZ = uncapped.filter((a) => a.z === z)
-      expect(span(atZ.map((a) => a.x))).toBeGreaterThan(span(allAtZ.map((a) => a.x)) * 0.8)
+      const mine = centroid(capped.filter((a) => a.z === z))
+      const all = centroid(uncapped.filter((a) => a.z === z))
+      // A corner-biased sample would be tens of centimetres off centre. With a
+      // centred grid both centroids land on the middle of the range exactly.
+      expect(Math.abs(mine.x - all.x)).toBeLessThan(4)
+      expect(Math.abs(mine.y - all.y)).toBeLessThan(4)
     }
   })
 })

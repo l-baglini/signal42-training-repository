@@ -569,7 +569,22 @@ export interface AnchorOptions {
   readonly pitchCm?: number
   readonly depths?: readonly number[]
   readonly maxAnchors?: number
+  /**
+   * The window and the eye, for keeping candidates inside the visible cone.
+   *
+   * Without this the grid spread a fixed distance either side of the furniture,
+   * and most of what it proposed was off the edge of the screen — where an enemy
+   * cannot be seen and therefore, by the rule in `engine/viewport.ts`, cannot be
+   * fought. A playtester noticed the consequence as "far fewer enemies than
+   * before": the candidates were being spent where they could never survive.
+   */
+  readonly cone?: { readonly widthCm: number; readonly heightCm: number; readonly eyeZ: number }
 }
+
+/** Nominal window, used when no cone is supplied. */
+const NOMINAL_CONE = { widthCm: 34, heightCm: 21, eyeZ: 60 } as const
+/** How far a leaning head can push the cone sideways and up, in cm. */
+const LEAN_MARGIN = { x: 18, y: 10 } as const
 
 /**
  * Candidate target positions, proposed generously and filtered by nobody here.
@@ -600,11 +615,11 @@ export function proposeAnchors(
     nearest = Math.max(nearest, o.z)
   }
   // Widened, because a target has to be able to sit beside the cover as well as
-  // behind it, and narrowed vertically to where a seated head can look.
+  // behind it. The visible cone narrows it again, per depth, below.
   xMin -= 40
   xMax += 40
-  yMin = Math.max(yMin - 20, -60)
-  yMax = Math.min(yMax + 20, 60)
+  yMin -= 20
+  yMax += 20
 
   /**
    * Depths chosen from the leverage identity rather than by taste. A target at
@@ -639,20 +654,60 @@ export function proposeAnchors(
   const totalWeight = weights.reduce((a, b) => a + b, 0)
   const out: Point3[] = []
 
+  const cone = opts.cone ?? NOMINAL_CONE
   depths.forEach((z, di) => {
     const budget = Math.max(1, Math.floor((maxAnchors * weights[di]!) / totalWeight))
-    const full: Point3[] = []
-    for (let y = yMin; y <= yMax; y += pitch * 1.6) {
-      for (let x = xMin; x <= xMax; x += pitch) {
-        full.push({ x: Math.round(x), y: Math.round(y), z: Math.round(z) })
+    // What the window frames at this depth, plus what leaning adds to it. A
+    // candidate outside this can never be engaged, so proposing it is waste.
+    const spread = (cone.eyeZ - z) / Math.max(cone.eyeZ, 1)
+    const halfW = (cone.widthCm / 2) * spread + LEAN_MARGIN.x
+    const halfH = (cone.heightCm / 2) * spread + LEAN_MARGIN.y
+    const x0 = Math.max(xMin, -halfW)
+    const x1 = Math.min(xMax, halfW)
+    const y0 = Math.max(yMin, -halfH)
+    const y1 = Math.min(yMax, halfH)
+    if (!(x1 > x0) || !(y1 > y0)) return
+
+    /**
+     * Coarsen the grid to fit the budget, rather than striding through a fine one,
+     * and centre what comes out.
+     *
+     * Striding aliases. A probe caught it: at one depth the row was 26 columns
+     * wide and the stride worked out to exactly 13, so the sample used columns 0
+     * and 13 and nothing else, its centroid sitting 38 cm left of the room's. A
+     * coarser grid cannot alias because the sample *is* a grid.
+     *
+     * Centring is the second half. With a large step and few samples the grid
+     * otherwise piles up against the start of each range — the same probe showed
+     * the deepest layer 27 cm low — because `y0 + n·step` runs out before `y1`.
+     * Distributing the remainder puts the sample where the room is.
+     */
+    const stepY0 = pitch * 1.6
+    let scale = 1
+    let stepX = pitch
+    let stepY = stepY0
+    let nx = 1
+    let ny = 1
+    for (let guard = 0; guard < 12; guard++) {
+      stepX = pitch * scale
+      stepY = stepY0 * scale
+      nx = Math.max(1, Math.floor((x1 - x0) / stepX) + 1)
+      ny = Math.max(1, Math.floor((y1 - y0) / stepY) + 1)
+      if (nx * ny <= budget) break
+      scale *= 1.15
+    }
+    const offX = ((x1 - x0) - (nx - 1) * stepX) / 2
+    const offY = ((y1 - y0) - (ny - 1) * stepY) / 2
+
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        out.push({
+          x: Math.round(x0 + offX + i * stepX),
+          y: Math.round(y0 + offY + j * stepY),
+          z: Math.round(z),
+        })
       }
     }
-    if (full.length <= budget) {
-      out.push(...full)
-      return
-    }
-    const stride = full.length / budget
-    for (let i = 0; i < budget; i++) out.push(full[Math.floor(i * stride)]!)
   })
 
   return out

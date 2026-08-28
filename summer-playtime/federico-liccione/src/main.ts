@@ -125,6 +125,15 @@ let firing = false
 let mouseNdc: { x: number; y: number } | null = null
 const sfx = createSfx()
 let shake = 0
+/**
+ * Where the last shot came from, and until when to show it.
+ *
+ * `step` removes an enemy from `active` in the same tick it fires, and only active
+ * enemies are drawn — so the thing that hits you vanishes in the very frame it
+ * hits you. A playtester reported being shot by enemies that were not there, and
+ * they were not: they had just left. This marks the spot for a moment.
+ */
+let shotFrom: { at: Point3; untilS: number } | null = null
 
 function rebuildLineup(): void {
   const { assessments } = assessEnemies(room, envelope, { viewport })
@@ -184,6 +193,10 @@ function renderScene(): void {
       occluderUvs: room.occluders.map((o) => roomUv.get(geomKey(o))),
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
+      threatMarker:
+        shotFrom && shotFrom.untilS > combat.tS
+          ? { at: shotFrom.at, radius: 16 }
+          : undefined,
     }),
   )
 }
@@ -808,7 +821,11 @@ function frame(now: number): void {
     for (const ev of combat.events) {
       if (ev.kind === 'miss' || ev.kind === 'killed') sfx.shot()
       if (ev.kind === 'killed') sfx.kill()
-      if (ev.kind === 'shot') sfx.hurt()
+      if (ev.kind === 'shot') {
+        sfx.hurt()
+        const from = enemies[ev.index]
+        if (from) shotFrom = { at: from.at, untilS: combat.tS + 1.1 }
+      }
     }
     firing = false
     if (combat.killed > wasKilled) flash('rgba(120,230,180,.22)')
