@@ -190,6 +190,37 @@ describe('an enemy is an eye', () => {
     expect(shut.indices.length).toBeGreaterThan(0)
   })
 
+  it('draws every part of the eye nearer the viewer than its socket', () => {
+    /**
+     * The exact bug a playtester found: the nudges went the wrong way, so sclera,
+     * iris and pupil were drawn *behind* the socket and the depth test hid all of
+     * them. In this frame the scene is at z < 0 and the player at z > 0, so
+     * "towards the viewer" is **larger** z.
+     */
+    const m = enemyMesh({ ...base, exposed: true, fuse: 0.5 })
+    const zs: number[] = []
+    for (let i = 2; i < m.positions.length; i += 3) zs.push(m.positions[i]!)
+    const socketZ = Math.min(...zs)
+    expect(socketZ).toBe(base.at.z)
+    // Something must sit in front of it, or there is nothing to see.
+    expect(Math.max(...zs)).toBeGreaterThan(socketZ)
+    for (const z of zs) expect(z).toBeGreaterThanOrEqual(socketZ)
+  })
+
+  it('is wider than it is tall, or it reads as a square', () => {
+    const m = enemyMesh({ ...base, exposed: true, fuse: 0 })
+    // Measure only the sclera layer, the widest thing in front of the socket.
+    let maxHalfW = 0
+    let maxHalfH = 0
+    for (let i = 0; i < m.positions.length; i += 3) {
+      const z = m.positions[i + 2]!
+      if (z <= base.at.z + 1e-6) continue
+      maxHalfW = Math.max(maxHalfW, Math.abs(m.positions[i]! - base.at.x))
+      maxHalfH = Math.max(maxHalfH, Math.abs(m.positions[i + 1]! - base.at.y))
+    }
+    expect(maxHalfW).toBeGreaterThan(maxHalfH * 1.3)
+  })
+
   it('heats towards its shot as the fuse charges', () => {
     const cold = enemyMesh({ ...base, exposed: true, fuse: 0 })
     const hot = enemyMesh({ ...base, exposed: true, fuse: 1 })

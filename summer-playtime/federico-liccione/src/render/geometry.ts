@@ -134,11 +134,11 @@ export const PALETTE = {
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
   hiding: [0.42, 0.95, 0.78] as Rgb,
-  enemySocket: [0.10, 0.05, 0.07] as Rgb,
-  enemyLid: [0.24, 0.09, 0.12] as Rgb,
-  enemySclera: [0.94, 0.86, 0.82] as Rgb,
-  enemyIris: [0.86, 0.22, 0.26] as Rgb,
-  enemyPupil: [0.06, 0.03, 0.04] as Rgb,
+  enemySocket: [0.22, 0.07, 0.10] as Rgb,
+  enemyLid: [0.52, 0.16, 0.19] as Rgb,
+  enemySclera: [0.97, 0.93, 0.88] as Rgb,
+  enemyIris: [0.90, 0.20, 0.24] as Rgb,
+  enemyPupil: [0.04, 0.02, 0.03] as Rgb,
   enemyFiring: [1.0, 0.92, 0.55] as Rgb,
   enemyAimed: [1.0, 0.62, 0.30] as Rgb,
   hidingCold: [0.18, 0.34, 0.32] as Rgb,
@@ -175,30 +175,56 @@ export interface EnemyView {
  */
 export function enemyMesh(e: EnemyView): Mesh {
   const r = e.radius
-  const z = e.at.z
   const cx = e.at.x
   const cy = e.at.y
   const f = Number.isFinite(e.fuse) ? Math.max(0, Math.min(1, e.fuse)) : 0
-  const open = e.exposed ? 1 : 0.12
 
-  const parts: Mesh[] = [
-    quad(z, cx - r, cx + r, cy - r, cy + r, PALETTE.enemySocket),
-  ]
+  /**
+   * Nudges go *towards the viewer*, which in this frame means **larger** z: the
+   * scene sits at z < 0 and the player at z > 0. The first version of this
+   * function subtracted, so every part of the eye was drawn behind its own socket
+   * and the depth test hid all of it — a playtester reported "a dark square and
+   * no eye", which was exactly right. There is now a test on the ordering.
+   */
+  const layer = (n: number) => e.at.z + n * 0.3
 
-  const lidGap = r * open
-  if (e.exposed) {
-    parts.push(quad(z - 0.2, cx - r * 0.92, cx + r * 0.92, cy - lidGap, cy + lidGap, PALETTE.enemySclera))
-    const ir = r * 0.52 * (1 - 0.18 * f)
-    parts.push(quad(z - 0.4, cx - ir, cx + ir, cy - Math.min(ir, lidGap), cy + Math.min(ir, lidGap),
-      mix(PALETTE.enemyIris, PALETTE.enemyFiring, f)))
-    const pr = r * 0.24
-    parts.push(quad(z - 0.6, cx - pr, cx + pr, cy - Math.min(pr, lidGap), cy + Math.min(pr, lidGap),
-      mix(PALETTE.enemyPupil, PALETTE.enemyFiring, f * f)))
-  } else {
-    // A closed eye: a single dark slit, so a covered enemy still reads as being
-    // *there* without reading as a threat.
-    parts.push(quad(z - 0.2, cx - r * 0.9, cx + r * 0.9, cy - r * 0.1, cy + r * 0.1, PALETTE.enemyLid))
+  const parts: Mesh[] = [quad(layer(0), cx - r, cx + r, cy - r, cy + r, PALETTE.enemySocket)]
+
+  if (!e.exposed) {
+    // A closed eye: one dark slit, so a covered enemy still reads as being there
+    // without reading as a threat.
+    parts.push(quad(layer(1), cx - r * 0.86, cx + r * 0.86, cy - r * 0.07, cy + r * 0.07,
+      PALETTE.enemyLid))
+    return merge(parts)
   }
+
+  /**
+   * The lens shape, as three stacked bands. An eye has to be wider than it is
+   * tall or it reads as a square, and three rectangles of decreasing width are
+   * enough to say "lens" while staying inside the one hard constraint of the
+   * project: screen-parallel quads, the reason the sightline solver is exact.
+   */
+  const bands: Array<[number, number, number]> = [
+    [0.52, 0.30, 0.42],
+    [0.94, 0.00, 0.30],
+    [0.52, -0.30, 0.42],
+  ]
+  for (const [halfW, offY, halfH] of bands) {
+    parts.push(quad(
+      layer(1),
+      cx - r * halfW, cx + r * halfW,
+      cy + r * offY - r * halfH, cy + r * offY + r * halfH,
+      PALETTE.enemySclera,
+    ))
+  }
+
+  const ir = r * (0.34 - 0.05 * f)
+  parts.push(quad(layer(2), cx - ir, cx + ir, cy - ir, cy + ir,
+    mix(PALETTE.enemyIris, PALETTE.enemyFiring, f)))
+  const pr = r * (0.15 + 0.06 * f)
+  parts.push(quad(layer(3), cx - pr, cx + pr, cy - pr, cy + pr,
+    mix(PALETTE.enemyPupil, PALETTE.enemyFiring, f * f)))
+
   return merge(parts)
 }
 
@@ -277,7 +303,8 @@ export function buildScene(input: SceneInput): Mesh {
     if (e.aimed && e.exposed) {
       parts.push(
         frameMesh(
-          e.at.z + 0.4,
+          // In front of every layer of the eye, or it z-fights with the sclera.
+          e.at.z + 1.6,
           e.at.x - e.radius - 3, e.at.x + e.radius + 3,
           e.at.y - e.radius - 3, e.at.y + e.radius + 3,
           1.8,
