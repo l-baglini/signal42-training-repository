@@ -2,6 +2,7 @@ import { Collection } from 'mongodb';
 import { DateTime } from 'luxon';
 import { ssps } from '../ssp-list';
 import { SellerRecord } from '../types';
+import { assertPublicDomain } from './net';
 
 /** Seller-name markers that identify an Open Bidding integration. */
 const OPEN_BIDDING_MARKERS = ['via OB', 'via EB', 'Google EB', 'Google OB', 'EB DFP', 'OB DFP'];
@@ -14,6 +15,7 @@ const ADS_TXT_TIMEOUT_MS = 5_000;
  * Returns the annotated ads.txt as plain text.
  */
 export async function parseAdsTxt(sellers: Collection<SellerRecord>, domain: string): Promise<string> {
+  assertPublicDomain(domain);
   const response = await fetch(`https://${domain}/ads.txt`, {
     signal: AbortSignal.timeout(ADS_TXT_TIMEOUT_MS),
   });
