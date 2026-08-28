@@ -188,6 +188,40 @@ describe('the room stands full', () => {
     expect(d.state.active.length).toBe(2)
   })
 
+  it('a killed enemy does not walk back into the same spot', () => {
+    /**
+     * The playtest report was *"una volta uccisi, rinascono sempre nella stessa
+     * posizione"*, and it was exactly right. The specs arrive in the engine's
+     * coverage order, best first, and the room stands the front of that order — so
+     * the moment index 3 died, index 3 was again the best available candidate.
+     * Correct by the old rule and absurd on screen.
+     */
+    const specs: EnemySpec[] = [
+      { leanCm: 7, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 8, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 9, windowCm: 4, fuseS: 1.4 },
+    ]
+    const d = driver({ ...cfg, waveSize: 1 }, specs).at(0)
+    const first = d.index
+    d.at(0.1, { exposed: specs.map((_, i) => i === first), aimedAt: [first], firing: true })
+    d.span(0.15, 2)
+    expect(d.state.active.map((a) => a.index)).not.toContain(first)
+    expect(d.state.dead).toContain(first)
+  })
+
+  it('refills a cleared room rather than ending the round early', () => {
+    // Ninety seconds is the contract. Running out of bodies with thirty left would
+    // be a worse answer than a second pass through a room already read.
+    const specs: EnemySpec[] = [{ leanCm: 7, windowCm: 4, fuseS: 1.4 }]
+    const d = driver({ ...cfg, waveSize: 1 }, specs).at(0)
+    d.at(0.1, { exposed: [true], aimedAt: [0], firing: true })
+    expect(d.state.killed).toBe(1)
+    d.span(0.15, 2)
+    expect(d.state.active.map((a) => a.index)).toEqual([0])
+    expect(d.state.dead).toEqual([])
+    expect(d.state.phase).toBe('playing')
+  })
+
   it('never has the same enemy in play twice', () => {
     const wide: CombatConfig = { ...cfg, waveSize: 2, waveGapS: 0.1 }
     const d = driver(wide).span(0, 8)

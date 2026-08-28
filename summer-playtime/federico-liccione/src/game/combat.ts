@@ -96,7 +96,17 @@ export interface CombatState {
   readonly shotsFired: number
   readonly active: readonly ActiveEnemy[]
   readonly nextWaveAtS: number
-  /** How many times the room has been topped up. Seeds the choice of who stands. */
+  /**
+   * Indices already killed this round. They do not come back.
+   *
+   * This was the bug behind *"una volta uccisi, rinascono sempre nella stessa
+   * posizione"*. The specs arrive in the engine's coverage order, best first, and
+   * the room stands the front of that order — so the moment index 3 died, index 3
+   * was again the best available candidate and walked straight back into the same
+   * spot. Correct by the old rule and absurd on screen.
+   */
+  readonly dead: readonly number[]
+  /** How many times the room has been topped up. */
   readonly wave: number
   readonly events: readonly CombatEvent[]
 }
@@ -131,6 +141,7 @@ export function newCombat(cfg: CombatConfig = DEFAULT_COMBAT): CombatState {
     shotsFired: 0,
     active: [],
     nextWaveAtS: 0,
+    dead: [],
     wave: 0,
     events: [],
   }
@@ -154,6 +165,7 @@ export function step(
   const dtS = Math.max(0, Math.min(0.25, tick.tS - state.tS))
   const tS = tick.tS
   let { score, killed, timesShot, shotsFired, wave, nextWaveAtS, endsAtS } = state
+  let dead = state.dead
 
   /**
    * The trigger resolves before the fuses. A player who fires and ducks on the
@@ -175,6 +187,7 @@ export function step(
       score += points
       killed++
       events.push({ kind: 'killed', index: hit, points })
+      dead = [...dead, hit]
       nextWaveAtS = Math.min(nextWaveAtS, tS + cfg.waveGapS)
     }
   }
@@ -232,8 +245,20 @@ export function step(
    */
   if (active.length < cfg.waveSize && tS >= nextWaveAtS) {
     const standing = new Set(active.map((a) => a.index))
-    const candidates: number[] = []
-    for (let i = 0; i < specs.length; i++) if (!standing.has(i)) candidates.push(i)
+    const buried = new Set(dead)
+    const fresh: number[] = []
+    for (let i = 0; i < specs.length; i++) if (!standing.has(i) && !buried.has(i)) fresh.push(i)
+    /**
+     * A cleared room refills from the start rather than ending the round early.
+     * Ninety seconds is the contract; running out of bodies with thirty left would
+     * be a worse answer than a second pass through a room the player has proved
+     * they can read.
+     */
+    if (fresh.length === 0) {
+      dead = []
+      for (let i = 0; i < specs.length; i++) if (!standing.has(i)) fresh.push(i)
+    }
+    const candidates = fresh
     /**
      * **In the order given.** There used to be a seeded shuffle here, and it was
      * wrong for a reason worth keeping: the order the specs arrive in is not
@@ -267,6 +292,7 @@ export function step(
     shotsFired,
     active: phase === 'over' ? [] : active,
     nextWaveAtS,
+    dead,
     wave,
     events,
   }

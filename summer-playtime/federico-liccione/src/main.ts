@@ -12,6 +12,7 @@ import {
   blockingOccluders,
   chooseLineup,
   onScreen,
+  playEnvelope,
   threatCoverage,
   visible,
 } from './engine'
@@ -86,6 +87,16 @@ let tracker: Tracker = keyboardTracker()
 void tracker.start()
 
 let envelope: Envelope = referenceBody(tracker.latencyS())
+/**
+ * How much of the calibrated envelope the level is laid out inside, and the
+ * absolute ceiling that stops a generous calibration from putting every threat
+ * out of reach. The reasoning is in `playEnvelope`; the numbers were chosen by
+ * running `npm run levels` at 1.0, 0.85, 0.75, 0.68 and 0.6, and COMFORT at 20,
+ * 14, 12 and 11, and reading the threat profile in centimetres of lean. At 12 cm
+ * the levels start running out of fair positions; at 20 nothing has moved.
+ */
+const PLAY_FRACTION = 0.68
+const COMFORT_CM = 14
 let bodySource = 'reference body'
 let room = rooms[0]!.scan
 let roomSource = rooms[0]!.name
@@ -180,7 +191,26 @@ let shotFrom: { at: Point3; untilWallS: number } | null = null
 let photoTexture: HTMLCanvasElement | null = null
 
 function rebuildLineup(): void {
-  const { assessments, lattice } = assessEnemies(room, envelope, { viewport })
+  /**
+   * The level is solved inside a **fraction** of the calibrated envelope.
+   *
+   * Calibration measures what a body *can* do — it asks the player to reach as far
+   * as they are able — and a game has to be playable in the range they actually
+   * use, which is nothing like the maximum. Measured with `npm run levels`, the
+   * old behaviour put almost every threat in the outer fifth of the calibrated
+   * reach: a full commit found something 99% of the time and a half-committed lean
+   * 40%. A webcam player, who is sitting normally rather than performing their
+   * calibration, spends the whole round in the part of the envelope where nothing
+   * is. *"Talvolta non vedo proprio nemici."*
+   *
+   * Shrinking the solver's envelope moves the whole gradient inwards. It costs the
+   * enemies that were only reachable at full stretch, which is a fair price for
+   * the ones that were unreachable in practice. And it touches only *selection*:
+   * exposure while playing is computed geometrically from the real eye, so leaning
+   * further than this still works and still helps.
+   */
+  const play = playEnvelope(envelope, { fraction: PLAY_FRACTION, comfortCm: COMFORT_CM })
+  const { assessments, lattice } = assessEnemies(room, play, { viewport })
   rejectCounts = {}
   for (const a of assessments) {
     if (!a.fair && a.reject) rejectCounts[a.reject] = (rejectCounts[a.reject] ?? 0) + 1
@@ -200,8 +230,11 @@ function rebuildLineup(): void {
     // scores lowest and saves the long, precise ones for later in the round.
     cost: pointsFor({ leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS }),
   }))
-  const order = chooseLineup(lattice, envelope, room.occluders, cands, { viewport, seed: roundSeed })
-  const chosen = order.slice(0, 18).map((i) => fair[i]!)
+  const order = chooseLineup(lattice, play, room.occluders, cands, { viewport, seed: roundSeed })
+  // Deep enough that a whole round of replacements is still new ground. They
+  // arrive in coverage order, so the tail is not padding — it is the next best
+  // covering set.
+  const chosen = order.slice(0, 40).map((i) => fair[i]!)
   threatened = threatCoverage(
     lattice, room.occluders, cands, order, DEFAULT_COMBAT.waveSize, { viewport },
   )
@@ -937,6 +970,7 @@ function frame(now: number): void {
       firing,
     })
     for (const ev of combat.events) {
+      if (ev.kind === 'spawned') sfx.arrive()
       if (ev.kind === 'miss' || ev.kind === 'killed') sfx.shot()
       if (ev.kind === 'killed') sfx.kill()
       if (ev.kind === 'shot') {

@@ -11,11 +11,21 @@ import {
   footprintMask,
   nearestRevealing,
   threatByReach,
+  reachCm,
+  playEnvelope,
 } from '../src/engine'
 import type { Point3 } from '../src/engine'
 import { pointsFor } from '../src/game/combat'
 import { LEVELS } from '../fixtures/levels/authored'
 import { frozen, noisy, roomy, seated } from '../fixtures/envelopes'
+
+/**
+ * The fraction of the calibrated envelope the app lays a level out inside. See
+ * `PLAY_FRACTION` in src/main.ts — calibration measures the maximum a body can
+ * reach, and a level placed at that maximum is a level nobody plays.
+ */
+const PLAY = Number(process.env.PLAY ?? 0.68)
+const COMFORT = Number(process.env.COMFORT ?? 14)
 
 const bodies = [
   ['seated', seated()],
@@ -28,7 +38,8 @@ it('levels', () => {
   for (const level of LEVELS) {
     console.log(`\n=== ${level.name} (${level.scan.occluders.length} cover, ${level.scan.anchors.length} candidates)`)
     for (const [bodyName, env] of bodies) {
-      const { assessments, lattice } = assessEnemies(level.scan, env)
+      const play = playEnvelope(env, { fraction: PLAY, comfortCm: COMFORT })
+      const { assessments, lattice } = assessEnemies(level.scan, play)
       const fair = assessments.filter((a) => a.fair)
       const rejects: Record<string, number> = {}
       for (const a of assessments) if (a.reject) rejects[a.reject] = (rejects[a.reject] ?? 0) + 1
@@ -37,10 +48,10 @@ it('levels', () => {
       // right", so the mix is measured for every level, every time.
       const axes = { x: 0, y: 0, z: 0 }
       for (const a of fair) {
-        const near = nearestRevealing(lattice, footprintMask(lattice, level.scan.occluders, a.enemy.at), env.rest)
+        const near = nearestRevealing(lattice, footprintMask(lattice, level.scan.occluders, a.enemy.at), play.rest)
         if (!near) continue
         const d: Point3 = {
-          x: near.at.x - env.rest.x, y: near.at.y - env.rest.y, z: near.at.z - env.rest.z,
+          x: near.at.x - play.rest.x, y: near.at.y - play.rest.y, z: near.at.z - play.rest.z,
         }
         const axis = (['x', 'y', 'z'] as const).reduce((m, k) => (Math.abs(d[k]) > Math.abs(d[m]) ? k : m))
         axes[axis]++
@@ -58,7 +69,7 @@ it('levels', () => {
         radius: a.enemy.radius,
         cost: pointsFor({ leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS }),
       }))
-      const order = chooseLineup(lattice, env, level.scan.occluders, cands, { seed: 1 })
+      const order = chooseLineup(lattice, play, level.scan.occluders, cands, { seed: 1 })
       /**
        * Banded, not averaged. The aggregate hid the problem: the lattice has far
        * more cells in the middle of an envelope than at its edge, so a mean over
@@ -66,10 +77,21 @@ it('levels', () => {
        * stay near zero; the last should be near one; the middle is the number
        * worth arguing about.
        */
+      /**
+       * In **centimetres of lean**, not in fractions of reach. Fractions are not
+       * comparable between two values of PLAY, and centimetres are what the player
+       * actually feels — this instrument exists to compare them.
+       *
+       * The lattice stops at the play envelope, so nothing past its edge is
+       * measured. That is not a gap: leaning past the edge keeps every sightline
+       * the edge had, so the real profile holds at the last figure.
+       */
+      const reach = reachCm(lattice, play.rest) || 1
+      const CM = [3, 6, 9, 12, 15, 18, 24]
       const cover = (o: readonly number[], n: number) =>
-        threatByReach(lattice, env, level.scan.occluders, cands, o, n,
-          [0.2, 0.35, 0.5, 0.65, 0.8, 1.0001])
-          .map((b) => `<${(b.upTo * 100).toFixed(0)}% ${
+        threatByReach(lattice, play, level.scan.occluders, cands, o, n,
+          CM.map((cm) => cm / reach + 1e-9))
+          .map((b, i) => `${CM[i]}cm ${
             b.cells ? ((100 * b.threatened) / b.cells).toFixed(0).padStart(3) : '  -'
           }%`)
           .join(' ')
@@ -90,7 +112,7 @@ it('levels', () => {
       )
       if (fair.length > 0) {
         console.log(
-          `          threat by reach, 8 standing: ${cover(order, 8)}` +
+          `          threat, 8 standing: ${cover(order, 8)}  (reach ${reach.toFixed(0)}cm)` +
             `   window ${range(order.slice(0, 8).map((i) => fair[i]!.windowCm))}\n` +
             `                      cost-sorted 8: ${cover(byLean, 8)}`,
         )

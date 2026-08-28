@@ -14,6 +14,8 @@ export interface Sfx {
   shot(): void
   kill(): void
   hurt(): void
+  /** A new enemy has taken a position somewhere. */
+  arrive(): void
   /** Rising warning tone. `intensity` 0..1 is how charged the fuse is. */
   exposed(intensity: number): void
   unlock(): void
@@ -115,6 +117,16 @@ export function createSfx(): Sfx {
     hurt() {
       noise(0.22, 0.55, 200)
       tone(150, 0.28, 'sawtooth', 0.004, 60, 0.55)
+    },
+    /**
+     * Someone new has taken a position. Low, short, and behind you in the mix —
+     * it is not a threat yet, it is the room telling you it changed. Without it a
+     * replacement arriving is completely silent and completely invisible, since a
+     * covered enemy draws nothing.
+     */
+    arrive() {
+      tone(150, 0.10, 'sine', 0.008, 105, 0.30)
+      noise(0.05, 0.35, 320)
     },
     exposed(intensity: number) {
       const c = ensure()

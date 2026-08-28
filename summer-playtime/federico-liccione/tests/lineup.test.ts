@@ -10,13 +10,16 @@ import { describe, expect, it } from 'vitest'
 import {
   assessEnemies,
   chooseLineup,
+  latticeOf,
   occupancyWeights,
+  playEnvelope,
+  reachCm,
   threatByReach,
   threatCoverage,
 } from '../src/engine'
 import type { LineupCandidate } from '../src/engine'
 import { LEVELS } from '../fixtures/levels/authored'
-import { seated } from '../fixtures/envelopes'
+import { roomy, seated } from '../fixtures/envelopes'
 
 /** The same preparation the app does, once per level. */
 function prepared(level: (typeof LEVELS)[number]) {
@@ -143,5 +146,45 @@ describe('occupancyWeights', () => {
           if (d > 16) far = Math.max(far, w[n]!)
         }
     expect(near).toBeGreaterThan(far * 2)
+  })
+})
+
+describe('playEnvelope', () => {
+  const reachOf = (env: ReturnType<typeof seated>) => reachCm(latticeOf(env, 2), env.rest)
+
+  it('lays the level out inside a fraction of what the body can reach', () => {
+    const env = seated()
+    const play = playEnvelope(env, { fraction: 0.68, comfortCm: 1000 })
+    expect(reachOf(play)).toBeLessThan(reachOf(env) * 0.75)
+    expect(reachOf(play)).toBeGreaterThan(reachOf(env) * 0.55)
+  })
+
+  it('also caps in centimetres, which is the half a fraction cannot do', () => {
+    /**
+     * The bug this fixes. A fraction scales with the calibration, so a player who
+     * calibrated at thirty-six centimetres still had every threat placed past
+     * fifteen — the same complaint, unchanged, because a comfortable head
+     * excursion is a property of necks and not of how far somebody can stretch.
+     */
+    const big = roomy()
+    expect(reachOf(big)).toBeGreaterThan(20)
+    const play = playEnvelope(big, { fraction: 0.68, comfortCm: 14 })
+    expect(reachOf(play)).toBeLessThanOrEqual(14.5)
+  })
+
+  it('leaves a body that already moves less than the ceiling alone', () => {
+    const env = seated()
+    const play = playEnvelope(env, { fraction: 1, comfortCm: 1000 })
+    expect(play).toBe(env)
+  })
+
+  it('keeps the rest position, because that is where cover is', () => {
+    const play = playEnvelope(roomy())
+    expect(play.rest).toEqual(roomy().rest)
+    // And the body's own measurements are untouched: this scales range, not the
+    // person. A slower or noisier body must not be handed a harder game.
+    expect(play.jitter).toBe(roomy().jitter)
+    expect(play.vmax).toBe(roomy().vmax)
+    expect(play.latency).toBe(roomy().latency)
   })
 })

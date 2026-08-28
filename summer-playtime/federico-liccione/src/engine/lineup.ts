@@ -45,9 +45,54 @@
  * faces. Perception proposed these positions; it has no say in which ones stand.
  */
 import type { Billboard, Envelope, Point3 } from './types'
-import { cellCentre, cellIndex, reachCm, type Lattice } from './lattice'
+import { scaledAbout } from './envelope'
+import { cellCentre, cellIndex, latticeOf, reachCm, type Lattice } from './lattice'
 import { engageableMask } from './exposure'
 import { DEFAULT_VIEWPORT, type Viewport } from './viewport'
+
+export interface PlayRangeOptions {
+  /** Ceiling as a share of what the body can reach. */
+  readonly fraction?: number
+  /** Ceiling in centimetres, whatever the body can reach. */
+  readonly comfortCm?: number
+}
+
+/**
+ * The part of the envelope a level is actually laid out inside.
+ *
+ * Calibration measures what a body *can* do: it asks the player to reach as far
+ * as they are able, and it records that. A level laid out against that maximum is
+ * a level nobody plays, because nobody sits at their own extreme for ninety
+ * seconds. Measured in centimetres of lean, the first version put almost every
+ * threat past 12 cm and the first 6 cm of movement found nothing at all — which
+ * from a chair, in front of a webcam, is *"talvolta non vedo proprio nemici"*.
+ *
+ * Two ceilings, and it needs both.
+ *
+ * A **fraction** handles a small envelope: someone who can only move eight
+ * centimetres should have the level built inside five or six of them, not two.
+ *
+ * An **absolute** ceiling handles a large one, and it is the half I got wrong
+ * first. A fraction scales with the calibration, so a player who calibrated at
+ * thirty-six centimetres still had the threats placed at fifteen — the same
+ * problem, unchanged, because the number that should have been bounding it is a
+ * property of necks rather than of calibration. A comfortable sustained head
+ * excursion is roughly the same for any adult, and it is nothing like a maximum.
+ *
+ * This is a bet about bodies rather than a measurement of one, and it is the only
+ * such bet in the solver. It is also cheap to be wrong about: it moves difficulty,
+ * not fairness. Everything shipped inside the smaller envelope is still judged
+ * fair inside it, and leaning past its edge keeps every sightline the edge had.
+ */
+export function playEnvelope(env: Envelope, opts: PlayRangeOptions = {}): Envelope {
+  const fraction = opts.fraction ?? 0.68
+  const comfortCm = opts.comfortCm ?? 14
+  // Coarse pitch: this only needs the radius, not a solver-grade lattice.
+  const reach = reachCm(latticeOf(env, 4), env.rest)
+  if (!(reach > 0) || !Number.isFinite(reach)) return env
+  const factor = Math.min(fraction, comfortCm / reach)
+  return factor >= 1 ? env : scaledAbout(env, factor)
+}
 
 export interface LineupCandidate {
   readonly at: Point3
