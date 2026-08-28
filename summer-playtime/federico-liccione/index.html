@@ -13,8 +13,13 @@
   .panel { position: fixed; z-index: 10; padding: 12px 14px; border-radius: 10px;
     background: rgba(6, 9, 16, .84); border: 1px solid rgba(255,255,255,.12);
     backdrop-filter: blur(8px); }
-  #hud { top: 12px; left: 12px; width: 430px; max-height: calc(100% - 24px); overflow: auto;
-    transition: opacity .2s; }
+  #hud { top: 12px; left: 12px; width: 340px; max-height: calc(100% - 24px); overflow: auto;
+    transition: opacity .18s; }
+  /* An enemy can stand anywhere on the glass, including behind this panel, so it
+     gets out of the way for the ninety seconds that matter. Unless the numbers
+     have been asked for with H, in which case watching them *is* the point. */
+  #hud.tucked { opacity: 0; pointer-events: none; }
+  #hud:not(.collapsed) { width: 430px; }
   /* The engine's numbers are for the author and for the showcase, not for play, so
      they start hidden and H brings them back. The sliders stay: one of them is the
      screen width, and the projection is wrong until it is right. */
@@ -35,6 +40,7 @@
   #stats { margin-top: 10px; font-family: ui-monospace, monospace; font-size: 11px; opacity: .8;
     white-space: pre-line; }
   .keygroup { margin-top: 7px; font-size: 11px; opacity: .62; }
+  .keygroup .on { color: #7ce0c0; opacity: .9; }
   .who { display: block; font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
     opacity: .55; margin-bottom: 2px; }
   kbd { background: rgba(255,255,255,.1); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
@@ -77,6 +83,12 @@
   #round h2 { margin: 0 0 8px; font-size: 17px; }
   #round p { margin: 0 0 10px; white-space: pre-line; }
   #round .note { font-size: 11px; opacity: .6; }
+  /* The one thing worth interrupting the player for: ten seconds of calibration
+     is what scales every number in the level to their own neck. */
+  #round .urge { margin: 10px 0 0; padding: 8px 10px; border-radius: 7px;
+    background: rgba(255,212,121,.10); border: 1px solid rgba(255,212,121,.34);
+    color: #ffd479; font-size: 12px; display: none; }
+  #round .urge kbd { background: rgba(255,212,121,.18); color: #ffe3a6; }
   #round .compose { margin-top: 14px; padding-top: 12px;
     border-top: 1px solid rgba(255,255,255,.12); text-align: left; }
   #round .composeTitle { font-size: 11px; opacity: .55; margin-bottom: 7px;
@@ -152,13 +164,13 @@
     </div>
     <div class="keygroup">
       <span class="who">Set up</span>
-      <kbd>K</kbd> measure your range — ten seconds, and worth it &nbsp;
-      <kbd>R</kbd> ruler, to check the width below
+      <kbd>K</kbd> measure your range — ten seconds, and every threshold in the
+      game is scaled to it &nbsp; <kbd>R</kbd> ruler, to check the width below
     </div>
     <div class="keygroup">
       <span class="who">Show</span>
       <kbd>H</kbd> the engine's numbers &nbsp; <kbd>N</kbd> sound &nbsp;
-      <kbd>O</kbd> turn the window illusion off
+      <kbd>O</kbd> compare: window <span class="on">on</span> / plain camera
     </div>
     <div class="keygroup">
       <span class="who">AI, when you ask for it</span>
@@ -203,6 +215,7 @@
     <h2 id="roundTitle">Blind Spot</h2>
     <p id="roundBody"></p>
     <div class="note">press <kbd>space</kbd> to play &nbsp;·&nbsp; <kbd>[</kbd> <kbd>]</kbd> for another level</div>
+    <div class="urge" id="urge"></div>
     <form class="compose" id="compose">
       <div class="composeTitle">or describe one and have it built</div>
       <input id="describe" type="text" autocomplete="off"

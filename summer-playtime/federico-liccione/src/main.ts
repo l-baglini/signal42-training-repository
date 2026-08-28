@@ -97,6 +97,8 @@ const COMFORT_CM = 14
 /** How deep the ordered lineup goes. Replacements come from it in order. */
 const LINEUP_DEPTH = 40
 let bodySource = 'reference body'
+/** Has `k` actually measured this player? Decides whether the panel asks for it. */
+let calibrated = false
 let room = rooms[0]!.scan
 let roomSource = rooms[0]!.name
 let farWallCm = 320
@@ -405,6 +407,19 @@ function renderRound(): void {
     `${combat.killed} killed · ${combat.timesShot} times hit · ` +
     `${combat.active.length} still standing`
 
+  /**
+   * The panel gets out of the way while a round is running.
+   *
+   * An enemy can stand anywhere on the glass, and a playtester lost one behind this
+   * panel — which is a fair complaint about a heads-up display that is really an
+   * instrument. So it fades out for the ninety seconds, and comes back when they
+   * are over. The exception is deliberate: if the numbers have been asked for with
+   * `H`, watching them light up *is* the thing worth watching, so an explicit
+   * choice wins over the automatic one.
+   */
+  const pinned = !el('hud').classList.contains('collapsed')
+  el('hud').classList.toggle('tucked', combat.phase === 'playing' && !pinned)
+
   if (combat.phase === 'playing') {
     panel.style.display = 'none'
     return
@@ -463,6 +478,31 @@ function renderRound(): void {
     el('roundBody').textContent =
       `${combat.killed} killed, ${combat.timesShot} times hit, ` +
       `${(accuracy(combat) * 100).toFixed(0)}% accuracy.`
+  }
+
+  /**
+   * Ask for the calibration, once it is the thing most worth doing.
+   *
+   * Every threshold in this game is scaled to a measured body: the minimum lean is
+   * a fraction of the envelope's reach, the minimum peek window is a multiple of
+   * the tracker's jitter, and the fuse is reaction plus *measured* latency plus the
+   * retreat at the *measured* speed. Until `K` has run, all of that is scaled to a
+   * reference body that is not the player's — playable, because `playEnvelope` caps
+   * the range anyway, but it is the difference between a game tuned to you and a
+   * game tuned to a stand-in.
+   *
+   * Only shown once the head is actually in charge. Suggesting a body measurement
+   * to somebody playing on WASD would be asking them to calibrate a keyboard.
+   */
+  const urge = el('urge')
+  const wants = tracker.kind === 'camera' && !calibrated
+  urge.style.display = wants ? 'block' : 'none'
+  if (wants) {
+    urge.innerHTML =
+      'Ten seconds well spent: press <kbd>K</kbd> and lean as far as is ' +
+      'comfortable. Every number in this level — how far you must lean, how ' +
+      'precisely you must hold it, how long each enemy waits before firing — is ' +
+      'scaled to what that measures. Right now it is scaled to a stand-in body.'
   }
 }
 
@@ -872,6 +912,9 @@ async function runCalibration(): Promise<void> {
     envelope = result.envelope
     bodySource = `measured, ${result.quality.samples} samples`
     const q = result.quality
+    // A run that barely moved is not a measurement, so the panel keeps asking.
+    // Marking it done would let somebody dismiss the request by nodding at it.
+    calibrated = !q.degenerate
     el('calibTitle').textContent = q.degenerate ? 'That is not enough movement' : 'Measured'
     el('calibPrompt').textContent =
       `reach ${q.reachCm.toFixed(1)} cm · ${q.directionsCovered}/${q.directionsTotal} directions` +
@@ -941,6 +984,13 @@ addEventListener('keydown', (e) => {
       renderRound()
     }
   } else if (k === 'o') {
+    /**
+     * Not a setting — a comparison. The window is on from the first frame because
+     * it is the project; this drops to a symmetric frustum so the difference is
+     * visible side by side, which is the only way to see that the off-axis
+     * projection is doing anything at all. The panel's label used to read "turn the
+     * window illusion off", which reads like a feature that is on and in the way.
+     */
     mode = mode === 'window' ? 'dolly' : 'window'
     renderHud()
   } else if (k === '[' || k === ']') {
