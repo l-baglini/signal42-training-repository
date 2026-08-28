@@ -5,8 +5,15 @@
  *   npm run levels
  */
 import { it } from 'vitest'
-import { assessEnemies, footprintMask, nearestRevealing } from '../src/engine'
+import {
+  assessEnemies,
+  chooseLineup,
+  footprintMask,
+  nearestRevealing,
+  threatByReach,
+} from '../src/engine'
 import type { Point3 } from '../src/engine'
+import { pointsFor } from '../src/game/combat'
 import { LEVELS } from '../fixtures/levels/authored'
 import { frozen, noisy, roomy, seated } from '../fixtures/envelopes'
 
@@ -39,6 +46,36 @@ it('levels', () => {
         axes[axis]++
       }
 
+      /**
+       * The number the standing lineup lives or dies by: of all the ways this
+       * body can peek, how many reveal at least one of the enemies standing
+       * there. A round where this is low is a round that feels empty however many
+       * fair positions the level has, which is exactly the playtest complaint the
+       * selection was written to answer.
+       */
+      const cands = fair.map((a) => ({
+        at: a.enemy.at,
+        radius: a.enemy.radius,
+        cost: pointsFor({ leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS }),
+      }))
+      const order = chooseLineup(lattice, env, level.scan.occluders, cands, { seed: 1 })
+      /**
+       * Banded, not averaged. The aggregate hid the problem: the lattice has far
+       * more cells in the middle of an envelope than at its edge, so a mean over
+       * cells is dominated by the middle. The first band is the cover and must
+       * stay near zero; the last should be near one; the middle is the number
+       * worth arguing about.
+       */
+      const cover = (o: readonly number[], n: number) =>
+        threatByReach(lattice, env, level.scan.occluders, cands, o, n,
+          [0.2, 0.35, 0.5, 0.65, 0.8, 1.0001])
+          .map((b) => `<${(b.upTo * 100).toFixed(0)}% ${
+            b.cells ? ((100 * b.threatened) / b.cells).toFixed(0).padStart(3) : '  -'
+          }%`)
+          .join(' ')
+      // What the rotating lean-sorted slice would have given, for comparison.
+      const byLean = cands.map((_, i) => i).sort((a, b) => cands[a]!.cost - cands[b]!.cost)
+
       const leans = fair.map((a) => a.leanCm)
       const windows = fair.map((a) => a.windowCm)
       const fuses = fair.map((a) => a.enemy.fuseS)
@@ -51,6 +88,13 @@ it('levels', () => {
           ` axes x${axes.x}/y${axes.y}` +
           `   ${Object.entries(rejects).map(([k, n]) => `${n} ${k}`).join(', ')}`,
       )
+      if (fair.length > 0) {
+        console.log(
+          `          threat by reach, 8 standing: ${cover(order, 8)}` +
+            `   window ${range(order.slice(0, 8).map((i) => fair[i]!.windowCm))}\n` +
+            `                      cost-sorted 8: ${cover(byLean, 8)}`,
+        )
+      }
     }
   }
 })

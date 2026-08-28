@@ -7,7 +7,14 @@
  * knows whether the head is a webcam, a keyboard or a pointer — that is what
  * `perceive/tracker.ts` is for.
  */
-import { assessEnemies, onScreen, visible } from './engine'
+import {
+  assessEnemies,
+  blockingOccluders,
+  chooseLineup,
+  onScreen,
+  threatCoverage,
+  visible,
+} from './engine'
 import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView, type UvRect } from './render/geometry'
@@ -26,6 +33,7 @@ import { applyInventory } from './perceive/inventory'
 import type { InventoryCost } from './perceive/inventory'
 import {
   DEFAULT_COMBAT,
+  pointsFor,
   accuracy,
   newCombat,
   startCombat,
@@ -143,6 +151,8 @@ interface EnemyEntry {
 
 let enemies: EnemyEntry[] = []
 let rejectCounts: Record<string, number> = {}
+/** Fraction of the body's range with a threat visible from it. See `chooseLineup`. */
+let threatened = 0
 let combat: CombatState = newCombat(DEFAULT_COMBAT)
 let exposed: boolean[] = []
 let aimed: boolean[] = []
@@ -170,18 +180,33 @@ let shotFrom: { at: Point3; untilWallS: number } | null = null
 let photoTexture: HTMLCanvasElement | null = null
 
 function rebuildLineup(): void {
-  const { assessments } = assessEnemies(room, envelope, { viewport })
+  const { assessments, lattice } = assessEnemies(room, envelope, { viewport })
   rejectCounts = {}
   for (const a of assessments) {
     if (!a.fair && a.reject) rejectCounts[a.reject] = (rejectCounts[a.reject] ?? 0) + 1
   }
-  const fair = assessments.filter((a) => a.fair).sort((x, y) => x.leanCm - y.leanCm)
-  // A different subset each round, from the one scan. The engine was built for
-  // this; the seed only chooses which of the fair ones get used.
-  const offset = fair.length ? roundSeed % fair.length : 0
-  const rotated = [...fair.slice(offset), ...fair.slice(0, offset)].slice(0, 12)
+  const fair = assessments.filter((a) => a.fair)
+  /**
+   * Which of the fair ones stand, and in what order, is the engine's decision —
+   * `chooseLineup` orders them so that every direction this body can peek reveals
+   * at least one of the first few. This used to be a rotating slice of the
+   * lean-sorted list, and that could stand five enemies all requiring a long lean
+   * to the same side: every one fair, and the room felt empty.
+   */
+  const cands = fair.map((a) => ({
+    at: a.enemy.at,
+    radius: a.enemy.radius,
+    // The game's own difficulty measure, so the lineup opens with the enemies it
+    // scores lowest and saves the long, precise ones for later in the round.
+    cost: pointsFor({ leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS }),
+  }))
+  const order = chooseLineup(lattice, envelope, room.occluders, cands, { viewport, seed: roundSeed })
+  const chosen = order.slice(0, 18).map((i) => fair[i]!)
+  threatened = threatCoverage(
+    lattice, room.occluders, cands, order, DEFAULT_COMBAT.waveSize, { viewport },
+  )
 
-  enemies = rotated.map((a) => ({
+  enemies = chosen.map((a) => ({
     at: a.enemy.at,
     radius: a.enemy.radius,
     spec: { leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS },
@@ -222,6 +247,31 @@ function views(): EnemyView[] {
   })
 }
 
+/**
+ * Which cover currently has a live enemy behind it, and how many.
+ *
+ * `blockingOccluders` is the engine's answer, so the cue cannot disagree with the
+ * rule it is cueing: it names an occluder exactly when the sightline is blocked by
+ * it. Recomputed per frame because it depends on the eye — as the player leans, a
+ * block stops hiding and the enemy appears out of it, which is the whole verb made
+ * visible.
+ */
+function occupiedCover(eye: Point3): Array<{ box: Billboard; count: number }> {
+  if (combat.phase !== 'playing') return []
+  const tally = new Map<string, { box: Billboard; count: number }>()
+  for (const a of combat.active) {
+    const e = enemies[a.index]
+    if (!e || exposed[a.index]) continue
+    for (const o of blockingOccluders(eye, e.at, room.occluders)) {
+      const k = geomKey(o)
+      const seen = tally.get(k)
+      if (seen) tally.set(k, { box: o, count: seen.count + 1 })
+      else tally.set(k, { box: o, count: 1 })
+    }
+  }
+  return [...tally.values()]
+}
+
 function renderScene(): void {
   renderer.upload(
     buildScene({
@@ -229,6 +279,7 @@ function renderScene(): void {
       occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : undefined,
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
+      occupied: occupiedCover(tracker.position() ?? envelope.rest),
       mood,
       skylineSeed,
       threatMarker:
@@ -266,6 +317,9 @@ function renderHud(): void {
   el('stats').textContent =
     `room (${roomSource}): ${room.occluders.length} cover, ${room.anchors.length} candidates → ` +
     `${enemies.length} enemies\n` +
+    // The measurement the lineup selection exists to move: how much of the space
+    // this body can reach has a threat visible from it.
+    `${(threatened * 100).toFixed(0)}% of your range is under threat\n` +
     (rejects ? `rejected: ${rejects}\n` : '') +
     `body (${bodySource}): jitter ${envelope.jitter.toFixed(2)} cm · ` +
     `vmax ${envelope.vmax.toFixed(0)} cm/s · latency ${(envelope.latency * 1000).toFixed(0)} ms\n` +

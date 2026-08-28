@@ -432,6 +432,9 @@ export const PALETTE = {
   enemyAimed: [1.0, 0.66, 0.32] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
+  /** Cover with something behind it. Amber for one, hot for a crowd. */
+  occupied: [1.0, 0.72, 0.24] as Rgb,
+  occupiedHot: [1.0, 0.36, 0.30] as Rgb,
   hiding: [0.42, 0.95, 0.78] as Rgb,
   hidingCold: [0.18, 0.34, 0.32] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
@@ -565,6 +568,23 @@ export interface SceneInput {
    */
   readonly hidingGlow?: number | undefined
   /**
+   * Cover with a live enemy behind it, and how many.
+   *
+   * The cue that says the room is *occupied*. An enemy that cannot be engaged
+   * draws nothing at all — that is the symmetry the whole design rests on, and it
+   * is not negotiable — but the **cover** it is standing behind is level geometry,
+   * and outlining that says "something is back there" without saying which side of
+   * it or how far to lean. The lean stays entirely the player's.
+   *
+   * This existed for the hunt, was never reconnected when the hunt became combat,
+   * and its absence is most of why a playtester reported a room with eight enemies
+   * in it as emptier than one with two.
+   */
+  readonly occupied?: ReadonlyArray<{
+    readonly box: Billboard
+    readonly count: number
+  }> | undefined
+  /**
    * Where each occluder came from in the scan's frame, so the cover can be drawn
    * with the pixels it was measured from. Parallel to `occluders`.
    *
@@ -619,6 +639,15 @@ export function buildScene(input: SceneInput): Mesh {
     parts.push(
       frameMesh(o.z + 0.4, o.x0, o.x1, o.y0, o.y1, 2.2, mix(PALETTE.hidingCold, PALETTE.hiding, g)),
     )
+  }
+
+  for (const { box, count } of input.occupied ?? []) {
+    // Brighter for a busier piece of cover, so the read is not just "something"
+    // but "how much". Two enemies behind one block is a different decision.
+    const n = Number.isFinite(count) ? Math.max(0, Math.min(3, count)) : 0
+    if (n <= 0) continue
+    const tone = mix(PALETTE.occupied, PALETTE.occupiedHot, (n - 1) / 2)
+    parts.push(frameMesh(box.z + 0.4, box.x0, box.x1, box.y0, box.y1, 2.2, tone))
   }
 
   input.targets.forEach((t, i) => {

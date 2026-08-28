@@ -41,12 +41,21 @@ export interface CombatConfig {
   readonly waveGapS: number
   /** How fast the fuse drains once you are back behind cover, as a multiple. */
   readonly coverDrain: number
+  /**
+   * Kept, and deliberately unused by `step`.
+   *
+   * Choosing *who* stands moved into `chooseLineup` in the engine, because it is
+   * a geometric decision — which set of enemies covers every way this body can
+   * peek — and the engine is where geometric decisions live. This field stays so
+   * a round is still addressable by a seed from the outside, and so that nobody
+   * reintroduces a shuffle here and calls it variety.
+   */
   readonly seed: number
 }
 
 export const DEFAULT_COMBAT: CombatConfig = {
   durationS: 90,
-  waveSize: 5,
+  waveSize: 8,
   hitPenaltyS: 6,
   waveGapS: 0.8,
   // Forgiving on purpose: ducking should feel like safety, and a tracker flicker
@@ -131,17 +140,6 @@ export const startCombat = (cfg: CombatConfig = DEFAULT_COMBAT): CombatState => 
   ...newCombat(cfg),
   phase: 'playing',
 })
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 export function step(
   state: CombatState,
@@ -236,15 +234,15 @@ export function step(
     const standing = new Set(active.map((a) => a.index))
     const candidates: number[] = []
     for (let i = 0; i < specs.length; i++) if (!standing.has(i)) candidates.push(i)
-    // Fisher-Yates, seeded. Striding a list to spread a selection out is what
-    // aliased three times in `proposeAnchors`; a shuffle cannot alias.
-    const rng = mulberry32(cfg.seed + wave)
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1))
-      const tmp = candidates[i]!
-      candidates[i] = candidates[j]!
-      candidates[j] = tmp
-    }
+    /**
+     * **In the order given.** There used to be a seeded shuffle here, and it was
+     * wrong for a reason worth keeping: the order the specs arrive in is not
+     * arbitrary. `chooseLineup` in the engine has already ordered them so that
+     * each successive block covers every direction this body can peek, and
+     * shuffling threw exactly that away — which is how the room came out feeling
+     * emptier than the timer it replaced. Variety is the engine's business too:
+     * it seeds its own tie-breaks.
+     */
     const want = active.length === 0 ? cfg.waveSize : 1
     for (const index of candidates.slice(0, Math.max(0, want))) {
       active.push({ index, bornS: tS, exposedS: 0 })
