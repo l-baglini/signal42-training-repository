@@ -200,17 +200,25 @@ class Menu:
         leaf = self.node_at(len(self.columns) - 1)
         return leaf.detail if leaf else ""
 
-    def sync_to(self, selection: Selection) -> bool:
+    def sync_to(self, selection: Selection, keep_focus: bool = True) -> bool:
         """Move the cursor onto ``selection`` if the catalogue contains it.
 
         Lets the menu open showing what is already on screen instead of resetting to the
         top, and keeps it honest when a hotkey changed the selection behind its back.
+
+        ``keep_focus`` is the default because this must not steal the focused column.
+        Moving the path is one thing; deciding which column the arrow keys act on is the
+        user's, and taking it produced a menu you could not walk left in -- every sync
+        dragged focus back to the deepest column, so the cursor sprang back the moment you
+        stepped out of one. Pass False only when opening the menu, where landing on the
+        leaf you are already playing is the point.
         """
         found = self._find(self._root, selection, [])
         if found is None:
             return False
         self._path = found
-        self.column = len(found) - 1
+        if not keep_focus:
+            self.column = len(found) - 1
         self._normalise()
         return True
 

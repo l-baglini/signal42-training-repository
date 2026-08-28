@@ -320,3 +320,65 @@ def test_hit_testing_follows_the_anchor():
     x, y, w, h = lay.row_rect(1, 3)
     assert lay.hit(x + w / 2, y + h / 2, m) == (1, 3)
     assert lay.hit(30, y + h / 2, m) is None, "clicks near the left edge are not the menu's"
+
+
+# --------------------------------------------------------------------------- #
+# Focus belongs to the user
+# --------------------------------------------------------------------------- #
+
+
+def test_sync_to_does_not_steal_the_focused_column():
+    """The bug that made the left column unreachable.
+
+    The app re-syncs the menu when a hotkey moves the selection behind its back. If that
+    also moved the focus, the cursor sprang back to the deepest column the moment you
+    stepped out of one, and the top-level column could not be reached at all.
+    """
+    m = Menu()
+    m.sync_to(Selection("mode_box", "G:3"))
+    for column in range(len(m.columns)):
+        m.focus(column)
+        m.sync_to(m.selection())
+        assert m.column == column, f"sync_to moved focus away from column {column}"
+
+
+def test_opening_the_menu_may_land_on_the_leaf_you_are_playing():
+    """The one time taking the focus is right: you opened it to see where you are."""
+    m = Menu()
+    m.focus(0)
+    assert m.sync_to(Selection("penta_box", "C:4:min"), keep_focus=False)
+    assert m.column == len(m.columns) - 1
+    assert m.trail == ["Scales", "C", "Minor pentatonic", "4th shape"]
+
+
+def test_you_can_reach_the_top_level_and_stay_there():
+    """Symptom as reported: stuck on Chords, and knocked back right when moving left.
+
+    Walks it the way a person does — step out to the top column, move down to Scales, and
+    re-sync as the app does — asserting the focus and the choice both hold.
+    """
+    m = Menu()
+    m.sync_to(Selection("chord", "G"), keep_focus=False)
+    while m.ascend():
+        pass
+    assert m.column == 0
+
+    m.move(1)
+    assert m.trail[0] == "Scales"
+    assert m.column == 0, "moving within the top column moved the focus"
+
+    m.sync_to(m.selection())
+    assert m.column == 0, "the re-sync knocked the focus back to the right"
+    assert m.trail[0] == "Scales", "the re-sync dragged the path back to Chords"
+
+
+def test_stepping_left_then_right_returns_where_you_were():
+    m = Menu()
+    m.sync_to(Selection("mode_box", "D:6"), keep_focus=False)
+    trail = m.trail
+    for _ in range(3):
+        m.ascend()
+    for _ in range(3):
+        m.descend()
+    assert m.trail == trail
+    assert m.selection() == Selection("mode_box", "D:6")

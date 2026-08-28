@@ -288,10 +288,13 @@ def main() -> int:
                 continue
 
             k = key & 0xFF if key != -1 else 255
+            was = sel
             if k == 9:  # Tab
                 menu.toggle()
                 if menu.open:
-                    menu.sync_to(sel)  # open showing where you already are
+                    # Opening is the one time the menu may take the focus: landing on the
+                    # leaf you are already playing is the point of opening it.
+                    menu.sync_to(sel, keep_focus=False)
                     layout = place_menu(packet.H)
             elif k == 27 and menu.open:
                 menu.open = False
@@ -323,8 +326,11 @@ def main() -> int:
                 frozen = not frozen
             elif k == ord("r"):
                 src.reset()
-            if menu.open:
-                menu.sync_to(sel)  # a hotkey may have moved the selection behind its back
+            # Only when a hotkey moved the selection behind the menu's back. Syncing every
+            # frame -- which this used to do -- meant the menu was rebuilt from `sel`
+            # continuously, so the cursor could never rest anywhere `sel` did not point.
+            if menu.open and sel != was:
+                menu.sync_to(sel)
     except KeyboardInterrupt:
         # Ctrl-C is a normal way to stop this, especially when it is driving a synthetic
         # source from a terminal. Without this the summary below is skipped and the user
