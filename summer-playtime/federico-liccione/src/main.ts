@@ -602,6 +602,11 @@ addEventListener('keydown', (e) => {
   } else if (k === 'h') {
     const p = el('hud')
     p.classList.toggle('collapsed')
+  } else if (k === 't') {
+    // The photograph is a choice, not a fixture: geometry and labels carry the
+    // "this is your room" claim on their own.
+    renderer.roomLevel = renderer.roomLevel > 0 ? 0 : 1
+    el('tracker').textContent = renderer.roomLevel > 0 ? 'room texture on' : 'room texture off'
   } else if (k === 'n') {
     sfx.setEnabled(!sfx.enabled)
     el('tracker').textContent = sfx.enabled ? 'sound on' : 'sound off'

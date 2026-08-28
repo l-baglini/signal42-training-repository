@@ -44,6 +44,7 @@ uniform float uTime;
 uniform float uShake;
 uniform sampler2D uRoom;
 uniform float uHasRoom;
+uniform float uRoomLevel;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -54,12 +55,25 @@ float hash(vec2 p) {
 void main() {
   vec3 own = vColor;
   if (vTextured > 0.5 && uHasRoom > 0.5) {
-    // The room's own pixels, pushed darker and cooler so the game reads on top of
-    // them: a photograph at full brightness competes with everything drawn over
-    // it, and the enemies have to win that fight.
+    /**
+     * The room's own pixels, posterised into the game's palette.
+     *
+     * A photograph used as-is loses twice: at full brightness it competes with
+     * everything drawn over it, and crushed to grey it just looks like a bad
+     * photograph. Quantising the luminance into a few steps and mapping those
+     * through a two-colour ramp keeps the room's structure — which is the part
+     * that makes it recognisable — while reading as art rather than as a frame
+     * grab. A trace of the original hue survives so a red chair stays reddish.
+     */
     vec3 tex = texture(uRoom, vUv).rgb;
     float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
-    own = mix(vec3(lum) * vec3(0.66, 0.76, 0.98), tex, 0.22) * 0.34;
+    float steps = 5.0;
+    float q = floor(lum * steps + 0.5) / steps;
+    vec3 dark = vec3(0.055, 0.075, 0.125);
+    vec3 light = vec3(0.42, 0.52, 0.62);
+    vec3 ramp = mix(dark, light, pow(q, 0.85));
+    vec3 hue = tex - vec3(lum);
+    own = clamp(ramp + hue * 0.35, 0.0, 1.0) * uRoomLevel;
   }
 
   // Aerial perspective: a monocular depth cue that works on a flat panel.
@@ -102,6 +116,8 @@ export class Renderer {
   private readonly texFlagBuf: WebGLBuffer
   private readonly idxBuf: WebGLBuffer
   private roomTex: WebGLTexture | null = null
+  /** How strongly the room's own pixels show. 0 turns the photograph off. */
+  roomLevel = 1
   private indexCount = 0
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -232,6 +248,7 @@ export class Renderer {
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uTime'), timeS)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uHasRoom'), this.roomTex ? 1 : 0)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uRoomLevel'), this.roomLevel)
     gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
     if (this.roomTex) {
       gl.activeTexture(gl.TEXTURE0)
