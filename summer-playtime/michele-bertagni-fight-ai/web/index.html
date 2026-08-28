@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      No unsafe-inline, no unsafe-eval: even if a Reddit title somehow reached
+      the DOM as markup, it could not execute. See docs/SECURITY.md section 6.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+    <title>Fight AI</title>
+  </head>
+  <body>
+    <main id="app">
+      <section id="screen-start" class="screen">
+        <h1>HUMAN <span class="vs">vs</span> AI</h1>
+        <p class="tagline">
+          The fight is scored by r/singularity. Positive posts about using AI and the AI
+          swings; negative posts and the Human swings. 10 HP each, one point per hit.
+        </p>
+        <div id="auth-box" class="auth-box"></div>
+        <h2>How far back?</h2>
+        <div id="range-picker" class="range-picker"></div>
+        <button id="start-btn" class="start-btn" disabled>FIGHT</button>
+        <p id="start-status" class="status"></p>
+      </section>
+
+      <section id="screen-fight" class="screen hidden">
+        <div class="hud">
+          <div class="hud-side">
+            <span class="hud-name">HUMAN</span>
+            <div class="bar"><i class="bar-ghost" id="ghost-human"></i><i class="bar-fill human" id="hp-human"></i></div>
+          </div>
+          <div class="hud-round" id="round-label">ROUND 1</div>
+          <div class="hud-side right">
+            <span class="hud-name">AI</span>
+            <div class="bar"><i class="bar-ghost" id="ghost-ai"></i><i class="bar-fill ai" id="hp-ai"></i></div>
+          </div>
+        </div>
+
+        <canvas id="arena" width="960" height="540"></canvas>
+
+        <div class="ticker">
+          <span id="ticker-sub" class="ticker-sub"></span>
+          <span id="ticker-badge" class="badge hidden">injection attempt</span>
+          <a id="ticker-title" class="ticker-title" target="_blank" rel="noopener noreferrer"></a>
+          <span id="ticker-source" class="ticker-source"></span>
+        </div>
+        <p id="fight-status" class="status"></p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

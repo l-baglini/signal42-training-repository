@@ -1,0 +1,25 @@
+{
+  "name": "fight-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Human vs AI 2D fighting game driven by Reddit sentiment analysis",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=web",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=server && npm run build --workspace=web",
+    "start": "node server/dist/index.js",
+    "serve": "npm run build && npm start",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspace=server",
+    "auth:status": "claude auth status",
+    "auth:login": "claude auth login"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
