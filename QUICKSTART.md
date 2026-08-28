@@ -255,7 +255,7 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 382 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 411 tests, no camera or GPU needed
 ```
 
 ## Layout
