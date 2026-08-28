@@ -143,6 +143,13 @@ function rebuildLineup(): void {
   exposed = enemies.map(() => false)
   aimed = enemies.map(() => false)
   combat = newCombat(DEFAULT_COMBAT)
+  /**
+   * The scene has to be re-uploaded here, not only while a round is running.
+   * Without this a new level — designed, scanned, or switched with the bracket
+   * keys — sat in memory while the previous one stayed on screen until somebody
+   * pressed space, which reads exactly like "the level was not built".
+   */
+  renderScene()
   renderHud()
   renderRound()
 }

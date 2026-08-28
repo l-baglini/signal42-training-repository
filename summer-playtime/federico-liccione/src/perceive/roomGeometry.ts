@@ -615,15 +615,46 @@ export function proposeAnchors(
   const eyeZ = 60
   const forLeverage = (L: number) => Math.round(eyeZ + (nearest - eyeZ) / (1 - L))
   const depths = opts.depths ?? [forLeverage(0.35), forLeverage(0.5), forLeverage(0.62)]
+
+  /**
+   * The cap is shared between the depths rather than spent on the first one.
+   *
+   * A probe caught this: with a wide room, 240 candidates were exhausted before
+   * the outer loop reached its second depth, so every position in the level sat
+   * on one plane — and depth is one of the two things that makes peek windows
+   * differ. Budgeting per depth costs one division.
+   */
+  /**
+   * Weighted towards the near depths, and **subsampled rather than truncated**.
+   *
+   * Two mistakes died here in one sitting. Splitting the budget evenly starved
+   * the shallowest depth, which is where the leverage is and therefore where fair
+   * positions live. And cutting each depth's grid short in scan order — which is
+   * what the code did before either change, with a budget large enough to hide it
+   * — biases the sample into one corner of the room, because the loops start at
+   * the bottom left. Striding through the full grid keeps the coverage even, which
+   * is the only thing a cap should cost.
+   */
+  const weights = depths.map((_, i) => depths.length - i)
+  const totalWeight = weights.reduce((a, b) => a + b, 0)
   const out: Point3[] = []
-  for (const z of depths) {
+
+  depths.forEach((z, di) => {
+    const budget = Math.max(1, Math.floor((maxAnchors * weights[di]!) / totalWeight))
+    const full: Point3[] = []
     for (let y = yMin; y <= yMax; y += pitch * 1.6) {
       for (let x = xMin; x <= xMax; x += pitch) {
-        out.push({ x: Math.round(x), y: Math.round(y), z: Math.round(z) })
-        if (out.length >= maxAnchors) return out
+        full.push({ x: Math.round(x), y: Math.round(y), z: Math.round(z) })
       }
     }
-  }
+    if (full.length <= budget) {
+      out.push(...full)
+      return
+    }
+    const stride = full.length / budget
+    for (let i = 0; i < budget; i++) out.push(full[Math.floor(i * stride)]!)
+  })
+
   return out
 }
 

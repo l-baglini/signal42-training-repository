@@ -316,6 +316,39 @@ describe('anchors are proposed, never judged', () => {
     expect(anchors.length).toBeLessThanOrEqual(256)
     for (const a of anchors) expect(a.z).toBeLessThan(-50)
   })
+
+  it('uses every depth it was given, not just the first', () => {
+    // The cap used to be spent inside the first depth loop, so every candidate in
+    // a wide room sat on one plane — and depth is one of the two things that make
+    // peek windows differ.
+    const anchors = proposeAnchors(
+      [{ z: -44, x0: -110, x1: 110, y0: -45, y1: 45, label: 'wide wall' }],
+      { pitchCm: 8, maxAnchors: 90 },
+    )
+    expect(new Set(anchors.map((a) => a.z)).size).toBeGreaterThanOrEqual(3)
+    expect(anchors.length).toBeLessThanOrEqual(90 + 3)
+  })
+
+  it('subsamples the grid evenly rather than cutting it short', () => {
+    /**
+     * Truncating in scan order biases the sample into one corner, because the
+     * loops start at the bottom left — and that quietly refused a room the engine
+     * had been playing. Striding keeps the coverage even, which is the only thing
+     * a cap should cost.
+     */
+    const wall = { z: -44, x0: -120, x1: 120, y0: -50, y1: 50, label: 'wall' }
+    const capped = proposeAnchors([wall], { pitchCm: 6, maxAnchors: 60 })
+    const uncapped = proposeAnchors([wall], { pitchCm: 6, maxAnchors: 100000 })
+
+    // Same span, far fewer points: a sample, not a corner.
+    const span = (xs: number[]) => Math.max(...xs) - Math.min(...xs)
+    expect(capped.length).toBeLessThan(uncapped.length)
+    for (const z of new Set(capped.map((a) => a.z))) {
+      const atZ = capped.filter((a) => a.z === z)
+      const allAtZ = uncapped.filter((a) => a.z === z)
+      expect(span(atZ.map((a) => a.x))).toBeGreaterThan(span(allAtZ.map((a) => a.x)) * 0.8)
+    }
+  })
 })
 
 describe('the whole pipeline', () => {
