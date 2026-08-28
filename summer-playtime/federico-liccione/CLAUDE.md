@@ -89,7 +89,7 @@ There are no pixels below the renderer. Fields carry their unit in the name
 
 ## State — resume here
 
-`npm test` is green at 225 tests and `npx tsc --noEmit` is clean. Commits are
+`npm test` is green at 243 tests and `npx tsc --noEmit` is clean. Commits are
 small and each one leaves the suite green, so `git log --oneline` is a reliable
 account of what exists.
 
@@ -97,8 +97,9 @@ account of what exists.
 (`V(t)`, footprints, five reject reasons, level generation with typed refusal);
 the dodge solver and its spawn gate; the off-axis projection; the calibration
 that turns a stream of tracked positions into an `Envelope`; the scene geometry;
-the scene geometry, the WebGL2 renderer, the webcam tracker, and a runnable app
-that calibrates a real body and plays against it. **All ten invariants of SPEC
+the scene geometry, the WebGL2 renderer, the webcam tracker, the round — a pure
+state machine, tested like one — and a runnable app that calibrates a real body
+and plays ninety seconds against it. **All ten invariants of SPEC
 §6.7 have tests** — I1–I6, I8, I9 in `tests/invariants.test.ts`
 and `tests/purity.test.ts`, I7 in `tests/dodge.test.ts`, I10 in
 `tests/projection.test.ts`.
@@ -123,18 +124,21 @@ import, so the mouse-only path stays a 23 kB bundle.
 geometry and the projection are tested; the GL wrapper and the tracker's real
 accuracy need eyes and a face. Nothing headless can check them.
 
-**Next, in order — this is SPEC §14 and the cut order is bottom-up:**
+**The minimum defensible build is complete.** Everything below is upside.
 
-1. **The playable loop** — waves, ninety seconds, threats through the dodge
-   solver's spawn gate. The engine already returns everything this needs, and
-   `src/main.ts` already has the frame loop and the reveal detection.
-   *Everything above this line is the minimum defensible build.*
+**Next, in order — this is SPEC §14 and the cut order is bottom-up:**
 2. **The live depth scan** (SPEC §7.2 and §7.6). Read §7.2 before writing a line
    of it: there are three non-obvious constraints there, and two of them are
    corrections to an earlier draft that told the implementation to do the wrong
    thing.
 3. **The semantic scan** — one vision call per room, plus the cost panel.
 4. *(optional, first to cut)* the director.
+
+**Playtesting has not happened**, and it is now the highest-value thing anyone
+can do to this project. The literature says peeking is the strong verb and
+dodging is the weak one (PRIOR-ART.md); the tuning knobs are all in
+`DEFAULT_CONFIG` in `src/game/round.ts` and `leanFraction` / `jitterK` in
+`src/engine/level.ts`. Change those, not the invariants.
 
 **Not started:** REVIEW.md. It has to be written by the author, not by a model —
 the brief says so explicitly. DEVLOG.md lists what the tests cannot check, and

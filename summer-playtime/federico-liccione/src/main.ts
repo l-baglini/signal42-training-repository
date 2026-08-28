@@ -7,8 +7,8 @@
  * mouse is the cleaner control for judging the geometry, the webcam is the real
  * thing, and no game code below knows which one it has.
  */
-import { generate, visible } from './engine'
-import type { Envelope, Generated, RoomScan, Target } from './engine'
+import { generate, latticeOf, shouldSpawn, visible } from './engine'
+import type { Envelope, Generated, Lattice, RoomScan, Target } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene } from './render/geometry'
 import { Renderer } from './render/renderer'
@@ -16,6 +16,14 @@ import { mouseTracker } from './perceive/mouse'
 import { calibrate, type Sample } from './perceive/calibrate'
 import { referenceBody } from './perceive/reference'
 import type { Tracker } from './perceive/tracker'
+import {
+  DEFAULT_CONFIG,
+  newRound,
+  start as startRound,
+  step as stepRound,
+  threatPosition,
+} from './game/round'
+import type { RoundState, TargetSpec } from './game/round'
 import roomJson from '../fixtures/desk.room.json'
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -57,19 +65,84 @@ let revealed: boolean[] = []
 let everRevealed: boolean[] = []
 let mode: 'window' | 'dolly' = 'window'
 let widthCm = 34
+let lattice: Lattice = latticeOf(envelope)
+let specs: TargetSpec[] = []
+let round: RoundState = newRound(DEFAULT_CONFIG)
 
 function regenerate(): void {
+  lattice = latticeOf(envelope)
   level = generate(room, envelope)
   targets = level.kind === 'level' ? level.targets : []
+  // The score needs the engine's difficulty pair, so it is carried across
+  // rather than recomputed — there is one place that decides what is hard.
+  const byKey = new Map(
+    (level.kind === 'level' ? level.assessments : []).map((a) => [
+      `${a.target.at.x},${a.target.at.y},${a.target.at.z}`,
+      a,
+    ]),
+  )
+  specs = targets.map((t) => {
+    const a = byKey.get(`${t.at.x},${t.at.y},${t.at.z}`)
+    return { leanCm: a?.leanCm ?? 0, windowCm: a?.windowCm ?? 1 }
+  })
   revealed = targets.map(() => false)
   everRevealed = targets.map(() => false)
-  el('scoreValue').textContent = `0/${targets.length}`
+  round = newRound(DEFAULT_CONFIG)
   renderScene()
   renderHud()
+  renderRound()
 }
 
 function renderScene(): void {
-  renderer.upload(buildScene({ occluders: room.occluders, targets, revealed }))
+  const playing = round.phase === 'playing'
+  renderer.upload(
+    buildScene({
+      occluders: room.occluders,
+      targets,
+      revealed,
+      active: playing ? round.active.map((a) => a.index) : undefined,
+      threat:
+        playing && round.threat
+          ? { at: threatPosition(round.threat, round.tS), radius: round.threat.radius }
+          : undefined,
+    }),
+  )
+}
+
+function renderRound(): void {
+  const panel = el('round')
+  const remaining = Math.max(0, round.endsAtS - round.tS)
+  el('clock').textContent = round.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_CONFIG.durationS.toFixed(1)
+  el('scoreValue').textContent = String(round.score)
+  el('tally').textContent =
+    `${round.revealed} found · ${round.missed} missed · ${round.hits} hit · ${round.dodged} dodged`
+
+  if (round.phase === 'playing') {
+    panel.style.display = 'none'
+    return
+  }
+  panel.style.display = 'block'
+  if (level.kind === 'refusal') {
+    el('roundTitle').textContent = 'No round to play'
+    el('roundBody').textContent = 'This room will not make a fair level. Press w to put the furniture back.'
+    return
+  }
+  if (round.phase === 'ready') {
+    el('roundTitle').textContent = 'Blind Spot'
+    el('roundBody').textContent =
+      'A target is hidden behind something. Lean until you can see it. Something red will come at ' +
+      'the window — lean out of its way, or it costs you five seconds.'
+  } else {
+    el('roundTitle').textContent = `${round.score} points`
+    el('roundBody').textContent =
+      `${round.revealed} found, ${round.missed} missed, ${round.hits} hit, ${round.dodged} dodged.`
+  }
+}
+
+function flash(): void {
+  const f = el('flash')
+  f.style.opacity = '1'
+  setTimeout(() => (f.style.opacity = '0'), 90)
 }
 
 function renderHud(): void {
@@ -219,6 +292,13 @@ addEventListener('keydown', (e) => {
     void useCamera()
   } else if (e.key === 'k') {
     void runCalibration()
+  } else if (e.key === ' ') {
+    e.preventDefault()
+    if (level.kind === 'level' && round.phase !== 'playing') {
+      round = startRound(round, DEFAULT_CONFIG)
+      roundStartedAt = performance.now() / 1000
+      renderRound()
+    }
   } else if (e.key === 'r') {
     const r = el('ruler')
     r.style.display = r.style.display === 'block' ? 'none' : 'block'
@@ -232,6 +312,7 @@ regenerate()
 /* ---------------- the loop ---------------- */
 
 let lastLatencyRefresh = 0
+let roundStartedAt = 0
 
 function frame(now: number): void {
   const eye = tracker.position() ?? envelope.rest
@@ -247,11 +328,26 @@ function frame(now: number): void {
     }
     if (nowVisible) everRevealed[i] = true
   })
-  if (changed) {
-    renderScene()
+
+  if (round.phase === 'playing') {
+    const before = round.phase
+    round = stepRound(round, DEFAULT_CONFIG, specs, {
+      tS: now / 1000 - roundStartedAt,
+      eye,
+      visible: revealed,
+      // The gate. A threat the engine says this player cannot dodge from where
+      // they are is never spawned, and the game has no way to overrule it.
+      maySpawn: (threat) => shouldSpawn(lattice, threat, envelope, eye),
+    })
+    for (const ev of round.events) if (ev.kind === 'hit') flash()
+    renderRound()
+    if (round.phase !== before) renderHud()
+    changed = true
+  } else if (changed) {
     renderHud()
-    el('scoreValue').textContent = `${everRevealed.filter(Boolean).length}/${targets.length}`
   }
+
+  if (changed) renderScene()
 
   // Latency is measured, and what the dodge guarantee spends must stay current.
   if (now - lastLatencyRefresh > 1000) {

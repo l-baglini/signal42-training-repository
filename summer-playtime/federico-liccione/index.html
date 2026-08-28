@@ -55,6 +55,13 @@
   #calib { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 480px;
     text-align: center; border-color: rgba(124,224,192,.35); }
   #calib h2 { margin: 0 0 6px; font-size: 15px; color: #7ce0c0; }
+  #round { left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 460px;
+    text-align: center; }
+  #round h2 { margin: 0 0 8px; font-size: 17px; }
+  #round p { margin: 0 0 10px; }
+  #round .note { font-size: 11px; opacity: .6; }
+  .hitflash { position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: rgba(230,60,70,.32); opacity: 0; transition: opacity .35s; }
   #calib .count { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #calib .note { font-size: 11px; opacity: .6; margin-top: 6px; }
 </style>
@@ -77,15 +84,25 @@
       <span class="val" id="widthVal"></span>
     </div>
     <div id="keys">
-      <kbd>o</kbd> window / dolly &nbsp; <kbd>w</kbd> blank the wall &nbsp;
+      <kbd>space</kbd> play &nbsp; <kbd>o</kbd> window / dolly &nbsp;
+      <kbd>w</kbd> blank the wall &nbsp;
       <kbd>c</kbd> webcam &nbsp; <kbd>k</kbd> calibrate &nbsp;
       <kbd>r</kbd> ruler &nbsp; <kbd>wheel</kbd> lean in and out
     </div>
   </div>
 
   <div class="panel" id="score">
-    <div class="big" id="scoreValue">0/0</div>
-    <div class="lbl">revealed</div>
+    <div class="big" id="clock">90.0</div>
+    <div class="lbl">seconds</div>
+    <div class="big" id="scoreValue" style="margin-top:8px">0</div>
+    <div class="lbl">score</div>
+    <div class="lbl" id="tally" style="margin-top:6px"></div>
+  </div>
+
+  <div class="panel" id="round">
+    <h2 id="roundTitle">Blind Spot</h2>
+    <p id="roundBody"></p>
+    <div class="note">press <kbd>space</kbd></div>
   </div>
 
   <div class="panel" id="refusal">
@@ -96,6 +113,7 @@
 
   <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
 
+  <div class="hitflash" id="flash"></div>
   <div id="cam"></div>
 
   <div class="panel" id="calib">

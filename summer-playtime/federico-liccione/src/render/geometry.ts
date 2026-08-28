@@ -7,7 +7,7 @@
  * `src/engine/types.ts` — the renderer is the only place pixels exist, and even
  * there they arrive via the projection matrix.
  */
-import type { Billboard, Target } from '../engine'
+import type { Billboard, Point3, Target } from '../engine'
 
 export interface Mesh {
   /** xyz per vertex, cm. */
@@ -100,7 +100,9 @@ export function backdropMesh(
 export const PALETTE = {
   occluder: [0.16, 0.18, 0.24] as Rgb,
   target: [0.32, 0.88, 0.68] as Rgb,
+  targetIdle: [0.14, 0.28, 0.26] as Rgb,
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
+  threat: [0.95, 0.32, 0.35] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
 } as const
@@ -110,6 +112,13 @@ export interface SceneInput {
   readonly targets: readonly Target[]
   /** Parallel to `targets`: whether each is currently visible from the eye. */
   readonly revealed?: readonly boolean[]
+  /**
+   * Which targets are in play. Everything else is drawn dim: a target that is
+   * not being hunted must still occlude and still be *there*, or the room stops
+   * making sense between rounds.
+   */
+  readonly active?: readonly number[] | undefined
+  readonly threat?: { readonly at: Point3; readonly radius: number } | undefined
   readonly backdropZ?: number
 }
 
@@ -130,7 +139,14 @@ export function buildScene(input: SceneInput): Mesh {
   for (const o of input.occluders) parts.push(occluderMesh(o, PALETTE.occluder))
   input.targets.forEach((t, i) => {
     const on = input.revealed?.[i] ?? false
-    parts.push(targetMesh(t, on ? PALETTE.targetRevealed : PALETTE.target))
+    const inPlay = input.active ? input.active.includes(i) : true
+    parts.push(
+      targetMesh(t, on ? PALETTE.targetRevealed : inPlay ? PALETTE.target : PALETTE.targetIdle),
+    )
   })
+  if (input.threat) {
+    const { at, radius } = input.threat
+    parts.push(quad(at.z, at.x - radius, at.x + radius, at.y - radius, at.y + radius, PALETTE.threat))
+  }
   return merge(parts)
 }

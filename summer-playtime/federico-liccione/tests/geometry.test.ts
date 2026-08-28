@@ -101,6 +101,28 @@ describe('buildScene', () => {
     expect(hidden.positions).toEqual(shown.positions)
   })
 
+  it('a target not in play is drawn dim, but is still drawn', () => {
+    // It must still occlude and still be there, or the room stops making sense
+    // between rounds.
+    const all = buildScene({ occluders: room.occluders, targets })
+    const one = buildScene({ occluders: room.occluders, targets, active: [1] })
+    expect(one.positions).toEqual(all.positions)
+    expect(one.colors).not.toEqual(all.colors)
+  })
+
+  it('a threat adds geometry at its own position', () => {
+    const without = buildScene({ occluders: room.occluders, targets })
+    const with_ = buildScene({
+      occluders: room.occluders,
+      targets,
+      threat: { at: { x: 4, y: -2, z: -140 }, radius: 13 },
+    })
+    expect(with_.positions.length).toBe(without.positions.length + 12)
+    const depths = []
+    for (let i = 2; i < with_.positions.length; i += 3) depths.push(with_.positions[i]!)
+    expect(depths).toContain(-140)
+  })
+
   it('an empty room still produces a drawable scene', () => {
     const m = buildScene({ occluders: [], targets: [] })
     expect(m.indices.length).toBeGreaterThan(0)
