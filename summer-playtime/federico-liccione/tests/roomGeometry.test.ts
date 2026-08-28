@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CAMERA,
+  orientMask,
   brightRegions,
   buildRoomScan,
   connectedComponents,
@@ -413,5 +414,115 @@ describe('the whole pipeline', () => {
     })
     expect(out.ok).toBe(false)
     if (!out.ok) expect(out.reason).toMatch(/no person/)
+  })
+})
+
+describe('the mask has to mark the person, not the room', () => {
+  /**
+   * The bug a playtester hit: the segmenter returned the mask inverted, so the
+   * room was excluded and the player kept — and the level became a face three
+   * metres tall, textured with that face.
+   *
+   * The check does not guess the model's convention. It uses the one thing
+   * certainly true of a webcam pointed at somebody: the person is nearest.
+   */
+  it('leaves a correct mask alone', () => {
+    const { depth, mask } = scene()
+    expect(orientMask(depth, mask).values).toBe(mask.values)
+  })
+
+  it('flips an inverted one', () => {
+    const { depth, mask } = scene()
+    const inverted = {
+      width: W, height: H,
+      values: Float32Array.from(mask.values, (v) => 1 - v),
+    }
+    const fixed = orientMask(depth, inverted)
+    expect(fixed.values).not.toBe(inverted.values)
+    // And it comes back agreeing with the original.
+    let agree = 0
+    for (let i = 0; i < mask.values.length; i++) {
+      if ((fixed.values[i]! >= 0.5) === (mask.values[i]! >= 0.5)) agree++
+    }
+    expect(agree / mask.values.length).toBeGreaterThan(0.99)
+  })
+
+  it('does not gamble when there is not enough of one side to judge', () => {
+    const { depth } = scene()
+    const empty = { width: W, height: H, values: new Float32Array(W * H) }
+    expect(orientMask(depth, empty).values).toBe(empty.values)
+  })
+
+  it('and the whole pipeline recovers from an inverted mask', () => {
+    const { depth, mask, rgba } = scene()
+    const inverted = {
+      width: W, height: H,
+      values: Float32Array.from(mask.values, (v) => 1 - v),
+    }
+    const out = buildRoomScan({
+      depth, mask: inverted, rgba,
+      headZcm: HEAD_Z, farWallCm: FAR_WALL,
+      model: 'synthetic', atISO: '2026-08-28T00:00:00.000Z',
+    })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    // The player's own depth band must not become furniture.
+    for (const o of out.scan.occluders) expect(-o.z).toBeGreaterThan(10)
+  })
+})
+
+describe('a surface covering the frame is a blindfold only if it hides something', () => {
+  /**
+   * Depth is the wrong way to tell these apart, and after the band compression it
+   * is not even absolute. What separates them is whether anything is behind: a
+   * blindfold hides a room, a back wall has nothing left to hide.
+   */
+  const build = (values: Float32Array, person: Float32Array) =>
+    buildRoomScan({
+      depth: { width: W, height: H, values },
+      mask: { width: W, height: H, values: person },
+      headZcm: HEAD_Z, farWallCm: FAR_WALL,
+      model: 'synthetic', atISO: '2026-08-28T00:00:00.000Z',
+    })
+
+  const personBlob = (): Float32Array => {
+    const p = new Float32Array(W * H)
+    for (let v = H - 14; v < H; v++) for (let u = 0; u < 10; u++) p[v * W + u] = 1
+    return p
+  }
+
+  it('drops one that hides a room behind it', () => {
+    const values = new Float32Array(W * H).fill(0.07) // the room, far away
+    /**
+     * A near surface over three quarters of the frame: a hand on the lens, or the
+     * player themselves after a mask failure. The far quarter has to be a real
+     * quarter — an earlier version of this test left the room only 4 % of the
+     * frame, which falls inside the 5th-percentile window, so the scene read as
+     * having no depth at all and there was nothing "behind" to detect.
+     */
+    for (let v = 0; v < H; v++) for (let u = 0; u < 120; u++) values[v * W + u] = 0.6
+    const person = personBlob()
+    for (let v = H - 14; v < H; v++) for (let u = 0; u < 10; u++) values[v * W + u] = 0.95
+
+    const out = build(values, person)
+    if (!out.ok) {
+      expect(out.reason).toMatch(/nothing in this frame/)
+      return
+    }
+    // If anything survived, it is not the frame-filling near surface.
+    const frameArea = W * H
+    for (const r of out.regions) {
+      const area = (r.u1 - r.u0 + 1) * (r.v1 - r.v0 + 1)
+      expect(area).toBeLessThanOrEqual(frameArea * 0.62)
+    }
+  })
+
+  it('keeps a back wall, which covers the frame and hides nothing', () => {
+    const values = new Float32Array(W * H).fill(0.08)
+    const person = personBlob()
+    for (let v = H - 14; v < H; v++) for (let u = 0; u < 10; u++) values[v * W + u] = 0.95
+    const out = build(values, person)
+    expect(out.ok).toBe(true)
+    if (out.ok) expect(out.scan.occluders.length).toBeGreaterThan(0)
   })
 })

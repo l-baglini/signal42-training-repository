@@ -46,6 +46,52 @@ export const DEFAULT_CAMERA: CameraModel = {
   flipX: false,
 }
 
+/* ----------------------------------------------------------------- mask ---- */
+
+/**
+ * Make sure the mask marks the person and not the background.
+ *
+ * A playtester scanned a room and got their own face, three metres tall, as the
+ * level. The segmenter had returned the mask the other way round: the background
+ * was marked "person", so the room was excluded and the player kept — and a
+ * near-field billboard textured with a face is both unplayable and very funny.
+ *
+ * The fix is not to guess which convention the model uses. It is to check the
+ * mask against the one thing that is certainly true of a webcam pointed at
+ * somebody: **the person is the nearest thing in the frame.** Depth is the model
+ * output, where larger means nearer, so whichever side of the mask is nearer is
+ * the person, and the mask is flipped when it disagrees.
+ *
+ * The earlier guard — invert when more than four fifths of the frame reads as
+ * person — could not catch this, because a face fills perhaps half a frame and
+ * the background the rest. It is kept in the segmenter as a cheap second line.
+ */
+export function orientMask(depth: DepthField, mask: PersonMask, threshold = 0.6): PersonMask {
+  if (depth.width !== mask.width || depth.height !== mask.height) return mask
+  let inSum = 0
+  let inCount = 0
+  let outSum = 0
+  let outCount = 0
+  for (let i = 0; i < depth.values.length; i += 4) {
+    const d = depth.values[i]!
+    if (!Number.isFinite(d)) continue
+    if ((mask.values[i] ?? 0) >= threshold) {
+      inSum += d
+      inCount++
+    } else {
+      outSum += d
+      outCount++
+    }
+  }
+  // Not enough of either side to judge: leave it alone rather than gamble.
+  if (inCount < 32 || outCount < 32) return mask
+  if (inSum / inCount >= outSum / outCount) return mask
+
+  const flipped = new Float32Array(mask.values.length)
+  for (let i = 0; i < flipped.length; i++) flipped[i] = 1 - (mask.values[i] ?? 0)
+  return { width: mask.width, height: mask.height, values: flipped }
+}
+
 /* ---------------------------------------------------------------- scale ---- */
 
 export interface ScaleFit {
@@ -315,13 +361,20 @@ export function fitRegions(
   const at = (p: number) => sample[Math.min(sample.length - 1, Math.round(p * (sample.length - 1)))]!
   const nearMetric = at(0.05)
   const farMetric = at(0.95)
-  const spread = Math.max(1, farMetric - nearMetric)
+  const observedSpread = farMetric - nearMetric
+  // A frame at one single distance has no relief to compress. Mapping it to the
+  // near edge of the band would put a flat wall at arm's length; the middle is
+  // the honest place for a scene with no depth in it.
+  const degenerate = observedSpread < 2
+  const spread = Math.max(1, observedSpread)
 
   const gameZ = new Float32Array(values.length)
   for (let i = 0; i < metric.length; i++) {
     if (!usable[i]) continue
     if (o.compressToBand) {
-      const t = Math.max(0, Math.min(1, (metric[i]! - nearMetric) / spread))
+      const t = degenerate
+        ? 0.5
+        : Math.max(0, Math.min(1, (metric[i]! - nearMetric) / spread))
       gameZ[i] = -(o.nearestCm + t * (o.furthestCm - o.nearestCm))
     } else {
       const zg = -Math.max(0, metric[i]! - cam.playerZcm)
@@ -533,14 +586,36 @@ export type ScanOutcome =
  * produces a stated reason, which the app shows and the engine never sees.
  */
 export function buildRoomScan(input: ScanInput): ScanOutcome {
-  const fit = solveScale(input.depth, input.mask, {
+  // Before anything else: is this mask the person, or the room? See `orientMask`.
+  const mask = orientMask(input.depth, input.mask)
+  const fit = solveScale(input.depth, mask, {
     headZcm: input.headZcm,
     farWallCm: input.farWallCm,
   })
   if (!isFit(fit)) return { ok: false, reason: fit.error }
 
   const cam = input.camera ?? DEFAULT_CAMERA
-  const fitted = fitRegions(input.depth, input.mask, fit, { camera: cam })
+  const all = fitRegions(input.depth, mask, fit, { camera: cam })
+
+  /**
+   * A surface covering most of the frame *with the room behind it* is not cover,
+   * it is a blindfold: either the mask failed, or there is a hand over the lens.
+   * It hides the whole level at once, so it goes here rather than to the engine —
+   * the engine judges targets, and has no opinion about an occluder that makes
+   * every target invisible simultaneously.
+   *
+   * The first version of this rule tested depth, and dropped the back wall of an
+   * empty room along with the blindfold. Depth is the wrong discriminator, and
+   * after the band compression it is not even absolute. What actually separates
+   * the two is whether **anything is behind it**: a blindfold hides a room, a back
+   * wall has nothing left to hide.
+   */
+  const frameArea = input.depth.width * input.depth.height
+  const fitted = all.filter((f) => {
+    const area = (f.box.u1 - f.box.u0 + 1) * (f.box.v1 - f.box.v0 + 1)
+    if (area <= frameArea * 0.62) return true
+    return !all.some((other) => other.bill.z < f.bill.z - 1)
+  })
   if (fitted.length === 0) {
     return { ok: false, reason: 'nothing in this frame reads as cover' }
   }

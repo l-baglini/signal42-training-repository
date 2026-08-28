@@ -59,7 +59,7 @@ void main() {
     // it, and the enemies have to win that fight.
     vec3 tex = texture(uRoom, vUv).rgb;
     float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
-    own = mix(vec3(lum) * vec3(0.72, 0.80, 0.96), tex, 0.45) * 0.62;
+    own = mix(vec3(lum) * vec3(0.66, 0.76, 0.98), tex, 0.22) * 0.34;
   }
 
   // Aerial perspective: a monocular depth cue that works on a flat panel.
