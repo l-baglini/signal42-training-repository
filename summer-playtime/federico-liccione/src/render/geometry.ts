@@ -18,22 +18,16 @@ export interface Mesh {
   /** uv per vertex. Meaningless where `textured` is 0. */
   readonly uvs: Float32Array
   /**
-   * Draw mode per vertex: 0 flat colour, 1 sample the texture, 2 procedural sky.
+   * Draw mode per vertex: 0 flat colour, 1 procedural sky.
    *
-   * A mode rather than a boolean, and stored in the same buffer, because a third
-   * vertex attribute for something with three states is a lot of plumbing to
-   * avoid one comparison in a shader.
+   * It had a third mode, for sampling the frame the room was scanned from onto the
+   * cover. A playtester's verdict on that was that it was grey, grainy and made
+   * levels hard to read, and it is gone — with its uniforms, its texture upload and
+   * its key. Kept as a number rather than collapsed to a boolean because the sky is
+   * unlikely to be the last thing that wants its own shading path.
    */
   readonly textured: Float32Array
   readonly indices: Uint32Array
-}
-
-/** A rectangle in texture space, 0..1, v measured downwards as images are. */
-export interface UvRect {
-  readonly u0: number
-  readonly v0: number
-  readonly u1: number
-  readonly v1: number
 }
 
 export type Rgb = readonly [number, number, number]
@@ -48,8 +42,7 @@ export function quad(
   y0: number,
   y1: number,
   colour: Rgb,
-  uv?: UvRect,
-  mode = uv ? 1 : 0,
+  mode = 0,
 ): Mesh {
   const positions = new Float32Array([
     x0, y0, z,
@@ -59,11 +52,10 @@ export function quad(
   ])
   const colors = new Float32Array(12)
   for (let i = 0; i < 4; i++) colors.set(colour, i * 3)
-  // Image v runs downwards while world y runs up, so the rows are swapped here
-  // rather than at every call site.
-  const uvs = uv
-    ? new Float32Array([uv.u0, uv.v1, uv.u1, uv.v1, uv.u0, uv.v0, uv.u1, uv.v0])
-    : new Float32Array(8)
+  // Only the sky reads these, and it wants the unit square.
+  const uvs = mode === 0
+    ? new Float32Array(8)
+    : new Float32Array([0, 1, 1, 1, 0, 0, 1, 0])
   const textured = new Float32Array(4).fill(mode)
   return { positions, colors, uvs, textured, indices: new Uint32Array(QUAD_INDICES) }
 }
@@ -118,8 +110,8 @@ export function merge(meshes: readonly Mesh[]): Mesh {
   return { positions, colors, uvs, textured, indices }
 }
 
-export const occluderMesh = (b: Billboard, colour: Rgb, uv?: UvRect): Mesh =>
-  quad(b.z, b.x0, b.x1, b.y0, b.y1, colour, uv)
+export const occluderMesh = (b: Billboard, colour: Rgb): Mesh =>
+  quad(b.z, b.x0, b.x1, b.y0, b.y1, colour)
 
 export interface EnvironmentOptions {
   readonly nearZ?: number
@@ -262,12 +254,7 @@ export function cloudMesh(mood: Mood = DEFAULT_MOOD, seed = 1): Mesh {
  * and at exactly its depth, which `tests/geometry.test.ts` asserts, so the
  * picture cannot promise solidity the engine does not believe in.
  */
-export function coverMesh(b: Billboard, mood: Mood = DEFAULT_MOOD, uv?: UvRect): Mesh {
-  // With a texture rect it is a plain textured quad: that path exists so the
-  // player can see their own room on the cover, and shading over a photograph
-  // fights the photograph.
-  if (uv) return quad(b.z, b.x0, b.x1, b.y0, b.y1, mood.blockFace as Rgb, uv)
-
+export function coverMesh(b: Billboard, mood: Mood = DEFAULT_MOOD): Mesh {
   const w = b.x1 - b.x0
   const h = b.y1 - b.y0
   const edge = Math.max(0.6, Math.min(1.8, w * 0.05, h * 0.05))
@@ -352,8 +339,7 @@ export const targetMesh = (t: Target, colour: Rgb): Mesh =>
  * nothing by definition.
  */
 export function skyMesh(z: number, halfW: number, halfH: number): Mesh {
-  return quad(z, -halfW, halfW, -halfH, halfH, [0, 0, 0],
-    { u0: 0, v0: 0, u1: 1, v1: 1 }, 2)
+  return quad(z, -halfW, halfW, -halfH, halfH, [0, 0, 0], 1)
 }
 
 /**
@@ -592,7 +578,6 @@ export interface SceneInput {
    * the furniture you are hiding behind is your furniture, with its own image on
    * it, and nobody has to be told that the level came from the room.
    */
-  readonly occluderUvs?: readonly (UvRect | undefined)[] | undefined
   /** False falls back to the checkerboard, which is what the geometry tests use. */
   readonly sky?: boolean | undefined
   /** False leaves out the floor, walls and ceiling. */
@@ -629,7 +614,7 @@ export function buildScene(input: SceneInput): Mesh {
 
   // Shadows before the cover, so a piece of cover always wins its own footing.
   for (const o of input.occluders) parts.push(contactShadowMesh(o, floorY, mood))
-  input.occluders.forEach((o, i) => parts.push(coverMesh(o, mood, input.occluderUvs?.[i])))
+  for (const o of input.occluders) parts.push(coverMesh(o, mood))
 
   for (const o of input.hiding ?? []) {
     const g = Number.isFinite(input.hidingGlow ?? 0)

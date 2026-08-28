@@ -18,7 +18,7 @@ import {
 } from './engine'
 import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
-import { buildScene, type EnemyView, type UvRect } from './render/geometry'
+import { buildScene, type EnemyView } from './render/geometry'
 import { DEFAULT_MOOD, moodFor, type Mood } from './render/mood'
 import { Renderer } from './render/renderer'
 import { offAxis, project, symmetric, type Screen } from './render/projection'
@@ -106,10 +106,8 @@ let scanning = false
  * precisely because `applyInventory` is tested never to change it.
  */
 const geomKey = (b: Billboard): string => `${b.z}|${b.x0}|${b.x1}|${b.y0}|${b.y1}`
-let roomUv = new Map<string, UvRect>()
 let occluderLabels = new Map<string, string>()
 /** The scanned frame, once there is one. `t` switches to it. */
-let showPhoto = false
 
 /**
  * The level's palette, weather and light, all chosen from the level's own words.
@@ -182,8 +180,6 @@ let shake = 0
  * class of bug is invisible until somebody plays two rounds.
  */
 let shotFrom: { at: Point3; untilWallS: number } | null = null
-/** The scanned frame, once there is one. */
-let photoTexture: HTMLCanvasElement | null = null
 
 function rebuildLineup(): void {
   /**
@@ -346,7 +342,6 @@ function renderScene(): void {
   renderer.upload(
     buildScene({
       occluders: room.occluders,
-      occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : undefined,
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
       occupied: occupiedCover(eye),
@@ -403,8 +398,8 @@ function renderRound(): void {
     combat.phase === 'playing' ? remaining.toFixed(1) : DEFAULT_COMBAT.durationS.toFixed(1)
   el('scoreValue').textContent = String(combat.score)
   el('tally').textContent =
-    `${combat.killed} killed · ${combat.timesShot} hit · ` +
-    `${combat.active.length} standing · ${(accuracy(combat) * 100).toFixed(0)}% accuracy`
+    `${combat.killed} killed · ${combat.timesShot} times hit · ` +
+    `${combat.active.length} still standing`
 
   if (combat.phase === 'playing') {
     panel.style.display = 'none'
@@ -438,9 +433,13 @@ function renderRound(): void {
     el('roundTitle').textContent = rooms[roomIndex]!.name
     el('roundBody').textContent =
       `${rooms[roomIndex]!.blurb}\n\n` +
-      'The room is already full. Leaning out is the only way to see what is in it — and ' +
-      'the only way for it to see you. Lean with WASD (or your head, press c), aim and ' +
-      'shoot with the mouse, and get back into cover before the shot lands.'
+      `${DEFAULT_COMBAT.waveSize} enemies are already standing in this room, and ` +
+      'you cannot see any of them from here. Each one is visible only from a ' +
+      'position you have to move ' +
+      'your head to reach — which is also the only position it can shoot you from. ' +
+      'So: lean out, shoot, and be back behind cover before its shot lands.\n\n' +
+      'Lean with WASD, or press C to use your webcam and K to measure your range. ' +
+      'Aim and shoot with the mouse. Ninety seconds; being hit costs six of them.'
   } else {
     el('roundTitle').textContent = `${combat.score} points`
     el('roundBody').textContent =
@@ -611,10 +610,8 @@ async function designLevel(description: string): Promise<void> {
     room = validated.scan
     roomSource = `${result.name}, designed`
     applyMood(`${result.name} ${result.blurb} ${description}`, roundSeed)
-    roomUv = new Map()
     occluderLabels = new Map()
     for (const o of room.occluders) occluderLabels.set(geomKey(o), o.label)
-    renderer.setRoomTexture(null)
     roundSeed++
     rebuildLineup()
     recordCost(result.cost, result.ms, result.report.dropped, result.report.clamped)
@@ -703,24 +700,7 @@ async function runScan(): Promise<void> {
       el('scanMeta').textContent = meta
     } else {
       room = report.outcome.scan
-      // The frame becomes the level art, and each piece of cover is drawn with
-      // the pixels it was measured from.
-      roomUv = new Map()
       occluderLabels = new Map()
-      const found = report.outcome
-      found.scan.occluders.forEach((o, i) => {
-        const box = found.regions[i]
-        if (!box) return
-        roomUv.set(geomKey(o), {
-          u0: box.u0 / found.frameWidth,
-          v0: box.v0 / found.frameHeight,
-          u1: (box.u1 + 1) / found.frameWidth,
-          v1: (box.v1 + 1) / found.frameHeight,
-        })
-      })
-      // Kept, not shown: `t` switches to it. The cleaned frame, not the raw one —
-      // the raw one has the player in it.
-      photoTexture = report.textureCanvas
       roomSource = `your room, ${report.device}/${report.dtype}`
       roundSeed++
       rebuildLineup()
@@ -910,12 +890,12 @@ addEventListener('keydown', (e) => {
     room = next.scan
     roomSource = next.name
     applyMood(`${next.name} ${next.blurb}`, roomIndex + 1)
-    roomUv = new Map()
     occluderLabels = new Map()
-    renderer.setRoomTexture(null)
     roundSeed++
+    // No text set here: `rebuildLineup` calls `renderRound`, which writes the blurb
+    // and the instructions together. Setting it again after that quietly dropped
+    // the instructions every time the level changed.
     rebuildLineup()
-    el('roundBody').textContent = next.blurb
   } else if (k === 'c') {
     void useCamera()
   } else if (k === 'm') {
@@ -925,23 +905,8 @@ addEventListener('keydown', (e) => {
   } else if (k === 'k') {
     void runCalibration()
   } else if (k === 'h') {
-    const p = el('hud')
-    p.classList.toggle('collapsed')
-  } else if (k === 't') {
-    /**
-     * Materials or the photograph of your actual room. Materials by default,
-     * because a beige wall is a beige rectangle however it is shaded — but the
-     * photograph stays available, since recognising your own furniture is worth
-     * something a stone texture cannot buy.
-     */
-    showPhoto = !showPhoto && photoTexture !== null
-    renderer.setRoomTexture(showPhoto ? photoTexture : null)
-    renderer.posterise = showPhoto
-    el('tracker').textContent = showPhoto
-      ? 'showing your room on the cover'
-      : photoTexture
-        ? 'plain silhouettes'
-        : 'no scan yet — press p with the webcam on'
+    // Starts collapsed: it plays as a game and expands into an instrument.
+    el('hud').classList.toggle('collapsed')
   } else if (k === 'n') {
     sfx.setEnabled(!sfx.enabled)
     el('tracker').textContent = sfx.enabled ? 'sound on' : 'sound off'
@@ -964,26 +929,6 @@ addEventListener('resize', updateRuler)
 viewport = renderer.resize(widthCm)
 
 let lastStatus = 0
-// Collapsed by default: it plays as a game and expands into an instrument.
-el('hud').classList.add('collapsed')
-/**
- * The photograph is off unless asked for. A playtester's judgement, and it was
- * right twice over: a beige wall is a beige rectangle whatever the shader does to
- * it, and generating the level from the player's furniture makes the quality of
- * the experience hostage to their furniture. The scan stays a capability, not the
- * game.
- */
-/**
- * No texture by default.
- *
- * A playtester's verdict on the procedural materials was that they were ugly and
- * made the levels harder to read, which is worse than ugly. The look now comes
- * from lighting and from a place to stand in — a graded floor, walls, a bright sky
- * behind — rather than from surface detail on a rectangle. The scanned photograph
- * is still one keypress away for anyone who wants to recognise their own room.
- */
-renderer.roomLevel = 1
-renderer.posterise = false
 applyMood(`${rooms[0]!.name} ${rooms[0]!.blurb}`, 1)
 rebuildLineup()
 renderScene()

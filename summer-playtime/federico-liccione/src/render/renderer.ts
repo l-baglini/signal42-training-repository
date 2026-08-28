@@ -42,10 +42,6 @@ uniform float uFogFar;
 uniform vec3 uFog;
 uniform float uTime;
 uniform float uShake;
-uniform sampler2D uRoom;
-uniform float uHasRoom;
-uniform float uRoomLevel;
-uniform float uPosterise;
 uniform float uRain;
 uniform vec3 uSkyLow;
 uniform vec3 uSkyHigh;
@@ -71,35 +67,7 @@ vec3 skyAt(vec2 uv) {
 }
 
 void main() {
-  vec3 own = vColor;
-  if (vTextured > 1.5) {
-    own = skyAt(vUv);
-  } else if (vTextured > 0.5 && uHasRoom > 0.5) {
-    /**
-     * The room's own pixels, posterised into the game's palette.
-     *
-     * A photograph used as-is loses twice: at full brightness it competes with
-     * everything drawn over it, and crushed to grey it just looks like a bad
-     * photograph. Quantising the luminance into a few steps and mapping those
-     * through a two-colour ramp keeps the room's structure — which is the part
-     * that makes it recognisable — while reading as art rather than as a frame
-     * grab. A trace of the original hue survives so a red chair stays reddish.
-     */
-    vec3 tex = texture(uRoom, vUv).rgb;
-    if (uPosterise > 0.5) {
-      // A photograph used as-is loses twice: bright it fights everything drawn
-      // over it, crushed to grey it looks like a bad photograph. Quantising keeps
-      // the structure, which is what makes a room recognisable, while reading as
-      // art. Procedural materials get none of this — they are already art.
-      float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
-      float q = floor(lum * 5.0 + 0.5) / 5.0;
-      vec3 ramp = mix(vec3(0.055, 0.075, 0.125), vec3(0.42, 0.52, 0.62), pow(q, 0.85));
-      own = clamp(ramp + (tex - vec3(lum)) * 0.35, 0.0, 1.0);
-    } else {
-      own = tex;
-    }
-    own *= uRoomLevel;
-  }
+  vec3 own = vTextured > 0.5 ? skyAt(vUv) : vColor;
 
   /**
    * Aerial perspective, kept but turned right down.
@@ -162,13 +130,8 @@ export class Renderer {
   private readonly uvBuf: WebGLBuffer
   private readonly texFlagBuf: WebGLBuffer
   private readonly idxBuf: WebGLBuffer
-  private roomTex: WebGLTexture | null = null
   /** What distance pulls colour towards. Per-level, from the mood. */
   fog: [number, number, number] = [0.68, 0.80, 0.94]
-  /** How strongly the texture shows. 0 turns it off entirely. */
-  roomLevel = 1
-  /** Quantise the texture into the palette. For photographs, not for materials. */
-  posterise = false
   /** 0 to 1. Weather is a per-level property. */
   rain = 0
   /** The sky's two bands, per level. See `render/mood.ts`. */
@@ -243,29 +206,6 @@ export class Renderer {
   }
 
   /**
-   * Hand over the frame the room was measured from, to be drawn on the furniture.
-   * Called once per scan; the texture is kept until the next one.
-   */
-  setRoomTexture(source: TexImageSource | null): void {
-    const gl = this.gl
-    if (!source) {
-      this.roomTex = null
-      return
-    }
-    if (!this.roomTex) {
-      const tex = gl.createTexture()
-      if (!tex) return
-      this.roomTex = tex
-    }
-    gl.bindTexture(gl.TEXTURE_2D, this.roomTex)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-  }
-
-  /**
    * Resize the drawing buffer and report the screen's physical extent. Height
    * follows the canvas aspect ratio from the calibrated width, so there is one
    * measured number and one derived one rather than two guesses.
@@ -303,17 +243,9 @@ export class Renderer {
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uFog'), ...this.fog)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uTime'), timeS)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'uHasRoom'), this.roomTex ? 1 : 0)
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'uRoomLevel'), this.roomLevel)
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'uPosterise'), this.posterise ? 1 : 0)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRain'), this.rain)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyLow'), ...this.skyLow)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyHigh'), ...this.skyHigh)
-    gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
-    if (this.roomTex) {
-      gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, this.roomTex)
-    }
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.bindVertexArray(this.vao)
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0)

@@ -12,7 +12,6 @@ import {
   DEFAULT_CAMERA,
   maskCoverage,
   orientMask,
-  removePerson,
   brightRegions,
   buildRoomScan,
   connectedComponents,
@@ -599,52 +598,6 @@ describe('the player is smeared out of the level art', () => {
     }
     return { rgba, mask: { width, height, values }, width, height }
   }
-
-  it('leaves not one pixel of the person in the texture', () => {
-    const { rgba, mask } = build()
-    const out = removePerson(rgba, mask)
-    for (let i = 0; i < out.length; i += 4) {
-      expect(out[i]).toBe(0) // no red survives
-      expect(out[i + 1]).toBe(180)
-      expect(out[i + 3]).toBe(255)
-    }
-  })
-
-  it('does not touch anything outside the mask', () => {
-    const { rgba, mask } = build()
-    const out = removePerson(rgba, mask)
-    for (let i = 0; i < mask.values.length; i++) {
-      if (mask.values[i]! >= 0.55) continue
-      for (let c = 0; c < 4; c++) expect(out[i * 4 + c]).toBe(rgba[i * 4 + c])
-    }
-  })
-
-  it('fills from the nearer edge, so a wall does not stretch across a face', () => {
-    const width = 9
-    const height = 1
-    const rgba = new Uint8ClampedArray(width * 4)
-    const values = new Float32Array(width)
-    // left wall = 10, right wall = 200, person in the middle three columns
-    for (let u = 0; u < width; u++) {
-      rgba[u * 4] = u < 4 ? 10 : u > 6 ? 200 : 99
-      rgba[u * 4 + 3] = 255
-      if (u >= 4 && u <= 6) values[u] = 1
-    }
-    const out = removePerson(rgba, { width, height, values })
-    expect(out[4 * 4]).toBe(10)  // nearest edge is the left
-    expect(out[6 * 4]).toBe(200) // nearest edge is the right
-  })
-
-  it('falls back to a flat dark fill when a whole row is the person', () => {
-    const width = 4
-    const height = 1
-    const rgba = new Uint8ClampedArray(width * 4).fill(255)
-    const out = removePerson(rgba, { width, height, values: new Float32Array(width).fill(1) })
-    for (let u = 0; u < width; u++) {
-      expect(out[u * 4]).toBeLessThan(40)
-      expect(out[u * 4 + 3]).toBe(255)
-    }
-  })
 
   it('reports how much of the frame the mask claims', () => {
     const { mask } = build()

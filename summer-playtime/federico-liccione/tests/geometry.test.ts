@@ -274,60 +274,34 @@ describe('an enemy is an eye', () => {
   })
 })
 
-describe('room texturing', () => {
-  const uv = { u0: 0.25, v0: 0.1, u1: 0.75, v1: 0.6 }
-
-  it('a quad without a uv rect is flat-coloured', () => {
+describe('draw modes', () => {
+  it('a quad is flat-coloured unless it asks for the sky', () => {
     const m = quad(-50, -1, 1, -1, 1, [1, 0, 0])
     expect([...m.textured]).toEqual([0, 0, 0, 0])
     expect(m.uvs.length).toBe(8)
   })
 
-  it('a quad with one is textured, with v flipped for image order', () => {
-    // Image v runs downwards and world y runs up, so the bottom of the rectangle
-    // takes the *larger* v. Getting this backwards flips the furniture.
-    const m = quad(-50, -1, 1, -1, 1, [1, 0, 0], uv)
-    expect([...m.textured]).toEqual([1, 1, 1, 1])
-    const ys = [m.positions[1]!, m.positions[4]!, m.positions[7]!, m.positions[10]!]
-    const vs = [m.uvs[1]!, m.uvs[3]!, m.uvs[5]!, m.uvs[7]!]
-    for (let i = 0; i < 4; i++) {
-      // toBeCloseTo, not toBe: these live in a Float32Array, so 0.6 comes back
-      // as 0.60000002.
-      expect(vs[i]).toBeCloseTo(ys[i]! < 0 ? uv.v1 : uv.v0, 6)
-    }
-  })
-
   it('merge keeps uvs and flags aligned with their vertices', () => {
     const flat = quad(-10, 0, 1, 0, 1, [1, 0, 0])
-    const tex = quad(-20, 0, 1, 0, 1, [0, 1, 0], uv)
-    const m = merge([flat, tex])
+    const sky = quad(-20, 0, 1, 0, 1, [0, 1, 0], 1)
+    const m = merge([flat, sky])
     expect([...m.textured]).toEqual([0, 0, 0, 0, 1, 1, 1, 1])
     expect(m.uvs.length).toBe(m.positions.length / 3 * 2)
   })
 
-  it('buildScene textures only the occluders it was given a rect for', () => {
-    const uvs = [uv, undefined, undefined]
-    const m = buildScene({ occluders: room.occluders, targets: [], occluderUvs: uvs })
-    const flagged = [...m.textured].filter((v) => v === 1).length
-    expect(flagged).toBe(4) // exactly one quad
-  })
-
   it('the sky is its own draw mode, and there is exactly one of it', () => {
+    /**
+     * There used to be a third mode, sampling the frame the room was scanned from
+     * onto the cover. A playtester found it grey, grainy and harmful to reading the
+     * level, so it is gone along with its uniforms, its texture upload and its key.
+     * This test is what is left of it: exactly one quad in the scene is shaded by
+     * something other than its own vertex colour.
+     */
     const m = buildScene({ occluders: room.occluders, targets: [] })
-    expect([...m.textured].filter((v) => v === 2).length).toBe(4)
+    expect([...m.textured].filter((v) => v === 1).length).toBe(4)
     const flat = buildScene({ occluders: room.occluders, targets: [], sky: false })
-    expect([...flat.textured].filter((v) => v === 2).length).toBe(0)
-  })
-
-  it('a short or missing uv array is not an error', () => {
-    // The array is built from a scan and the scan can be replaced at any moment;
-    // a mismatch must degrade to flat colour rather than throw mid-frame.
-    for (const uvs of [undefined, [], [undefined, uv]]) {
-      const m = buildScene({ occluders: room.occluders, targets: [], occluderUvs: uvs })
-      expect(m.indices.length).toBeGreaterThan(0)
-      // 0 flat, 1 textured, 2 sky: a mode rather than a boolean.
-      for (const v of m.textured) expect([0, 1, 2]).toContain(v)
-    }
+    expect([...flat.textured].filter((v) => v === 1).length).toBe(0)
+    for (const v of m.textured) expect([0, 1]).toContain(v)
   })
 })
 
@@ -414,10 +388,8 @@ describe('cover as a silhouette', () => {
      * treats the rectangle as solid, so anything drawn outside it — or any gap
      * left inside it — is the picture lying about the rules.
      */
-    for (const mesh of [
-      coverMesh(b),
-      coverMesh(b, undefined, { u0: 0, v0: 0, u1: 1, v1: 1 }),
-    ]) {
+    {
+      const mesh = coverMesh(b)
       for (let i = 0; i < mesh.positions.length; i += 3) {
         expect(mesh.positions[i]!).toBeGreaterThanOrEqual(b.x0 - 1e-6)
         expect(mesh.positions[i]!).toBeLessThanOrEqual(b.x1 + 1e-6)
@@ -486,11 +458,8 @@ describe('cover as a silhouette', () => {
     expect(touching).toBeGreaterThanOrEqual(8)
   })
 
-  it('drops the gradient when given a texture, because a photo fights it', () => {
-    const plain = coverMesh(b)
-    const textured = coverMesh(b, undefined, { u0: 0, v0: 0, u1: 1, v1: 1 })
-    expect([...textured.textured].every((v) => v === 1)).toBe(true)
-    expect([...plain.textured].every((v) => v === 0)).toBe(true)
+  it('is drawn entirely from vertex colour, never sampled', () => {
+    expect([...coverMesh(b).textured].every((v) => v === 0)).toBe(true)
   })
 })
 
