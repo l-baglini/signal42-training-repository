@@ -183,8 +183,15 @@ wider than its own front face, which would promise cover the solver does not
 grant. `coverMesh` bevels *inwards* and a test asserts every vertex is inside the
 rectangle and at exactly its depth.
 
-**The room stands full.** Five enemies from the first tick, they never leave, and
-a kill is replaced after a beat. There is no spawn timer any more and reintroducing
+**The room stands full.** Eight enemies from the first tick, they never leave, and
+a kill is replaced after a beat. *Which* eight is `chooseLineup` in
+`src/engine/lineup.ts` — greedy maximum coverage, weighted by where the body
+spends its time, so that a modest lean is worth making and not only a full commit.
+Judge a lineup change with `npm run levels`, which prints threat coverage **in
+bands by distance from rest**; the aggregate average hides everything that
+matters. And cover with a live enemy behind it is outlined by `blockingOccluders`
+— that cue was silently disconnected once already and its absence reads as an
+empty room. There is no spawn timer any more and reintroducing
 one is how the game got boring: with a timer, the likeliest thing to happen when
 you lean out is nothing. This needed no change to the fairness theorem, because
 I2 already guarantees no shipped enemy can see the player at the rest position —

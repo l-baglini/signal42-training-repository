@@ -375,6 +375,45 @@ It did need one addition: with several sightlines opening at once, a single mome
 of over-exposure would bill the player once per enemy per frame. A hit now resets
 every fuse.
 
+## A feature deleted by being disconnected
+
+The playtester reported a round with eight enemies standing in it as *emptier*
+than one with two arriving on a timer. Three causes, and the first is the one
+worth keeping.
+
+Commit 7df4ee5 had added `blockingOccluders` so the app could outline the cover a
+hidden target was standing behind — the complaint then was that the hunt had no
+visible subject. When the hunt became combat, the wiring for both of that
+commit's cues was dropped, and **nothing failed**. The engine function still had
+its tests, and they still passed, because they test what it returns and not
+whether anybody asks. The same class of failure as the `stopPropagation` guard
+that vanished, and as the `designLevel` block whose scripted edit silently matched
+nothing: behaviour that lives only in a call site cannot be defended by testing
+the callee. This is the third time, and the only reliable countermeasure I have
+found is to grep the source *and* the built bundle for the call, not the
+definition.
+
+The second cause was selection. Fair positions were sorted by lean and a rotating
+slice taken, so a round could stand five enemies that all needed a long lean the
+same way — every one fair, and peeking the other way found nothing. Replaced with
+greedy maximum coverage over the masks the fairness solver already builds.
+
+The third cause is the interesting one, and it was my objective function.
+Maximum coverage counts cells, and cells favour the *widest* footprints, which
+belong to the long-lean enemies whose exposure region is a swathe at the edge of
+the envelope. A seven-line probe binning coverage by distance from rest showed
+what that produced: a full commit found a threat 93-100% of the time, a
+half-committed lean a third of the time. The algorithm was systematically
+preferring the enemies that make a modest peek pointless. Weighting coverage by
+where the body actually spends its time fixed it.
+
+And the aggregate number had been hiding all of it. "57% of the range is under
+threat" is dominated by the middle of the envelope, because a lattice has far more
+cells there than at its edge. The same data in bands — 0% / 40% / 71% / 99% — says
+something a designer can act on. That is the second time in this project a mean
+over a lattice has told me nothing (the first was anchor centroids), and both
+times the fix was to bin rather than average.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
