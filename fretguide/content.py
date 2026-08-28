@@ -188,16 +188,14 @@ def resolve_selection(sel: Selection, max_fret: int = 12) -> ResolvedSelection |
         if not key or not index.isdigit() or not 1 <= int(index) <= 5:
             return None
         try:
-            pents = key_pentatonics(key, max_fret=max_fret)
+            pents = key_pentatonics(key, minor=flavour == "min", max_fret=max_fret)
         except ValueError:
             return None
         pent = pents[int(index) - 1]
-        minor = flavour == "min"
-        positions = pentatonic_box(pent, max_fret=max_fret, minor=minor)
+        positions = pentatonic_box(pent, max_fret=max_fret)
         if not positions:
             return None
-        name = f"{pent.relative_minor} minor pent" if minor else f"{pent.root} major pent"
-        return ResolvedSelection(name=f"{name} — {pent.label} · {pent.detail}",
+        return ResolvedSelection(name=f"{pent.name} — {pent.label} · {pent.detail}",
                                  positions=positions)
 
     if sel.mode == "scale_generated":

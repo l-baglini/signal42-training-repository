@@ -208,56 +208,127 @@ PENTATONIC_FROM: tuple[int, ...] = (1, 2, 3, 5, 6)
 class Pentatonic:
     """One pentatonic position: a modal box with the 4th and 7th removed."""
 
-    key: str
-    index: int  #: 1..5, in fret order up the neck
+    key: str  #: the key you asked for -- and the root you hear
+    minor: bool
+    parent: str  #: the major key whose notes these are; == key when major
+    index: int  #: 1..5, numbered from the shape that starts on the root
     from_mode: str  #: the modal box it is carved out of, e.g. "Ionico"
-    root: str  #: the major pentatonic's tonic -- the key itself
-    relative_minor: str  #: the same notes heard from the sixth degree
+    #: Semitones the parent modal box is moved by to place this shape on the neck. A box
+    #: is a shape and repeats every octave; this picks which copy of it you are shown.
+    octave_shift: int
+    relative: str  #: the same notes under their other name
     position: int
     clipped: int = 0
 
     @property
     def label(self) -> str:
-        return f"Pos {self.index}"
+        return f"{ORDINALS[self.index - 1]} shape"
+
+    @property
+    def name(self) -> str:
+        return f"{self.key} {'minor' if self.minor else 'major'} pentatonic"
 
     @property
     def detail(self) -> str:
-        bits = [f"{self.root} maj / {self.relative_minor} min",
-                f"pos {_roman(self.position)}", f"from {self.from_mode}"]
+        bits = [f"{self.key} {'min' if self.minor else 'maj'}",
+                f"rel. {self.relative}", f"pos {_roman(self.position)}"]
         if self.clipped:
             bits.append(f"{self.clipped} frets off the neck")
         return " · ".join(bits)
 
 
-def key_pentatonics(key: str, max_fret: int = 12) -> list[Pentatonic]:
-    """The five pentatonic positions of ``key``, in fret order."""
-    modes = {m.degree: m for m in key_modes(key, max_fret=max_fret)}
-    out = []
-    for i, degree in enumerate(PENTATONIC_FROM, start=1):
-        m = modes[degree]
-        out.append(Pentatonic(key=key, index=i, from_mode=m.italian, root=key,
-                              relative_minor=transpose(key, 9), position=m.position,
-                              clipped=m.clipped))
+#: How the five shapes are labelled, in the order a sheet numbers them.
+ORDINALS = ("1st", "2nd", "3rd", "4th", "5th")
+
+
+def key_pentatonics(key: str, minor: bool = False, max_fret: int = 12) -> list[Pentatonic]:
+    """The five pentatonic positions of ``key``, major or minor, running up the neck.
+
+    **The minor pentatonic of A is A minor pentatonic**, not the relative minor of A
+    major. Ask for the minor pentatonic in a key and you mean the one rooted on that key;
+    its *notes* come from the relative major three semitones up, which is why the boxes are
+    carved out of that key's modal shapes rather than this one's.
+
+    Numbering starts at the shape that begins on the root -- the one whose lowest note on
+    the low E string is the tonic -- and the rest follow it up the neck. That is where a
+    teaching sheet starts counting, and it is the only starting point that is a property
+    of the scale rather than of where the frets happen to fall.
+    """
+    parent = transpose(key, 3) if minor else key
+    by_degree = {m.degree: m for m in key_modes(parent, max_fret=24)}
+
+    # Each shape repeats every octave, so first bring every one down to its lowest
+    # playable copy; then they can be ordered without an arbitrary octave getting in the
+    # way. Without this the boxes come out scattered over three octaves in whatever order
+    # the modal positions happened to land.
+    canon: list[tuple[Mode, int]] = []
+    for degree in PENTATONIC_FROM:
+        m = by_degree[degree]
+        shift = 0
+        while m.position + shift - 12 >= 0:
+            shift -= 12
+        canon.append((m, shift))
+    canon.sort(key=lambda t: t[0].position + t[1])
+
+    root_chroma = chroma(key)
+    first = 0
+    for i, (m, shift) in enumerate(canon):
+        low = [p.fret for p in _pentatonic_notes(m, parent, 24) if p.string == 6]
+        if low and chroma_at(6, min(low) + shift) == root_chroma:
+            first = i
+            break
+
+    ordered = canon[first:] + canon[:first]
+    out: list[Pentatonic] = []
+    previous = -99
+    for index, (m, shift) in enumerate(ordered, start=1):
+        while m.position + shift < previous:  # keep them ascending, not wrapping round
+            shift += 12
+        previous = m.position + shift
+        notes = _pentatonic_notes(m, parent, 24)
+        hi = max(p.fret for p in notes) + shift
+        lo = min(p.fret for p in notes) + shift
+        # A shape that runs off the end goes back an octave, if there is room for it
+        # down there. On a twelve-fret neck that puts the last two shapes low -- which is
+        # what a teaching sheet does with them too, for the same reason.
+        while hi > max_fret and lo - 12 >= 0:
+            shift, lo, hi = shift - 12, lo - 12, hi - 12
+        # The relative of a minor key is its parent major (A minor -> C major); of a major
+        # key it is the sixth degree (A major -> F# minor). Not the same interval, and
+        # getting it backwards labels every minor box with a key three semitones wrong.
+        relative = (f"{parent} major" if minor else f"{transpose(key, 9)} minor")
+        # The pentatonic's own first fret, not the modal window's. The window can open a
+        # fret earlier on a note the pentatonic drops, and reporting that would put every
+        # position label one out.
+        out.append(Pentatonic(
+            key=key, minor=minor, parent=parent, index=index, from_mode=m.italian,
+            relative=relative, position=lo, clipped=max(0, hi - max_fret),
+            octave_shift=shift))
     return out
 
 
-def pentatonic_box(pent: Pentatonic, max_fret: int = 12,
-                   minor: bool = False) -> tuple[FretPosition, ...]:
+def _pentatonic_notes(mode: Mode, parent: str, max_fret: int) -> tuple[FretPosition, ...]:
+    """A modal box with the parent key's 4th and 7th taken out. Roots not yet assigned."""
+    dropped = {(chroma(parent) + 5) % 12, (chroma(parent) + 11) % 12}
+    return tuple(p for p in mode_box(mode, max_fret=max_fret)
+                 if chroma_at(p.string, p.fret) not in dropped)
+
+
+def pentatonic_box(pent: Pentatonic, max_fret: int = 12) -> tuple[FretPosition, ...]:
     """The notes of one pentatonic position, fingered as its parent modal box is.
 
-    ``minor`` marks the relative minor's tonic as the root instead of the key's. The notes
-    do not change -- G major pentatonic and E minor pentatonic are one scale -- and being
-    able to see the same box both ways is the point of saying so.
+    Major and minor share every shape -- A minor pentatonic and C major pentatonic are one
+    scale -- so what the flavour decides is which note is marked as home, not where your
+    fingers go.
     """
-    mode = next(m for m in key_modes(pent.key, max_fret=max_fret)
+    mode = next(m for m in key_modes(pent.parent, max_fret=24)
                 if m.italian == pent.from_mode)
-    dropped = {(chroma(pent.key) + 5) % 12, (chroma(pent.key) + 11) % 12}  # the 4th and 7th
-    root_chroma = chroma(pent.relative_minor if minor else pent.root)
+    root_chroma = chroma(pent.key)
     return tuple(
-        FretPosition(string=p.string, fret=p.fret, finger=p.finger,
+        FretPosition(string=p.string, fret=p.fret + pent.octave_shift, finger=p.finger,
                      is_root=chroma_at(p.string, p.fret) == root_chroma)
-        for p in mode_box(mode, max_fret=max_fret)
-        if chroma_at(p.string, p.fret) not in dropped
+        for p in _pentatonic_notes(mode, pent.parent, 24)
+        if 0 <= p.fret + pent.octave_shift <= max_fret
     )
 
 

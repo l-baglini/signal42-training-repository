@@ -163,14 +163,18 @@ on every string, the same fingering, the same place on the neck.
 
 That is not a convenient coincidence. The seven modal boxes occupy only **five
 distinct windows**, and five is exactly how many pentatonic positions there are,
-because they are the same five shapes. Each row says which mode it comes from, so
-the relationship stays in view.
+because they are the same five shapes.
 
-Minor and major pentatonic are the same five shapes with the root moved: G major
-pentatonic and E minor pentatonic are one scale, identical dots, and only which
-note you hear as home changes. Both are listed because which one you are playing
-over changes everything about how it sounds and nothing about where your fingers
-go.
+**The minor pentatonic of a key is rooted on that key.** Pick A and ask for the
+minor pentatonic and you get A minor pentatonic — A C D E G, first shape at frets
+5–8. Its *notes* come from the relative major three semitones up (C), which is
+why its boxes are carved out of C's modal shapes rather than A's. The major
+pentatonic of A is a different scale entirely: A B C# E F#.
+
+Shapes are numbered from the one that begins on the root — A at the fifth fret of
+the low E — and run up the neck from there, which is where a teaching sheet
+starts counting. A shape that would run off the end drops an octave if there is
+room, so on twelve frets the last two sit low rather than vanishing.
 
 **Whole neck** keeps blues, harmonic minor and the unboxed pentatonics, for when
 you want the map rather than one position.

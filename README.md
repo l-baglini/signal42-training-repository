@@ -111,7 +111,7 @@ per-module conventions.
 | [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `probe_camera`, … |
-| [`tests/`](tests/) | 357 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 363 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
@@ -131,7 +131,7 @@ per-module conventions.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-357 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
+363 tests, ~9 seconds, no hardware. They cover the parts that *can* be proven
 without a guitar: synthetic-homography round-trips, the fret law, note
 identities, the heatmap codec's accuracy ceiling, and the trust gate's refusal
 conditions.

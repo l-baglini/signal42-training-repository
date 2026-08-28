@@ -74,17 +74,12 @@ def _key_node(key: str, max_fret: int) -> Node:
         Node(m.label, selection=Selection("mode_box", f"{key}:{m.degree}"), detail=m.detail)
         for m in key_modes(key, max_fret=max_fret)
     )
-    pents = key_pentatonics(key, max_fret=max_fret)
-
     def shapes(minor: bool) -> tuple[Node, ...]:
         flavour = "min" if minor else ""
-        root = pents[0].relative_minor if minor else key
         return tuple(
-            Node(f"{ORDINALS[p.index - 1]} shape",
-                 selection=Selection("penta_box", f"{key}:{p.index}:{flavour}"),
-                 detail=f"{root} · pos {_roman(p.position)} · from {p.from_mode}"
-                        + (f" · {p.clipped} frets off the neck" if p.clipped else ""))
-            for p in pents
+            Node(p.label, selection=Selection("penta_box", f"{key}:{p.index}:{flavour}"),
+                 detail=p.detail)
+            for p in key_pentatonics(key, minor=minor, max_fret=max_fret)
         )
 
     whole = tuple(

@@ -15,6 +15,7 @@ from fretguide.content import G_MAJOR_BOX, resolve_selection
 from fretguide.modes import (
     BOX_FRETS,
     MODES,
+    ORDINALS,
     key_modes,
     key_pentatonics,
     mode_box,
@@ -294,24 +295,90 @@ def test_eolio_string_four_is_fingered_from_the_twelfth_fret():
 def test_a_key_has_exactly_five_pentatonic_positions():
     """Not an arbitrary count. The seven modal boxes occupy only five distinct windows,
     and those windows *are* the pentatonic positions — the same five shapes."""
-    assert len(key_pentatonics("G")) == 5
-    assert [p.index for p in key_pentatonics("G")] == [1, 2, 3, 4, 5]
-    assert [p.position for p in key_pentatonics("G")] == [2, 4, 7, 9, 11]
+    for minor in (False, True):
+        pents = key_pentatonics("G", minor=minor, max_fret=24)
+        assert len(pents) == 5
+        assert [p.index for p in pents] == [1, 2, 3, 4, 5]
+        assert [p.label for p in pents] == [f"{o} shape" for o in ORDINALS]
+
+
+def test_the_minor_pentatonic_of_a_key_is_rooted_on_that_key():
+    """The bug this replaces: asking for A's minor pentatonic gave F# minor, because it
+    was built as the relative minor of A *major*.
+
+    Pick a key and ask for its minor pentatonic and you mean the one rooted there. Its
+    notes come from the relative major three semitones up, which is why the boxes are
+    carved out of that key's modal shapes.
+    """
+    from fretguide.theory import chroma, chroma_at, scale_chromas
+
+    for key in ("A", "G", "C#", "F"):
+        for pent in key_pentatonics(key, minor=True, max_fret=24):
+            assert pent.key == key
+            assert pent.parent == transpose(key, 3), "notes come from the relative major"
+            box = pentatonic_box(pent, max_fret=24)
+            roots = {chroma_at(p.string, p.fret) for p in box if p.is_root}
+            assert roots == {chroma(key)}, f"{key} minor pentatonic is rooted elsewhere"
+            allowed = scale_chromas(key, "minor pentatonic")
+            assert all(chroma_at(p.string, p.fret) in allowed for p in box)
+
+
+def test_the_major_pentatonic_of_a_key_is_rooted_on_that_key():
+    from fretguide.theory import chroma, chroma_at, scale_chromas
+
+    for key in ("A", "G", "D#"):
+        for pent in key_pentatonics(key, max_fret=24):
+            assert pent.parent == key
+            box = pentatonic_box(pent, max_fret=24)
+            assert {chroma_at(p.string, p.fret) for p in box if p.is_root} == {chroma(key)}
+            allowed = scale_chromas(key, "major pentatonic")
+            assert all(chroma_at(p.string, p.fret) in allowed for p in box)
+
+
+def test_a_minor_pentatonic_matches_the_reference_sheet():
+    """Checked against a printed chart of the five positions of A minor pentatonic.
+
+    The shapes are numbered from the one that begins on the root — A at the fifth fret of
+    the low E — and run up the neck from there, which is where the chart starts counting.
+    """
+    pents = key_pentatonics("A", minor=True, max_fret=21)
+    spans = []
+    for pent in pents:
+        box = pentatonic_box(pent, max_fret=21)
+        spans.append((min(p.fret for p in box), max(p.fret for p in box)))
+    assert spans == [(5, 8), (7, 10), (9, 13), (12, 15), (14, 17)]
+
+    first = pentatonic_box(pents[0], max_fret=21)
+    low_e = sorted(p.fret for p in first if p.string == 6)
+    assert low_e == [5, 8], "the first shape starts on A at the fifth fret"
+    assert next(p for p in first if p.string == 6 and p.fret == 5).is_root
+
+
+def test_shapes_that_run_off_the_neck_drop_an_octave_if_there_is_room():
+    """On twelve frets the last two shapes sit low instead of vanishing — which is what a
+    teaching sheet does with them, for the same reason."""
+    spans = []
+    for pent in key_pentatonics("A", minor=True, max_fret=12):
+        box = pentatonic_box(pent, max_fret=12)
+        spans.append((min(p.fret for p in box), max(p.fret for p in box)))
+    assert spans == [(5, 8), (7, 10), (9, 12), (0, 3), (2, 5)]
 
 
 def test_a_pentatonic_position_is_its_modal_box_minus_the_fourth_and_seventh():
     """The whole construction, asserted directly rather than reimplemented."""
     from fretguide.theory import chroma, chroma_at
 
-    for key in ("G", "C", "F#"):
-        dropped = {(chroma(key) + 5) % 12, (chroma(key) + 11) % 12}
-        modes = {m.italian: m for m in key_modes(key, max_fret=24)}
-        for pent in key_pentatonics(key, max_fret=24):
-            box = pentatonic_box(pent, max_fret=24)
-            parent = mode_box(modes[pent.from_mode], max_fret=24)
-            want = {(p.string, p.fret, p.finger) for p in parent
+    for key, minor in (("G", False), ("A", True), ("F#", True)):
+        for pent in key_pentatonics(key, minor=minor, max_fret=24):
+            dropped = {(chroma(pent.parent) + 5) % 12, (chroma(pent.parent) + 11) % 12}
+            parent_mode = next(m for m in key_modes(pent.parent, max_fret=24)
+                               if m.italian == pent.from_mode)
+            want = {(p.string, p.fret + pent.octave_shift, p.finger)
+                    for p in mode_box(parent_mode, max_fret=24)
                     if chroma_at(p.string, p.fret) not in dropped}
-            assert {(p.string, p.fret, p.finger) for p in box} == want
+            got = {(p.string, p.fret, p.finger)
+                   for p in pentatonic_box(pent, max_fret=24)}
+            assert got == want
 
 
 def test_every_pentatonic_position_has_two_notes_on_every_string():
@@ -321,43 +388,70 @@ def test_every_pentatonic_position_has_two_notes_on_every_string():
     4th and ends up with one note on the low E, so Frigio takes that window instead.
     """
     for key in ("G", "C", "E", "A#"):
-        for pent in key_pentatonics(key, max_fret=24):
-            box = pentatonic_box(pent, max_fret=24)
-            per_string = [sum(1 for p in box if p.string == s) for s in range(1, 7)]
-            assert per_string == [2] * 6, f"{key} {pent.label}: {per_string}"
-            assert len(box) == 12
+        for minor in (False, True):
+            for pent in key_pentatonics(key, minor=minor, max_fret=24):
+                box = pentatonic_box(pent, max_fret=24)
+                per_string = [sum(1 for p in box if p.string == s) for s in range(1, 7)]
+                assert per_string == [2] * 6, f"{key} {pent.label}: {per_string}"
+                assert len(box) == 12
 
 
 def test_pentatonic_notes_belong_to_the_pentatonic_scale():
     from fretguide.theory import chroma_at, scale_chromas
 
     for key in ("G", "D"):
-        allowed = scale_chromas(key, "major pentatonic")
-        for pent in key_pentatonics(key, max_fret=24):
-            for p in pentatonic_box(pent, max_fret=24):
-                assert chroma_at(p.string, p.fret) in allowed
+        for minor in (False, True):
+            flavour = "minor pentatonic" if minor else "major pentatonic"
+            allowed = scale_chromas(key, flavour)
+            for pent in key_pentatonics(key, minor=minor, max_fret=24):
+                for p in pentatonic_box(pent, max_fret=24):
+                    assert chroma_at(p.string, p.fret) in allowed
 
 
-def test_the_minor_flag_moves_the_root_without_moving_a_note():
-    """G major pentatonic and E minor pentatonic are one scale. Being able to see the
-    same box rooted both ways is the point of saying so."""
-    pent = key_pentatonics("G", max_fret=24)[0]
-    major = pentatonic_box(pent, max_fret=24)
-    minor = pentatonic_box(pent, max_fret=24, minor=True)
-    assert {(p.string, p.fret) for p in major} == {(p.string, p.fret) for p in minor}
-    assert [p.is_root for p in major] != [p.is_root for p in minor]
-    assert pent.relative_minor == "E"
+def test_a_minor_pentatonic_is_its_relative_majors_pentatonic():
+    """A minor pentatonic and C major pentatonic are one scale — the same notes heard from
+    a different home. Same shapes, in the same places, rooted three semitones apart."""
+    minor = key_pentatonics("A", minor=True, max_fret=24)
+    major = key_pentatonics("C", max_fret=24)
+    assert minor[0].parent == "C"
+    assert {m.from_mode for m in minor} == {m.from_mode for m in major}
+
+    by_mode = {m.from_mode: m for m in major}
+    for lo in minor:
+        hi = by_mode[lo.from_mode]
+        a = {(p.string, p.fret % 12) for p in pentatonic_box(lo, max_fret=24)}
+        b = {(p.string, p.fret % 12) for p in pentatonic_box(hi, max_fret=24)}
+        assert a == b, f"{lo.label} is not the same shape as C major's"
 
 
 def test_pentatonic_fingering_is_inherited_from_the_modal_box():
     """Same shape, same hand. A pentatonic position fingered differently from the modal
     box it sits inside would make the relationship invisible, which is most of its value.
     """
-    for pent in key_pentatonics("G", max_fret=24):
-        box = pentatonic_box(pent, max_fret=24)
-        assert all(1 <= p.finger <= 4 for p in box)
+    for minor in (False, True):
+        for pent in key_pentatonics("G", minor=minor, max_fret=24):
+            assert all(1 <= p.finger <= 4 for p in pentatonic_box(pent, max_fret=24))
 
 
 @pytest.mark.parametrize("bad", ["G:0:", "G:6:", "G:x:", "H:1:", "G", ":", ""])
 def test_malformed_pentatonic_ids_resolve_to_nothing(bad):
     assert resolve_selection(Selection("penta_box", bad), max_fret=21) is None
+
+
+def test_the_relative_key_is_named_correctly_in_both_directions():
+    """A minor's relative major is C — three semitones up, not down. A major's relative
+    minor is F#, nine up. Different intervals; getting one backwards labels every box with
+    a key three semitones wrong, which is what it did."""
+    assert key_pentatonics("A", minor=True)[0].relative == "C major"
+    assert key_pentatonics("A")[0].relative == "F# minor"
+    assert key_pentatonics("C", minor=True)[0].relative == "D# major"
+    assert key_pentatonics("G")[0].relative == "E minor"
+
+
+def test_the_reported_position_is_where_the_pentatonic_actually_starts():
+    """The modal window it is carved from can open a fret earlier, on a note the
+    pentatonic drops. Reporting that would put every position label one fret out."""
+    for minor in (False, True):
+        for pent in key_pentatonics("A", minor=minor, max_fret=21):
+            box = pentatonic_box(pent, max_fret=21)
+            assert pent.position == min(p.fret for p in box)

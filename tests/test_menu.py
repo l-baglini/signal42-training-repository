@@ -80,15 +80,18 @@ def test_each_pentatonic_offers_five_shapes(group):
     assert all(n.selection.mode == "penta_box" for n in shapes.children)
 
 
-def test_minor_and_major_pentatonic_are_the_same_shapes_rooted_differently():
-    key = find(find(build_root(), "Scales").children, "G")
+def test_a_keys_minor_and_major_pentatonics_are_different_scales():
+    """Under key A, "minor pentatonic" means A minor pentatonic — not the relative minor
+    of A major, which is what it used to mean and was the bug."""
+    key = find(find(build_root(), "Scales").children, "A")
     minor = find(key.children, "Minor pentatonic").children
     major = find(key.children, "Major pentatonic").children
-    for lo, hi in zip(minor, major):
-        a = resolve_selection(lo.selection, max_fret=24)
-        b = resolve_selection(hi.selection, max_fret=24)
-        assert {(p.string, p.fret) for p in a.positions} == {(p.string, p.fret) for p in b.positions}
-        assert [p.is_root for p in a.positions] != [p.is_root for p in b.positions]
+
+    a = resolve_selection(minor[0].selection, max_fret=24)
+    b = resolve_selection(major[0].selection, max_fret=24)
+    assert a.name.startswith("A minor pentatonic")
+    assert b.name.startswith("A major pentatonic")
+    assert {(p.string, p.fret) for p in a.positions} != {(p.string, p.fret) for p in b.positions}
 
 
 def test_every_mode_and_shape_carries_a_detail_line():
