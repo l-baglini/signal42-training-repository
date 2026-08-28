@@ -598,6 +598,49 @@ mistaken for a working feature. Its tests went with it.
 The rule I want to hold myself to, stated so the next session can apply it: **a
 switch on a live path may stay; a leaf with no caller may not.**
 
+## The documentation, and one thing I will not write
+
+Written at the end, with the parts that had gone stale fixed rather than hidden.
+
+**SPEC.md gets a §0 instead of an edit.** Six things it got wrong — dodge, the
+hunt, the room as the level, the play envelope, lineup selection, the texture —
+listed at the top with pointers into this log. Editing the body would have been
+easier and would have destroyed the document's only real value: it was written
+before the code, and it has to still read as what was written then. A
+specification quietly reconciled with its implementation is a summary pretending
+to be a plan.
+
+**PRIOR-ART.md gets a §6 that narrows the claim rather than widening it.** The
+pivot to a cover shooter moved this project *closer* to Wang et al. 2006 — webcam,
+flat screen, dodging-and-peeking, twenty years ago — and pretending otherwise
+would be the exact failure the survey was written to prevent. What §6 argues is
+unclaimed is no longer the interaction: it is the referee. A solver that decides
+before a level ships whether each position is reachable by *this* body, whether the
+window it demands exceeds *this* tracker's jitter, whether the retreat fits a fuse
+derived from *this* body's speed — and that returns a typed refusal when it cannot.
+Sko and Gardner's peering does collision checks so you cannot peer through walls;
+that is correctness. This is a fairness argument about a player, and the survey
+found nothing attempting it.
+
+**CLAUDE.md's state section was stale in six places** — 345 tests, a next-steps
+list of things already built, a texture key that no longer exists. Rewritten. And
+in rewriting it I deleted four guidance paragraphs I had added an hour earlier,
+because my replacement spanned a region wider than I had checked. Caught by
+grepping for the phrases I expected to find. That is the same class of mistake as
+the vanished `stopPropagation` guard and the `designLevel` edit that matched
+nothing: **an edit whose blast radius I did not verify.** Third distinct instance,
+first one in a document rather than in code, and the countermeasure is the same —
+assert what the edit is supposed to have touched, then check what it actually did.
+
+**REVIEW.md I am not writing.** The brief asks for a review pass owned by the
+author and explicitly not self-graded by a model, and a model-written review of a
+model-written codebase is worth nothing to anybody. What is here for it instead:
+this log's list of what the tests cannot check, the "What is not verified" section
+of README.md, and the fact that every commit message quotes the complaint it
+answers — so the honest question a reviewer can ask of this project is *how many
+of these findings needed a human to notice?* The answer is most of them, and that
+is the interesting result rather than an embarrassing one.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

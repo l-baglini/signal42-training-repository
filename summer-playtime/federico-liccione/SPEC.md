@@ -9,6 +9,46 @@
 
 ---
 
+## 0. Where this document is now wrong
+
+Added at the end of the build, and deliberately not folded into the text below.
+
+This specification was written **before** the code, to direct it, and its value as
+evidence depends on it still reading as what was written then. Six things the
+build and the playtesting overturned. Each one is argued in DEVLOG.md; this is
+the index.
+
+1. **Dodge is cut.** §1 gives two verbs and §6.5 specifies a dodge guarantee. Only
+   peek ships. The dodge solver, its invariant I7 and its tests are all still
+   present and green; nothing calls them from the game. §14's own cut order
+   predicted this, and Kulshreshth & LaViola (PRIOR-ART §2) predicted it before
+   that.
+2. **The game is a cover shooter, not a hunt.** "Find the hidden target" became
+   "lean out to shoot an enemy that can shoot you from the same position", which is
+   the same geometry read as a threat instead of as a search. `src/game/round.ts`
+   is the hunt and is no longer wired up.
+3. **The level is not the player's room.** §7 makes the room scan the game. A
+   playtester made the decisive objection — it makes the quality of the experience
+   hostage to the player's furniture — and the levels are now authored and swept.
+   The scan is still there, still one keypress, and is now a capability rather than
+   the premise.
+4. **The level is laid out inside a fraction of the measured envelope**, capped at
+   14 cm. Nothing here anticipated that calibration measures a maximum while play
+   happens nowhere near it. See `playEnvelope`.
+5. **Which positions stand is a decision, and it is the engine's.** This document
+   assumes that judging each candidate for fairness is enough. It is not: a set of
+   individually fair enemies can be a bad round or an unfair lineup. Hence
+   `src/engine/lineup.ts` and **I11**, which is in §6.7 below and was written after
+   the fact.
+6. **The room texture is gone**, along with the drawing of the scanned frame onto
+   the cover. Rejected in playtesting as unreadable.
+
+Everything else below still describes the build, and §6.7's invariants are all
+tested. Where this document and the code disagree about anything not on this list,
+the code is probably right and the disagreement is a bug in the documentation.
+
+---
+
 ## 1. The mechanic
 
 **You lean to see.**

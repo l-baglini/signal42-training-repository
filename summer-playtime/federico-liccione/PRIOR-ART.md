@@ -118,6 +118,65 @@ them.
    author "Ziong"; search results give "Xiong". The ACM DL record is
    authoritative.
 
+## 6. What the build changed about this survey
+
+Added after implementation and playtesting, because §4's verdict was written
+about a design that no longer exists and leaving it unqualified would be the
+dishonest kind of tidy.
+
+**The game is now a cover shooter, and that moves it *closer* to prior art, not
+further from it.** The verbs as shipped are: lean out to see an enemy, shoot it,
+lean back before its shot lands. Wang et al. (2006) is webcam face tracking, flat
+screen, "dodging-and-peeking" in an FPS. On the *verb*, that is the same game.
+The distance between them is what §4 already said — Wang had no head-coupled
+projection — and the pivot did not widen it. Anyone assessing novelty should read
+§4's verdict as narrower now than when it was written.
+
+**Dodge was cut, and the literature was right.** §4 predicted it: *"dodge is the
+first mechanic to cut if playtesting agrees with the literature."* Kulshreshth and
+LaViola's caution about fast-paced head tracking was borne out almost word for
+word — a playtester reported the dodge targets as unreadable at close range and
+the mechanic as tiring, and it was replaced by a shooter in which the head does
+slow positional work and the mouse does fast precision. That split is a direct
+consequence of a paper found during this survey. It is the one place where prior
+art changed the design rather than just the claim.
+
+**A second verb was tried and withdrawn.** Enemies that can already see the rest
+position — shoot now or get out of the way — were built, measured, and then
+switched off because the playtester preferred the single verb. The machinery and
+its fairness guarantee are still in the engine. Nothing in this survey covers
+that shape; nothing in this survey needs to, because it does not ship.
+
+**And the part that appears genuinely unclaimed has moved.** It is no longer the
+interaction technique, which §4 already conceded, nor really the delivery. It is
+the referee: a solver that decides, *before a level ships*, whether each enemy
+position is reachable by this measured body, whether the peek window it demands
+exceeds this tracker's measured jitter, whether the retreat fits inside a fuse
+derived from that body's own speed and latency — and that returns a **typed
+refusal with counts** when a room cannot be played fairly. Sko and Gardner's
+peering does collision checks so you cannot peer through walls; that is
+correctness. This is a fairness argument about a *player*, and the survey found
+nothing that attempts it. Whether that is because it is unclaimed or because
+nobody wanted it is a fair question and is not settled here.
+
+Two smaller things the survey has no entry for, offered as leads rather than
+claims:
+
+- **Laying the level out inside a fraction of the calibrated envelope.** Teather
+  and Stuerzlinger (§5, unverified) on gain tuning is the nearest thing found, and
+  it is the opposite operation — they exaggerate head motion, this shrinks the
+  world to meet it. If there is literature on comfortable sustained head
+  excursion versus maximum, it was not found, and the 14 cm ceiling in
+  `playEnvelope` is the only number in the solver that is a guess about bodies
+  rather than a measurement of one.
+- **A language model as level designer behind a validating boundary.** Plenty of
+  work exists on procedural content generation and on LLMs generating game
+  content; none was surveyed here, and no claim is made. What is specific to this
+  build is not the generation but the arrangement: the model's output is treated
+  as hostile input, clamped by `src/boundary/validate.ts`, and then judged by the
+  same solver that judges a hand-authored level. If that arrangement has a name in
+  the PCG literature, this survey does not know it.
+
 ---
 
 *Survey method: web search plus primary-source retrieval, with every claim
