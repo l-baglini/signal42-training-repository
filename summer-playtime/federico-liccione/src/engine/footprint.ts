@@ -136,6 +136,34 @@ export function inradiusCm(lat: Lattice, mask: Uint8Array): number {
   return Math.max(0, best - 0.5) * lat.pitch
 }
 
+/**
+ * The nearest viewpoint that would reveal the target, and how far it is.
+ *
+ * This is the engine's own answer to "which way do I lean", so a hint built on
+ * it cannot disagree with the rules — it is the same footprint that decided the
+ * target was fair in the first place.
+ */
+export function nearestRevealing(
+  lat: Lattice,
+  mask: Uint8Array,
+  from: Point3,
+): { at: Point3; distCm: number } | null {
+  let best: Point3 | null = null
+  let bestD = Infinity
+  for (let k = 0; k < lat.nz; k++)
+    for (let j = 0; j < lat.ny; j++)
+      for (let i = 0; i < lat.nx; i++) {
+        if (!mask[cellIndex(lat, i, j, k)]) continue
+        const c = cellCentre(lat, i, j, k)
+        const d = dist(c, from)
+        if (d < bestD) {
+          bestD = d
+          best = c
+        }
+      }
+  return best ? { at: best, distCm: bestD } : null
+}
+
 /** Distance from the rest position to the nearest cell of V(t), in cm. */
 export function nearestLeanCm(lat: Lattice, mask: Uint8Array, rest: Point3): number {
   let best = Infinity

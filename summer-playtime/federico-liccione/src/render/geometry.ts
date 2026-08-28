@@ -127,6 +127,7 @@ export const PALETTE = {
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
+  hiding: [0.36, 0.72, 0.62] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
 } as const
@@ -145,6 +146,12 @@ export interface SceneInput {
   readonly threat?: { readonly at: Point3; readonly radius: number } | undefined
   /** Where the threat will cross the window. The tell — drawn from spawn. */
   readonly threatMarker?: { readonly at: Point3; readonly radius: number } | undefined
+  /**
+   * Occluders currently hiding the target being hunted. Outlined, so the player
+   * knows what to peek around. Without this the hunt has no visible subject at
+   * all — which is exactly how the first playtest read.
+   */
+  readonly hiding?: readonly Billboard[] | undefined
   readonly backdropZ?: number
 }
 
@@ -163,6 +170,10 @@ export function buildScene(input: SceneInput): Mesh {
     backdropMesh(backdropZ, 260, 170, 16, 11, PALETTE.backdropA, PALETTE.backdropB),
   ]
   for (const o of input.occluders) parts.push(occluderMesh(o, PALETTE.occluder))
+  for (const o of input.hiding ?? []) {
+    // Nudged towards the viewer so it wins the depth test against its own face.
+    parts.push(frameMesh(o.z + 0.4, o.x0, o.x1, o.y0, o.y1, 2.2, PALETTE.hiding))
+  }
   input.targets.forEach((t, i) => {
     const on = input.revealed?.[i] ?? false
     const inPlay = input.active ? input.active.includes(i) : true

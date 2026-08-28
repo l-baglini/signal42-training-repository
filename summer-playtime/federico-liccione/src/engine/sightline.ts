@@ -25,6 +25,32 @@ export function visible(e: Point3, t: Point3, occluders: readonly Billboard[]): 
 }
 
 /**
+ * Which occluders are hiding the target from here.
+ *
+ * The game needs this to be able to say *what to peek around*. A target the
+ * player cannot see is, on screen, nothing at all — and a hunt with no visible
+ * subject is not a hunt. Pointing at the furniture doing the hiding is the
+ * smallest cue that makes the goal legible without giving the position away.
+ */
+export function blockingOccluders(
+  e: Point3,
+  t: Point3,
+  occluders: readonly Billboard[],
+): Billboard[] {
+  const blocking: Billboard[] = []
+  const dz = t.z - e.z
+  if (dz === 0) return blocking
+  for (const o of occluders) {
+    if (!(t.z < o.z && o.z < e.z)) continue
+    const s = (o.z - e.z) / dz
+    const px = e.x + (t.x - e.x) * s
+    const py = e.y + (t.y - e.y) * s
+    if (px >= o.x0 && px <= o.x1 && py >= o.y0 && py <= o.y1) blocking.push(o)
+  }
+  return blocking
+}
+
+/**
  * The player's leverage over where the sightline crosses an occluder's plane.
  *
  * The crossing point is `e·(1-s) + t·s`, so leverage is `(1 - s)`. An occluder

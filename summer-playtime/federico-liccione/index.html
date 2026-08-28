@@ -60,6 +60,10 @@
   #round h2 { margin: 0 0 8px; font-size: 17px; }
   #round p { margin: 0 0 10px; }
   #round .note { font-size: 11px; opacity: .6; }
+  #hint { position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%); z-index: 10;
+    display: none; text-align: center; }
+  #hint .arrow { font-size: 40px; line-height: 1; color: #7ce0c0; }
+  #hint .text { font-size: 12px; opacity: .75; margin-top: 2px; }
   .hitflash { position: fixed; inset: 0; z-index: 5; pointer-events: none;
     background: rgba(230,60,70,.32); opacity: 0; transition: opacity .35s; }
   #calib .count { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -113,6 +117,7 @@
 
   <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
 
+  <div id="hint"><div class="arrow" id="hintArrow"></div><div class="text" id="hintText"></div></div>
   <div class="hitflash" id="flash"></div>
   <div id="cam"></div>
 

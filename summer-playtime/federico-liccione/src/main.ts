@@ -7,8 +7,16 @@
  * mouse is the cleaner control for judging the geometry, the webcam is the real
  * thing, and no game code below knows which one it has.
  */
-import { generate, latticeOf, shouldSpawn, visible } from './engine'
-import type { Envelope, Generated, Lattice, RoomScan, Target } from './engine'
+import {
+  blockingOccluders,
+  footprintMask,
+  generate,
+  latticeOf,
+  nearestRevealing,
+  shouldSpawn,
+  visible,
+} from './engine'
+import type { Billboard, Envelope, Generated, Lattice, Point3, RoomScan, Target } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene } from './render/geometry'
 import { Renderer } from './render/renderer'
@@ -74,6 +82,13 @@ let lattice: Lattice = latticeOf(envelope)
 let roundSeed = 1
 let specs: TargetSpec[] = []
 let round: RoundState = newRound(DEFAULT_CONFIG)
+/** The footprint of the target being hunted, recomputed only when it changes. */
+let huntIndex = -1
+let huntMask: Uint8Array | null = null
+let hiding: Billboard[] = []
+
+/** How long the player is left to search before the game offers a direction. */
+const HINT_AFTER_S = 2.5
 
 function regenerate(): void {
   lattice = latticeOf(envelope)
@@ -117,6 +132,7 @@ function renderScene(): void {
         playing && round.threat
           ? { at: round.threat.to, radius: round.threat.radius }
           : undefined,
+      hiding: playing ? hiding : undefined,
     }),
   )
 }
@@ -134,6 +150,7 @@ function renderRound(): void {
     return
   }
   panel.style.display = 'block'
+  el('hint').style.display = 'none'
   if (level.kind === 'refusal') {
     el('roundTitle').textContent = 'No round to play'
     el('roundBody').textContent = 'This room will not make a fair level. Press w to put the furniture back.'
@@ -142,13 +159,50 @@ function renderRound(): void {
   if (round.phase === 'ready') {
     el('roundTitle').textContent = 'Blind Spot'
     el('roundBody').textContent =
-      'A target is hidden behind something. Lean until you can see it. Something red will come at ' +
-      'the window — lean out of its way, or it costs you five seconds.'
+      'Somewhere in this room there is a marker you cannot see from where you are sitting — ' +
+      'a piece of furniture is in the way. The one that is hiding it lights up. Lean to the side ' +
+      'until the marker comes into view, and it scores. Something red will cross the room at you; ' +
+      'an orange square shows where it will land, so lean out of that spot or it costs you five ' +
+      'seconds of the clock.'
   } else {
     el('roundTitle').textContent = `${round.score} points`
     el('roundBody').textContent =
       `${round.revealed} found, ${round.missed} missed, ${round.hits} hit, ${round.dodged} dodged.`
   }
+}
+
+/**
+ * After a couple of seconds of searching, say which way and how far. Not a
+ * concession: the first playtest could not tell there was a hunt on at all, and
+ * a hint that arrives only when the player is stuck teaches the mechanic without
+ * playing it for them.
+ */
+function renderHint(ageS: number, index: number, eye: Point3): void {
+  const panel = el('hint')
+  if (index < 0 || !huntMask || ageS < HINT_AFTER_S || revealed[index]) {
+    panel.style.display = 'none'
+    return
+  }
+  const near = nearestRevealing(lattice, huntMask, eye)
+  if (!near) {
+    panel.style.display = 'none'
+    return
+  }
+  const dx = near.at.x - eye.x
+  const dy = near.at.y - eye.y
+  const dz = near.at.z - eye.z
+  let arrow: string
+  if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)) arrow = dx > 0 ? '\u2192' : '\u2190'
+  else if (Math.abs(dy) >= Math.abs(dz)) arrow = dy > 0 ? '\u2191' : '\u2193'
+  else arrow = dz > 0 ? '\u21a9' : '\u21aa'
+  panel.style.display = 'block'
+  el('hintArrow').textContent = arrow
+  el('hintText').textContent =
+    dz > Math.abs(dx) && dz > Math.abs(dy)
+      ? `lean back ${near.distCm.toFixed(0)} cm`
+      : Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)
+        ? `lean in ${near.distCm.toFixed(0)} cm`
+        : `lean ${near.distCm.toFixed(0)} cm`
 }
 
 function flash(): void {
@@ -354,6 +408,24 @@ function frame(now: number): void {
       // they are is never spawned, and the game has no way to overrule it.
       maySpawn: (threat) => shouldSpawn(lattice, threat, envelope, eye),
     })
+    // Track which target is being hunted, and what is hiding it. The mask is
+    // the same footprint the engine used to decide the target was fair, so the
+    // hint can never point somewhere the rules disagree with.
+    const active = round.active[0]
+    const index = active?.index ?? -1
+    if (index !== huntIndex) {
+      huntIndex = index
+      huntMask =
+        index >= 0 && targets[index]
+          ? footprintMask(lattice, room.occluders, targets[index]!.at)
+          : null
+    }
+    hiding =
+      index >= 0 && targets[index]
+        ? blockingOccluders(eye, targets[index]!.at, room.occluders)
+        : []
+    renderHint(active ? round.tS - active.bornS : 0, index, eye)
+
     for (const ev of round.events) if (ev.kind === 'hit') flash()
     renderRound()
     if (round.phase !== before) renderHud()
