@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 467 tests
+.venv/bin/python -m pytest tests/ -q      # 466 tests (+1 needing dataset/frames)
 .venv/bin/python -m ruff check .          # must be clean
 ```
 

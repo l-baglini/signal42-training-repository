@@ -8,7 +8,7 @@
 <p align="center">
   <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="OpenVINO" src="https://img.shields.io/badge/inference-OpenVINO-0068B5?style=flat-square">
-  <img alt="467 tests" src="https://img.shields.io/badge/tests-467%20hardware--free-2ea043?style=flat-square">
+  <img alt="466 tests" src="https://img.shields.io/badge/tests-466%20hardware--free-2ea043?style=flat-square">
   <img alt="accuracy budget" src="https://img.shields.io/badge/budget-%C2%B10.25%20fret--widths-8957e5?style=flat-square">
   <img alt="network calls" src="https://img.shields.io/badge/network%20calls-zero-d29922?style=flat-square">
 </p>
@@ -136,8 +136,8 @@ whatever speed you can actually manage.
 
 Files come from anywhere that has them — **[gprotab.net](https://gprotab.net/)** is a
 community archive of 50,000-odd Guitar Pro tabs, free and without an account. They are
-community transcriptions, so quality varies and the fingering you get is whoever's who typed
-it in; `--refinger` below exists partly for that.
+community transcriptions, so quality varies and the fingering you get is whoever's typed it
+in; `--refinger` below exists partly for that.
 
 | Key | |
 |---|---|
@@ -346,8 +346,12 @@ in **[QUICKSTART.md](QUICKSTART.md)**.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 467 tests, ~8 s, no hardware
+.venv/bin/python -m pytest tests/ -q      # 466 tests, ~8 s, no hardware
 ```
+
+466 tests on a fresh clone. A 467th measures label noise against the real captured
+frames, which are gitignored and regenerable, so it skips unless you have them — the
+only skip in the suite, and it reports itself.
 
 They cover what *can* be proven without a guitar: synthetic-homography round-trips, the fret
 law, note identities, the heatmap codec's accuracy ceiling, the trust gate's refusal
@@ -384,7 +388,7 @@ camera and an instrument, and it is judged by eye.
 | [`fretguide/shell/`](fretguide/shell/) | The native shell — YUV planes as GL textures, converted in a shader |
 | [`fretguide/tracker.py`](fretguide/tracker.py) | Legacy enrollment/SIFT backend, kept as a baseline |
 | [`tools/`](tools/) | `run_app`, `collect`, `train`, `export`, `screenshots`, `eval_fingering`, … |
-| [`tests/`](tests/) | 467 tests. No camera, no GPU, no guitar required. |
+| [`tests/`](tests/) | 466 tests. No camera, no GPU, no guitar required. |
 
 ## Documentation
 
