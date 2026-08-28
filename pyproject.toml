@@ -34,6 +34,16 @@ train = [
 gui = [
     "PySide6>=6.8",
 ]
+# Reading Guitar Pro files (docs/PLAN-songs.md). An extra, not a runtime
+# dependency, for two reasons. PyGuitarPro is LGPL-3.0 while this project is
+# MIT: declaring a dependency is not distributing one, but vendoring it into
+# the Windows bundle would be a "combined work" under LGPL sec.4, and an extra
+# keeps it out of tools/make_bundle.py by construction -- the same reason Qt
+# lives in [gui]. It is also dead weight for the tracker, which never reads a
+# score.
+score = [
+    "PyGuitarPro>=0.11",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.9",

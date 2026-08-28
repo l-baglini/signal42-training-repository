@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 363 tests
+.venv/bin/python -m pytest tests/ -q      # 382 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -96,6 +96,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 
 
 
+| `fretguide/score.py` | Songs. Reads Guitar Pro into notes carrying **beats, not seconds** — so tempo is a playback multiplier rather than something baked into every onset. Repeats are unrolled: page order is not playback order. Ties extend the note they continue instead of emitting a second one; a tied note is a finger that never left the string. Needs the `[score]` extra, imported lazily so the model stays usable without it. **Camera reach is reported, not hidden** — `SongTrack.fits_camera` is false past fret 12, and on real tabs every rhythm part fits while most solos do not. |
+| `partitures/` | Gitignored, like `dataset/frames/`. Copyrighted transcriptions that a fresh clone will not have, so tests build their own fixtures with `guitarpro.write` (see `test_score.py::_write`) rather than reading from it. |
 | `fretguide/menu.py` | The practice catalogue as a tree, browsed as columns (Chords/Scales → key → kind of scale → shape), plus the cursor over it. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. `Menu.selection()` follows the deepest node, not the focused one, so moving through keys keeps showing the same mode. |
 
 | `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |

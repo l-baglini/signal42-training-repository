@@ -48,3 +48,8 @@ coverage/
 # --- Misc ---
 *.local
 .DS_Store
+
+# Guitar Pro / MusicXML source files. Copyrighted transcriptions, and like
+# dataset/frames/ they are regenerable by the user rather than ours to ship.
+# tests/ build their own fixtures instead of reaching for these.
+partitures/

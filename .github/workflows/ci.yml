@@ -32,7 +32,7 @@ jobs:
       - name: Install runtime and dev dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,score]"
 
       - name: Install torch (CPU build)
         # From PyTorch's CPU index deliberately: the default PyPI wheel drags in
@@ -45,10 +45,11 @@ jobs:
         run: ruff check .
 
       - name: Confirm the optional deps really installed
-        # tests/test_model.py guards its imports with pytest.importorskip, so a
-        # failed torch install would turn the FretNet tests green-by-skipping
-        # instead of red. Assert the dependency here, where it cannot be missed.
-        run: python -c "import torch, openvino, cv2; print(torch.__version__, openvino.__version__, cv2.__version__)"
+        # tests/test_model.py and tests/test_score.py guard their imports with
+        # pytest.importorskip, so a failed install would turn those tests
+        # green-by-skipping instead of red. Assert the dependencies here, where
+        # it cannot be missed.
+        run: python -c "import torch, openvino, cv2, guitarpro; print(torch.__version__, openvino.__version__, cv2.__version__)"
 
       - name: Tests
         # -rs reports the reason for any skip in the log, so a suite that shrinks
