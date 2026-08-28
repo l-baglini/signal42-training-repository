@@ -183,15 +183,24 @@ wider than its own front face, which would promise cover the solver does not
 grant. `coverMesh` bevels *inwards* and a test asserts every vertex is inside the
 rectangle and at exactly its depth.
 
-**Two verbs, not one.** Most enemies need a lean to be seen (`verb: 'peek'`).
-A minority — capped at a quarter of the lineup by `inTheOpenShare` — can already
-see the rest position (`verb: 'duck'`), which by the symmetry means they can be
-shot from it: take it now or get out of the way. This is opt-in via
-`allowInTheOpen` and **off by default**, so I2 and every test written against it
-still hold for the hunt path. What replaced I2's silent second job — that rest is
-safe from everything at once — is I11, enforced by `escapable` in
-`src/engine/lineup.ts`. Do not weaken it to "some cell is safe": that version let
+**One verb: you see an enemy by leaning out.** The engine can also ship enemies
+that already see the rest position (`verb: 'duck'`, `allowInTheOpen`,
+`inTheOpenShare`) — tested, documented, and **shipping at 0**, because the
+playtester played both and preferred the single verb. Do not switch it on without
+asking them. What it needs if you ever do is I11, enforced by `escapable` in
+`src/engine/lineup.ts`: never weaken it to "some cell is safe", that version let
 through a lineup threatening 100% of the body's range.
+
+**The levels are generated: `npm run author`.** Layouts are hand-designed in
+`tools/author.test.ts` — that part is taste — and the anchors are swept and
+measured, because the one level whose anchors were placed by hand had four usable
+positions out of twenty-one. Two rules came out of iterating them, both with
+numbers in DEVLOG: **cover belongs near the window** (z = -46 to z = -22 tripled
+the threat coverage at six centimetres of lean) and **edges matter more than
+area** (a lattice of narrow uprights beat two big slabs, and is the only thing
+that produced vertical peeking at all). Judge any change with `npm run levels`,
+which prints coverage in centimetres of lean; the 3 cm column must stay at 0%,
+because that is the cover.
 
 **Enemies reposition rather than move.** `repositionAfterS` steps an unobserved
 enemy with a cold fuse to another position **the solver has already judged**. Do

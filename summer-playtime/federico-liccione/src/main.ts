@@ -46,7 +46,6 @@ import {
 import type { CombatState, EnemySpec } from './game/combat'
 import { LEVELS } from '../fixtures/levels/authored'
 import type { AuthoredLevel } from '../fixtures/levels/authored'
-import roomJson from '../fixtures/desk.room.json'
 
 const el = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id)
@@ -74,15 +73,9 @@ try {
  * level I wrote by hand is not more trustworthy than one a model wrote — it is
  * just written by someone with a worse memory for units.
  */
-const rooms: AuthoredLevel[] = [
-  ...LEVELS,
-  {
-    id: 'desk',
-    name: 'The desk',
-    blurb: 'The first room, written by hand before any of the tools existed.',
-    scan: validateScan(roomJson).scan,
-  },
-].map((l) => ({ ...l, scan: validateScan(l.scan).scan }))
+// The desk used to be appended here from the test fixture. It is a level in its
+// own right now, swept like the rest of them, and lives in LEVELS.
+const rooms: AuthoredLevel[] = LEVELS.map((l) => ({ ...l, scan: validateScan(l.scan).scan }))
 
 let roomIndex = 0
 
@@ -100,6 +93,8 @@ let envelope: Envelope = referenceBody(tracker.latencyS())
  */
 const PLAY_FRACTION = 0.68
 const COMFORT_CM = 14
+/** How deep the ordered lineup goes. Replacements come from it in order. */
+const LINEUP_DEPTH = 40
 /** How far the play envelope actually reaches. Set by `rebuildLineup`. */
 let playReachCm = 10
 let bodySource = 'reference body'
@@ -229,7 +224,7 @@ function rebuildLineup(): void {
      * or get out of the way*. `chooseLineup` guarantees there is still somewhere
      * safe from everything standing, and that it is reachable in time.
      */
-    allowInTheOpen: true,
+    allowInTheOpen: false,
   })
   rejectCounts = {}
   for (const a of assessments) {
@@ -257,11 +252,25 @@ function rebuildLineup(): void {
     }),
     retreatBudgetCm: a.retreatBudgetCm,
   }))
-  const order = chooseLineup(lattice, play, room.occluders, cands, { viewport, seed: roundSeed })
+  const order = chooseLineup(lattice, play, room.occluders, cands, {
+    viewport,
+    seed: roundSeed,
+    // Only the front of the list ever stands, so ordering past it is wasted work —
+    // and the work is quadratic in the candidate count.
+    limit: LINEUP_DEPTH,
+    /**
+     * Enemies that can already see the rest position stay in the engine, tested and
+     * documented, and do not ship. They were the playtester's own idea and I argued
+     * for them; playing both, they preferred the version where an enemy is only ever
+     * something you found by leaning. That is the whole verb, and it beats a second
+     * verb that dilutes it. `allowInTheOpen` above is what turns them back on.
+     */
+    inTheOpenShare: 0,
+  })
   // Deep enough that a whole round of replacements is still new ground. They
   // arrive in coverage order, so the tail is not padding — it is the next best
   // covering set.
-  const chosen = order.slice(0, 40).map((i) => fair[i]!)
+  const chosen = order.slice(0, LINEUP_DEPTH).map((i) => fair[i]!)
   threatened = threatCoverage(
     lattice, room.occluders, cands, order, DEFAULT_COMBAT.waveSize, { viewport },
   )

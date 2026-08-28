@@ -20,7 +20,7 @@ import {
   threatCoverage,
   threatUnion,
 } from '../src/engine'
-import type { LineupCandidate } from '../src/engine'
+import type { LineupCandidate, Point3, RoomScan } from '../src/engine'
 import { LEVELS } from '../fixtures/levels/authored'
 import { roomy, seated } from '../fixtures/envelopes'
 
@@ -204,6 +204,50 @@ describe('playEnvelope', () => {
   })
 })
 
+/**
+ * A room built for the in-the-open case, because the shipped levels no longer
+ * contain one.
+ *
+ * `npm run author` sweeps candidate positions through the solver with the default
+ * rule, so every anchor in every authored level is one that *requires a lean* —
+ * which is the game as it ships, and which leaves the `verb: 'duck'` path with no
+ * fixture to exercise. Rather than put positions the game rejects into the levels
+ * to keep a test happy, the test brings its own room: three blocks near the window,
+ * a grid of positions behind and between them, so some are hidden from rest and
+ * some are not.
+ */
+function openRoom() {
+  const anchors: Point3[] = []
+  for (const z of [-160, -200]) {
+    for (const y of [-12, 4, 20]) {
+      for (let x = -70; x <= 70; x += 7) anchors.push({ x, y, z })
+    }
+  }
+  const scan: RoomScan = {
+    source: 'fixture',
+    occluders: [
+      { z: -26, x0: -52, x1: -20, y0: -34, y1: 34, label: 'left' },
+      { z: -26, x0: 8, x1: 40, y0: -34, y1: 34, label: 'right' },
+      { z: -40, x0: -14, x1: 4, y0: -34, y1: 34, label: 'middle' },
+    ],
+    anchors,
+    noSpawn: [],
+    provenance: { model: 'test', atISO: '2026-08-29T00:00:00.000Z', costCents: 0 },
+  }
+  const env = playEnvelope(seated())
+  const { assessments, lattice } = assessEnemies(scan, env, { allowInTheOpen: true })
+  const fair = assessments.filter((a) => a.fair)
+  const candidates: LineupCandidate[] = fair.map((a) => ({
+    at: a.enemy.at,
+    radius: a.enemy.radius,
+    cost: a.verb === 'duck' ? 16 * a.retreatCm + 40 : 14 * a.leanCm + 180 / Math.max(a.windowCm, 0.5),
+    retreatBudgetCm: a.retreatBudgetCm,
+    verb: a.verb,
+  }))
+  const byCost = candidates.map((_, i) => i).sort((x, y) => candidates[x]!.cost - candidates[y]!.cost)
+  return { env, lattice, occluders: scan.occluders, candidates, byCost }
+}
+
 describe('a lineup with enemies in the open is still escapable', () => {
   const WAVE = 8
 
@@ -218,8 +262,9 @@ describe('a lineup with enemies in the open is still escapable', () => {
      * firing range and not a game. A refuge is held against the same jitter a peek
      * window is held against, so it gets the same criterion.
      */
-    for (const level of LEVELS) {
-      const { lattice, env, occluders, candidates } = prepared(level)
+    {
+      const { lattice, env, occluders, candidates } = openRoom()
+      expect(candidates.some((c) => c.verb === 'duck')).toBe(true)
       const order = chooseLineup(lattice, env, occluders, candidates)
       const union = threatUnion(lattice, occluders, candidates, order, WAVE)
       const safe = new Uint8Array(union.length)
@@ -236,8 +281,8 @@ describe('a lineup with enemies in the open is still escapable', () => {
   })
 
   it('and the refuge is reachable inside the tightest fuse in the lineup', () => {
-    for (const level of LEVELS) {
-      const { lattice, env, occluders, candidates } = prepared(level)
+    {
+      const { lattice, env, occluders, candidates } = openRoom()
       const order = chooseLineup(lattice, env, occluders, candidates)
       const standing = order.slice(0, WAVE)
       const budget = Math.min(
@@ -257,8 +302,8 @@ describe('a lineup with enemies in the open is still escapable', () => {
     // exactly that, so uncapped they take every slot. Checked on every prefix, not
     // only the first eight, because the cap was per covering block once and the
     // prefixes span several of those.
-    for (const level of LEVELS) {
-      const { lattice, env, occluders, candidates } = prepared(level)
+    {
+      const { lattice, env, occluders, candidates } = openRoom()
       const order = chooseLineup(lattice, env, occluders, candidates, { inTheOpenShare: 0.25 })
       let ducks = 0
       for (let n = 0; n < Math.min(order.length, 24); n++) {
@@ -269,7 +314,7 @@ describe('a lineup with enemies in the open is still escapable', () => {
   })
 
   it('and none of them at all when the share is zero', () => {
-    const { lattice, env, occluders, candidates } = prepared(LEVELS[0]!)
+    const { lattice, env, occluders, candidates } = openRoom()
     expect(candidates.some((c) => c.verb === 'duck')).toBe(true)
     const order = chooseLineup(lattice, env, occluders, candidates, { inTheOpenShare: 0 })
     for (let n = 0; n < 8; n++) expect(candidates[order[n]!]!.verb).toBe('peek')
@@ -277,32 +322,58 @@ describe('a lineup with enemies in the open is still escapable', () => {
 })
 
 describe('the guard earns its keep', () => {
-  it('the ordering it refuses really does leave nowhere safe', () => {
+  it('two individually fair enemies can leave nowhere safe between them', () => {
     /**
-     * Stated as a test because it is the whole argument for the guard rather than a
-     * detail of it. Ordering the same candidates by difficulty — which is what the
-     * game did before any of this — stands a set of enemies-in-the-open that between
-     * them threaten the entire envelope. `chooseLineup` refuses that lineup and
-     * pays for it in raw coverage, which is the correct trade and not a regression.
+     * The whole argument for I11 in the smallest room that can carry it: **a set of
+     * individually fair enemies is not a fair lineup.**
+     *
+     * No cover at all, and two enemies far off to either side. Each one is fair on
+     * its own — the far edge of the envelope puts it off the edge of the glass, and
+     * off the glass is cover by the same rule the game plays by, reachable inside
+     * its own fuse. Stand both and those two refuges are on opposite sides, so their
+     * union is the whole envelope and there is nowhere left to be. The per-enemy
+     * theorem says nothing about this: it says each enemy's own cover is reachable
+     * in its own fuse, and never that the covers intersect.
+     *
+     * Three earlier versions of this test passed for the wrong reason — one via a
+     * cost ordering that happened to select the right enemies, one asserting it of
+     * eight where eight was not enough, one on a fixture where the property simply
+     * did not hold. Which is its own lesson: a test of a guard has to be written
+     * against a case where the guard is *needed*, and finding that case is the work.
      */
-    let foundOne = false
-    for (const level of LEVELS) {
-      const { lattice, env, occluders, candidates, byCost } = prepared(level)
-      const holdable = (order: readonly number[]) => {
-        const union = threatUnion(lattice, occluders, candidates, order, 8)
-        const safe = new Uint8Array(union.length)
-        let cells = 0
-        for (let i = 0; i < union.length; i++) {
-          if (lattice.inside[i] && !union[i]) {
-            safe[i] = 1
-            cells++
-          }
-        }
-        return cells > 0 && inradiusCm(lattice, safe) > 2 * env.jitter
-      }
-      expect(holdable(chooseLineup(lattice, env, occluders, candidates))).toBe(true)
-      if (!holdable(byCost)) foundOne = true
+    const env = playEnvelope(seated())
+    const scan: RoomScan = {
+      source: 'fixture',
+      occluders: [],
+      anchors: [{ x: -40, y: 0, z: -200 }, { x: 40, y: 0, z: -200 }],
+      noSpawn: [],
+      provenance: { model: 'test', atISO: '2026-08-29T00:00:00.000Z', costCents: 0 },
     }
-    expect(foundOne).toBe(true)
+    const { assessments, lattice } = assessEnemies(scan, env, { allowInTheOpen: true })
+    expect(assessments.map((a) => a.fair)).toEqual([true, true])
+    expect(assessments.map((a) => a.verb)).toEqual(['duck', 'duck'])
+
+    const candidates: LineupCandidate[] = assessments.map((a) => ({
+      at: a.enemy.at,
+      radius: a.enemy.radius,
+      cost: a.retreatCm,
+      retreatBudgetCm: a.retreatBudgetCm,
+      verb: a.verb,
+    }))
+    const safeCellsOf = (order: readonly number[]) => {
+      const union = threatUnion(lattice, scan.occluders, candidates, order, order.length)
+      let cells = 0
+      for (let i = 0; i < union.length; i++) if (lattice.inside[i] && !union[i]) cells++
+      return cells
+    }
+    // Each alone leaves somewhere to be.
+    expect(safeCellsOf([0])).toBeGreaterThan(0)
+    expect(safeCellsOf([1])).toBeGreaterThan(0)
+    // Together they do not.
+    expect(safeCellsOf([0, 1])).toBe(0)
+    // So the guard stands one of them and refuses the other.
+    const order = chooseLineup(lattice, env, scan.occluders, candidates, { inTheOpenShare: 1 })
+    expect(safeCellsOf(order.slice(0, 1))).toBeGreaterThan(0)
+    expect(order).toHaveLength(2)
   })
 })

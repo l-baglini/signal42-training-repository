@@ -482,6 +482,96 @@ That one also reproduced the respawn bug one tick later — a vacated position g
 back to the front of the coverage order, so the body that just left it was handed
 straight back. Third time this exact shape has appeared.
 
+## Both verbs tried, one kept, and then the levels rebuilt
+
+The playtester played the two-verb version and came back with *"forse hai ragione
+ed era meglio prima, dove i nemici li vedevi solo affacciandosi... allora però ti
+direi di rivedere i livelli per far sì che il gioco abbia senso"*. Which is the
+right call and the right diagnosis in the same sentence: a second verb dilutes
+the first, and the reason the first one felt thin was never the verb. It was the
+levels.
+
+So `inTheOpenShare` ships at 0. The machinery stays in the engine, tested, with
+its guarantee (I11) intact, because it was a real iteration and because I11 is a
+*stronger* statement than what it replaced — it just has nothing to do at 0. That
+is a deliberate exception to this log's own rule about code nothing calls; the
+difference is that this is an engine capability with a switch and a test, not
+behaviour living in a call site.
+
+And then the levels, which is where the actual finding is. Two things, both
+measured against threat coverage in centimetres of lean:
+
+**Cover belongs near the window, and by a lot more than I expected.** SPEC §6.3
+already says why — leverage over a sightline is `(1 - s)`, so cover close to the
+eye is the only cover a lean can beat — but I had never turned that into a number.
+Moving Doorway's jambs from z = -46 to z = -22 took the fraction of positions
+with a threat visible at six centimetres of lean from **18% to 54%**, and the
+fair-position count from 38 to 108. The same layout, twenty-four centimetres
+nearer.
+
+**Edges matter more than area.** Two big slabs give two edges. Seven narrow
+uprights crossed by three horizontal shelves give thirty, and it went to 67% at
+six centimetres and 93% at nine — and it is the only layout that ever produced
+vertical peeking, 58 of its 200 positions against 0 for the two-slab version. The
+"sempre da sinistra a destra" complaint from weeks ago turns out to have been a
+level-geometry complaint too.
+
+Where the levels came out, seated, eight standing:
+
+| level    | 3 cm | 6 cm | 9 cm | 12 cm | axes      |
+|----------|------|------|------|-------|-----------|
+| Doorway  |   0% |  54% |  81% |   98% | x95/y13   |
+| Shelves  |   0% |  67% |  93% |   98% | x142/y58  |
+| Parapet  |   0% |  61% |  86% |  100% | x149/y51  |
+| The desk |   0% |  58% |  81% |  100% | x135/y29  |
+
+The 3 cm column is zero on purpose and must stay: that is the cover.
+
+## Two mistakes inside the authoring tool, both familiar shapes
+
+`npm run author` now writes the levels: layouts by hand, anchors by sweep. Both
+bugs in it were repeats.
+
+**I thinned the swept anchors by taking every nth.** 700 candidates, 256 allowed,
+so something has to choose — and a regular stride through a grid lands on a
+regular sublattice. It cost twenty-five points of coverage. This is the *fourth*
+time aliasing has bitten in this project, after three attempts at
+`proposeAnchors`. The fix is the same one that worked there and it is not
+"choose more carefully": it is to let the objective choose. Running the coverage
+order and keeping its prefix has no stride in it.
+
+**And I filtered to anchors fair for *both* reference bodies**, with the comment
+"so a level is not tuned to one neck". It deleted the easy enemies. "Requires a
+lean" is `leanCm >= leanFraction * reach`, reach scales with the body, so a larger
+body's threshold rejects precisely the *shortest-lean* candidates — the ones that
+make a modest peek find anything. An intersection over bodies keeps the hard
+positions and throws away the easy ones, which is exactly backwards. The union is
+also the honest structure: what a level stores is a set of **candidates**, and
+`assessEnemies` re-judges every one against the body actually playing. A wider
+proposal cannot make a level unfair; it can only give the judge more to work with.
+
+## A test that passed for the wrong reason, three times running
+
+I11's guard — no lineup may leave the body without a holdable refuge — needed a
+test showing the guard is *needed*, not just that it is satisfied. Three versions
+passed without showing anything:
+
+1. Compared against a cost-sorted ordering, which in that room happened to select
+   the enemies that break it. Would have gone quiet the moment scoring changed.
+2. Asserted it of eight enemies, where eight was not enough in that room. A claim
+   about a number rather than about the property.
+3. Ran on a fixture where the property genuinely did not hold: all twenty-seven
+   in-the-open candidates together still left a 1.8 cm refuge.
+
+The version that works is two enemies in an empty room, far out to either side.
+Each is fair alone — the far edge of the envelope puts it off the glass, and off
+the glass is cover by the same rule the game plays by — and their two refuges are
+on opposite sides, so together there is nowhere to be. Finding that case was the
+work; asserting it was one line. Which is the general lesson: **a guard's test has
+to be written against a case where the guard bites**, and if that case is hard to
+construct, that is information about the guard and not an excuse to assert the
+easy half.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

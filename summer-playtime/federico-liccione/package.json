@@ -15,7 +15,8 @@
     "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic",
     "setup": "node tools/setup-assets.mjs",
     "levels": "vitest run --config vitest.tools.config.ts tools/levels.test.ts --reporter=basic",
-    "designed": "vitest run --config vitest.tools.config.ts tools/designed.test.ts --reporter=basic"
+    "designed": "vitest run --config vitest.tools.config.ts tools/designed.test.ts --reporter=basic",
+    "author": "vitest run --config vitest.tools.config.ts tools/author.test.ts --reporter=basic"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",

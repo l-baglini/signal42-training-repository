@@ -17,25 +17,14 @@ import {
 import type { Point3 } from '../src/engine'
 import { pointsFor } from '../src/game/combat'
 import { LEVELS } from '../fixtures/levels/authored'
-import { validateScan } from '../src/boundary/validate'
-import deskJson from '../fixtures/desk.room.json'
-import type { RoomScan } from '../src/engine'
 
 /**
- * The Desk is in here because a playtester found it presenting its targets in one
- * specific spot, and it was not in this tool's list — so nothing was watching the
- * oldest fixture in the project. It was written by hand before any of these
- * instruments existed.
+ * Every playable level, which now includes The Desk — a playtester found it
+ * presenting its targets in one specific spot and it was not in this tool's list,
+ * so nothing was watching it. That is the failure worth remembering: an instrument
+ * only measures what somebody remembered to point it at.
  */
-const ROOMS = [
-  ...LEVELS,
-  {
-    id: 'desk',
-    name: 'The desk',
-    blurb: 'The first room, written by hand before any of the tools existed.',
-    scan: validateScan(deskJson as unknown as RoomScan).scan,
-  },
-]
+const ROOMS = LEVELS
 import { frozen, noisy, roomy, seated } from '../fixtures/envelopes'
 
 /**
@@ -45,8 +34,8 @@ import { frozen, noisy, roomy, seated } from '../fixtures/envelopes'
  */
 const PLAY = Number(process.env.PLAY ?? 0.68)
 const COMFORT = Number(process.env.COMFORT ?? 14)
-const OPEN = (process.env.OPEN ?? '1') !== '0'
-const MAXOPEN = Number(process.env.MAXOPEN ?? 0.25)
+const OPEN = (process.env.OPEN ?? '0') !== '0'
+const MAXOPEN = Number(process.env.MAXOPEN ?? 0)
 
 const bodies = [
   ['seated', seated()],

@@ -192,6 +192,16 @@ export interface LineupOptions {
   readonly inTheOpenShare?: number
   /** Multiple of tracker jitter a refuge must be wider than. Matches the solver's. */
   readonly jitterK?: number
+  /**
+   * How many positions to order greedily before appending the rest by cost.
+   *
+   * The greedy loop is O(candidates x cells) per pick and runs once per pick, so
+   * ordering everything is quadratic in the candidate count. That was invisible
+   * while a level offered forty fair positions and became a visible stall at two
+   * hundred, which is where the reworked levels landed. The game only ever stands
+   * the front of the list, so ordering past what it will use buys nothing.
+   */
+  readonly limit?: number
 }
 
 /** A hash, not a generator: same index and seed, same number, no state. */
@@ -248,6 +258,7 @@ export function chooseLineup(
   const seed = opts.seed ?? 1
   const inTheOpenShare = Math.max(0, Math.min(1, opts.inTheOpenShare ?? 0.25))
   const jitterK = opts.jitterK ?? 2
+  const limit = Math.max(0, opts.limit ?? Number.POSITIVE_INFINITY)
   const masks = masksFor(lat, occluders, candidates, view)
   const weight = occupancyWeights(lat, env)
   // A few per cent of jitter on the preference, so two rounds of the same level
@@ -262,7 +273,7 @@ export function chooseLineup(
   // Counted across the whole order, not per covering block. See `inTheOpenShare`.
   let inTheOpen = 0
 
-  for (;;) {
+  while (order.length < limit) {
     union.fill(0)
     let added = 0
     let budget = Infinity
@@ -286,7 +297,7 @@ export function chooseLineup(
           bestGain = gain
         }
       }
-      if (best < 0) break
+      if (best < 0 || order.length >= limit) break
 
       /**
        * Verified **after** choosing rather than filtered before it: the check costs

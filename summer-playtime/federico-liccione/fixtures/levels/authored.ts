@@ -14,7 +14,11 @@
  * cover may sit: the player's control over a sightline is `(1 - s)`, so cover
  * belongs near the window and targets well behind it.
  */
-import type { Billboard, Point3, RoomScan } from '../../src/engine'
+import type { RoomScan } from '../../src/engine'
+import doorwayRoom from './doorway.room.json'
+import shelvesRoom from './shelves.room.json'
+import parapetRoom from './parapet.room.json'
+import deskRoom from './desk.room.json'
 
 export interface AuthoredLevel {
   readonly id: string
@@ -24,103 +28,72 @@ export interface AuthoredLevel {
   readonly scan: RoomScan
 }
 
-const bill = (
-  z: number, x0: number, x1: number, y0: number, y1: number, label: string,
-): Billboard => ({ z, x0, x1, y0, y1, label })
-
-/** A grid of candidate positions. The engine keeps what it can prove is fair. */
-function candidates(
-  depths: readonly number[],
-  xs: { from: number; to: number; step: number },
-  ys: readonly number[],
-): Point3[] {
-  const out: Point3[] = []
-  for (const z of depths) {
-    for (const y of ys) {
-      for (let x = xs.from; x <= xs.to; x += xs.step) out.push({ x, y, z })
-    }
-  }
-  return out
-}
-
-const provenance = (name: string) => ({
-  model: `authored:${name}`,
-  atISO: '2026-08-29T00:00:00.000Z',
-  costCents: 0,
-})
+/**
+ * The geometry lives in JSON next to this file and is **generated**, by
+ * `npm run author`. What the room looks like is still hand-designed — the layouts
+ * are written out in `tools/author.test.ts` — but where an enemy may stand is
+ * swept and measured, because the one level whose anchors were placed by hand
+ * turned out to have four usable positions out of twenty-one and a playtester
+ * found it before any test did.
+ *
+ * What stays here is what only a person can write: the name and the sentence. The
+ * sentence is not decoration either — `moodFor` reads it for the palette and the
+ * weather, so "a rainy night" is both the blurb and the lighting.
+ */
+const level = (
+  id: string, name: string, blurb: string, scan: unknown,
+): AuthoredLevel => ({ id, name, blurb, scan: scan as RoomScan })
 
 /**
- * Two slabs with a gap between them. The purest statement of the mechanic: the
- * only way to see down the corridor is to put your head in the doorway.
+ * Two slabs with a gap between them, close to the window. The purest statement of
+ * the mechanic and deliberately the simplest level: one axis, one idea.
  */
-const doorway: AuthoredLevel = {
-  id: 'doorway',
-  name: 'Doorway',
-  blurb:
-    'Two walls and a gap on a clear afternoon. The only way to look down the ' +
+const doorway = level(
+  'doorway',
+  'Doorway',
+  'Two walls and a gap on a clear afternoon. The only way to look down the ' +
     'corridor is to stand in it.',
-  scan: {
-    source: 'fixture',
-    occluders: [
-      bill(-46, -96, -13, -40, 44, 'left jamb'),
-      bill(-46, 13, 96, -40, 44, 'right jamb'),
-      bill(-92, -30, 30, 16, 50, 'lintel'),
-    ],
-    anchors: candidates([-155, -205, -255], { from: -78, to: 78, step: 9 }, [-16, -2, 12, 26]),
-    noSpawn: [],
-    provenance: provenance('doorway'),
-  },
-}
+  doorwayRoom,
+)
 
 /**
- * Vertical slabs at staggered depths. Lots of narrow lateral windows, and the
- * near ones give the most leverage, so the shallow enemies are the easy ones.
+ * A lattice: seven narrow uprights crossed by three shelves. The best threat
+ * profile in the set, and the only layout that makes the neck work in both
+ * directions — edges turned out to matter far more than area.
  */
-const shelves: AuthoredLevel = {
-  id: 'shelves',
-  name: 'Shelves',
-  blurb:
-    'A neon arcade: uprights at four depths, and every one of them hides a ' +
-    'different sliver of the room.',
-  scan: {
-    source: 'fixture',
-    occluders: [
-      bill(-38, -58, -40, -34, 40, 'upright A'),
-      bill(-52, -8, 12, -34, 46, 'upright B'),
-      bill(-66, 40, 62, -34, 40, 'upright C'),
-      bill(-80, -100, -74, -30, 36, 'upright D'),
-      bill(-58, -74, 74, -44, -30, 'low shelf'),
-    ],
-    anchors: candidates([-145, -190, -240], { from: -90, to: 90, step: 9 }, [-14, 0, 14, 28]),
-    noSpawn: [],
-    provenance: provenance('shelves'),
-  },
-}
+const shelves = level(
+  'shelves',
+  'Shelves',
+  'A neon arcade: uprights at four depths crossed by three shelves, and every ' +
+    'one of them hides a different sliver of the room.',
+  shelvesRoom,
+)
 
 /**
- * A wide low wall with two pillars. The low wall is here to force vertical
- * peeking, which the axis measurement showed the room fixture had none of — and
- * a neck has roughly half the vertical range it has lateral, so these windows are
+ * Vertical first: a low wall to rise above, pillars to lean past, a rail overhead.
+ * A neck has roughly half the vertical range it has lateral, so these windows are
  * narrower by nature and worth more.
  */
-const parapet: AuthoredLevel = {
-  id: 'parapet',
-  name: 'Parapet',
-  blurb:
-    'A rainy night on a low wall you have to rise above, and two pillars you have ' +
-    'to lean past. The weather and the palette both come from those words — see ' +
+const parapet = level(
+  'parapet',
+  'Parapet',
+  'A rainy night on a low wall you have to rise above, and pillars you have to ' +
+    'lean past. The weather and the palette both come from those words — see ' +
     '`moodFor` in src/render/mood.ts.',
-  scan: {
-    source: 'fixture',
-    occluders: [
-      bill(-44, -110, 110, -46, 6, 'parapet'),
-      bill(-58, -46, -28, 4, 48, 'pillar left'),
-      bill(-58, 28, 46, 4, 48, 'pillar right'),
-    ],
-    anchors: candidates([-150, -200, -250], { from: -84, to: 84, step: 9 }, [-26, -10, 4, 18, 32]),
-    noSpawn: [],
-    provenance: provenance('parapet'),
-  },
-}
+  parapetRoom,
+)
 
-export const LEVELS: readonly AuthoredLevel[] = [doorway, shelves, parapet]
+/**
+ * A room of furniture rather than a designed layout, which is what the scan
+ * pipeline produces. It is in the set to keep that case honest, and it is the level
+ * a playtester caught presenting its targets in one specific spot.
+ */
+const desk = level(
+  'desk',
+  'The desk',
+  'A desk at dusk: a monitor, a chair back, a lamp and a shelf, which is what a ' +
+    'real room offers instead of a level.',
+  deskRoom,
+)
+
+export const LEVELS: readonly AuthoredLevel[] = [doorway, shelves, parapet, desk]
