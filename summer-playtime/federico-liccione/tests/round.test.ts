@@ -66,9 +66,21 @@ describe('targets', () => {
       tick(0.1, [true, false]),
     ])
     expect(state.revealed).toBe(1)
-    expect(state.score).toBe(pointsFor(SPECS[0]!))
     expect(state.active).toHaveLength(0)
     expect(events.some((e) => e.kind === 'revealed')).toBe(true)
+    // Base value, plus a promptness bonus of up to half again.
+    expect(state.score).toBeGreaterThanOrEqual(pointsFor(SPECS[0]!))
+    expect(state.score).toBeLessThanOrEqual(Math.round(pointsFor(SPECS[0]!) * 1.5))
+  })
+
+  it('finding it sooner is worth more than finding it late', () => {
+    const quick = run([tick(0, [false, false]), tick(0.2, [true, false])])
+    const slow = run([
+      tick(0, [false, false]),
+      tick(cfg.targetLifeS - 0.3, [false, false]),
+      tick(cfg.targetLifeS - 0.2, [true, false]),
+    ])
+    expect(quick.state.score).toBeGreaterThan(slow.state.score)
   })
 
   it('a target not found in time is missed, and scores nothing', () => {
@@ -113,6 +125,17 @@ describe('threats go through the engine gate, never around it', () => {
     for (let t = 0; t <= 20; t += 0.5) ticks.push(tick(t, [false, false], { maySpawn: always }))
     const { events } = run(ticks)
     expect(events.some((e) => e.kind === 'threat')).toBe(true)
+  })
+
+  it('depth does not save you — only moving sideways does', () => {
+    // The threat is aimed at the lateral position of the eye, so leaning back
+    // keeps you in its path. This is the model the engine uses too.
+    const ticks = []
+    for (let t = 0; t <= 20; t += 0.2) {
+      const back: Point3 = t > cfg.threatEveryS + 0.3 ? { x: 0, y: 0, z: 45 } : EYE
+      ticks.push({ tS: t, eye: back, visible: [false, false], maySpawn: always })
+    }
+    expect(run(ticks).state.hits).toBeGreaterThan(0)
   })
 
   it('standing still where it lands is a hit, and it costs clock', () => {

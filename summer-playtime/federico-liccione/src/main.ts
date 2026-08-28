@@ -66,12 +66,18 @@ let everRevealed: boolean[] = []
 let mode: 'window' | 'dolly' = 'window'
 let widthCm = 34
 let lattice: Lattice = latticeOf(envelope)
+/**
+ * A new seed every round, so one room scan yields a different level each time.
+ * The engine was built for this (I5: different seeds pick different targets);
+ * the first fixture just did not propose enough candidates for it to show.
+ */
+let roundSeed = 1
 let specs: TargetSpec[] = []
 let round: RoundState = newRound(DEFAULT_CONFIG)
 
 function regenerate(): void {
   lattice = latticeOf(envelope)
-  level = generate(room, envelope)
+  level = generate(room, envelope, { seed: roundSeed, maxTargets: 14 })
   targets = level.kind === 'level' ? level.targets : []
   // The score needs the engine's difficulty pair, so it is carried across
   // rather than recomputed — there is one place that decides what is hard.
@@ -104,6 +110,12 @@ function renderScene(): void {
       threat:
         playing && round.threat
           ? { at: threatPosition(round.threat, round.tS), radius: round.threat.radius }
+          : undefined,
+      // The tell. Drawn from the moment it spawns, so the direction to move is
+      // readable before the thing itself is large enough to read.
+      threatMarker:
+        playing && round.threat
+          ? { at: round.threat.to, radius: round.threat.radius }
           : undefined,
     }),
   )
@@ -294,7 +306,10 @@ addEventListener('keydown', (e) => {
     void runCalibration()
   } else if (e.key === ' ') {
     e.preventDefault()
-    if (level.kind === 'level' && round.phase !== 'playing') {
+    if (round.phase !== 'playing') {
+      roundSeed++
+      regenerate()
+      if (level.kind !== 'level') return
       round = startRound(round, DEFAULT_CONFIG)
       roundStartedAt = performance.now() / 1000
       renderRound()

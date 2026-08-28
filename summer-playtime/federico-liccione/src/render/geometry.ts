@@ -97,12 +97,36 @@ export function backdropMesh(
   return merge(parts)
 }
 
+/**
+ * A hollow rectangle: four thin quads. Used for the landing marker, which has to
+ * be readable without hiding what is behind it — the player needs to know where
+ * NOT to be, while still seeing the room they are leaning through.
+ */
+export function frameMesh(
+  z: number,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  thickness: number,
+  colour: Rgb,
+): Mesh {
+  const t = thickness
+  return merge([
+    quad(z, x0, x1, y0, y0 + t, colour),
+    quad(z, x0, x1, y1 - t, y1, colour),
+    quad(z, x0, x0 + t, y0 + t, y1 - t, colour),
+    quad(z, x1 - t, x1, y0 + t, y1 - t, colour),
+  ])
+}
+
 export const PALETTE = {
   occluder: [0.16, 0.18, 0.24] as Rgb,
   target: [0.32, 0.88, 0.68] as Rgb,
   targetIdle: [0.14, 0.28, 0.26] as Rgb,
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
+  threatMarker: [1.0, 0.45, 0.28] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
 } as const
@@ -119,6 +143,8 @@ export interface SceneInput {
    */
   readonly active?: readonly number[] | undefined
   readonly threat?: { readonly at: Point3; readonly radius: number } | undefined
+  /** Where the threat will cross the window. The tell — drawn from spawn. */
+  readonly threatMarker?: { readonly at: Point3; readonly radius: number } | undefined
   readonly backdropZ?: number
 }
 
@@ -144,6 +170,13 @@ export function buildScene(input: SceneInput): Mesh {
       targetMesh(t, on ? PALETTE.targetRevealed : inPlay ? PALETTE.target : PALETTE.targetIdle),
     )
   })
+  if (input.threatMarker) {
+    const { at, radius } = input.threatMarker
+    parts.push(
+      frameMesh(at.z, at.x - radius, at.x + radius, at.y - radius, at.y + radius, 1.6,
+        PALETTE.threatMarker),
+    )
+  }
   if (input.threat) {
     const { at, radius } = input.threat
     parts.push(quad(at.z, at.x - radius, at.x + radius, at.y - radius, at.y + radius, PALETTE.threat))

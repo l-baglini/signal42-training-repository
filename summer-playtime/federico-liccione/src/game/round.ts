@@ -30,8 +30,8 @@ export const DEFAULT_CONFIG: RoundConfig = {
   durationS: 90,
   targetLifeS: 7,
   threatEveryS: 11,
-  threatFlightS: 1.6,
-  threatRadiusCm: 13,
+  threatFlightS: 1.8,
+  threatRadiusCm: 8,
   hitPenaltyS: 5,
   seed: 1,
 }
@@ -148,7 +148,11 @@ export function step(
   const active: ActiveTarget[] = []
   for (const a of state.active) {
     if (tick.visible[a.index]) {
-      const points = pointsFor(specs[a.index]!)
+      // Promptness bonus: finding it in the first second is worth half again as
+      // much as finding it on the last. It rewards committing to a lean instead
+      // of sweeping the room.
+      const remaining = Math.max(0, a.deadlineS - tS) / cfg.targetLifeS
+      const points = Math.round(pointsFor(specs[a.index]!) * (1 + 0.5 * remaining))
       score += points
       revealed++
       events.push({ kind: 'revealed', index: a.index, points })
@@ -178,10 +182,9 @@ export function step(
 
   // --- threats
   if (threat && tS >= threat.tImpact) {
-    const dx = tick.eye.x - threat.to.x
-    const dy = tick.eye.y - threat.to.y
-    const dz = tick.eye.z - threat.to.z
-    if (Math.hypot(dx, dy, dz) <= threat.radius) {
+    // Lateral only, matching the engine: depth does not save you, and the dodge
+    // is therefore a sideways lean rather than a guess.
+    if (Math.hypot(tick.eye.x - threat.to.x, tick.eye.y - threat.to.y) <= threat.radius) {
       hits++
       endsAtS -= cfg.hitPenaltyS
       events.push({ kind: 'hit', penaltyS: cfg.hitPenaltyS })
@@ -198,7 +201,10 @@ export function step(
     const candidate: Threat = {
       // Aimed at where you are now, from somewhere across the room.
       from: { x: (r() - 0.5) * 160, y: (r() - 0.5) * 80, z: -300 },
-      to: { ...tick.eye },
+      // Aimed at where you are now, and it stops at the glass. Travelling all
+      // the way to the eye is what made it fill the screen and become
+      // unreadable — at the window plane its size is bounded by the screen.
+      to: { x: tick.eye.x, y: tick.eye.y, z: 0 },
       tSpawn: tS,
       tImpact: tS + cfg.threatFlightS,
       radius: cfg.threatRadiusCm,

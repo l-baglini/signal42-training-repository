@@ -74,8 +74,14 @@ export interface Target {
 
 /**
  * Something arriving at the player. It travels from `from` to `to` between
- * `tSpawn` and `tImpact`; `to` is where it lands, and an eye within `radius` of
- * that point at impact has been hit. SPEC §6.5.
+ * `tSpawn` and `tImpact`.
+ *
+ * `to` is where it crosses the window plane, and **only the lateral offset
+ * counts**: an eye within `radius` of it in x and y at impact has been hit,
+ * whatever its depth. That is both the honest model — something flying at your
+ * face reaches your plane regardless of how far back you sit, so what matters is
+ * whether your head is in its path — and the legible one, because it makes the
+ * dodge a sideways lean rather than a guess. SPEC §6.5.
  */
 export interface Threat {
   readonly from: Point3

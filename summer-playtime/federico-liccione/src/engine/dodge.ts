@@ -3,6 +3,12 @@ import { cellCentre, cellIndex, type Lattice } from './lattice'
 import { dist } from './vec'
 
 /**
+ * Distance in the window plane. Safety is lateral (see `Threat`); travel is not,
+ * because moving your head back still costs you the same neck.
+ */
+const lateral = (a: Point3, b: Point3): number => Math.hypot(a.x - b.x, a.y - b.y)
+
+/**
  * Human visual reaction time. A stated constant rather than a tuned one — this
  * is a fact about people, not a difficulty knob, and calling it a knob would
  * invite somebody to turn it.
@@ -34,7 +40,7 @@ export function dodgeVerdict(
       for (let i = 0; i < lat.nx; i++) {
         if (!lat.inside[cellIndex(lat, i, j, k)]) continue
         const c = cellCentre(lat, i, j, k)
-        if (dist(c, threat.to) <= threat.radius) continue // inside the impact
+        if (lateral(c, threat.to) <= threat.radius) continue // in its path
         safeCells++
         const d = dist(c, from)
         if (d < needCm) needCm = d

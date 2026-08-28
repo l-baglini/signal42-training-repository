@@ -15,6 +15,7 @@
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import type { Point3 } from '../engine'
 import type { Tracker } from './tracker'
+import { oneEuro3 } from './oneEuro'
 
 export interface CameraTrackerOptions {
   /** Where the copied MediaPipe WASM lives. Local, never a CDN — see setup-assets. */
@@ -28,8 +29,10 @@ export interface CameraTrackerOptions {
   readonly canthalCm?: number
   /** How far the webcam sits above the centre of the drawing area. */
   readonly cameraAboveCentreCm?: number
-  readonly smoothing?: number
-  readonly predictS?: number
+  /** One Euro: how hard a held head is filtered. Hz. */
+  readonly minCutoff?: number
+  /** One Euro: how quickly the filter gets out of the way when you move. */
+  readonly beta?: number
   readonly flipX?: boolean
   /** Optional element to attach the video preview to. */
   readonly mount?: HTMLElement | null
@@ -42,8 +45,8 @@ const DEFAULTS = {
   ipdCm: 6.3,
   canthalCm: 9.0,
   cameraAboveCentreCm: 12,
-  smoothing: 0.45,
-  predictS: 0.04,
+  minCutoff: 0.4,
+  beta: 0.04,
   flipX: false,
   mount: null,
 } as const
@@ -66,15 +69,37 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
   /** True while falling back to eye corners — worse metric accuracy, recorded. */
   let degraded = false
 
+  /**
+   * One Euro rather than a fixed average with forward prediction. The first
+   * version used the latter and it was reported as jerky in poor light, which is
+   * exactly what that pair does: too slow to hide jitter, and the prediction
+   * multiplies whatever jitter is left.
+   */
+  const filter = oneEuro3({ minCutoff: o.minCutoff, beta: o.beta })
   let smoothed: Point3 | null = null
-  const velocity = { x: 0, y: 0, z: 0 }
-  let lastT = 0
   let detectMsEma = 0
   let frameSEma = 1 / 60
+  /** True camera frame rate, which is what collapses in low light. */
+  let cameraFps = 0
+  let lastVideoTime = -1
+  let lastCameraFrameT = 0
   let running = false
 
   function measure(): void {
     if (!landmarker || video.readyState < 2) return
+    // Auto-exposure lengthens in poor light and the sensor slows down. Counting
+    // distinct video timestamps measures that directly, so the HUD can say so
+    // instead of leaving the player to wonder why it feels bad.
+    if (video.currentTime !== lastVideoTime) {
+      const now = performance.now() / 1000
+      if (lastCameraFrameT) {
+        const gap = now - lastCameraFrameT
+        if (gap > 0) cameraFps += (1 / gap - cameraFps) * 0.1
+      }
+      lastCameraFrameT = now
+      lastVideoTime = video.currentTime
+    }
+
     const t0 = performance.now()
     let result
     try {
@@ -131,21 +156,8 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
     }
 
     const now = performance.now() / 1000
-    const step = lastT ? Math.min(0.1, now - lastT) : 1 / 60
-    lastT = now
-    frameSEma += (step - frameSEma) * 0.1
-
-    if (!smoothed) {
-      smoothed = raw
-    } else {
-      const next = { ...smoothed }
-      for (const k of ['x', 'y', 'z'] as const) {
-        const previous = next[k]
-        next[k] = previous + (raw[k] - previous) * o.smoothing
-        velocity[k] += ((next[k] - previous) / step - velocity[k]) * 0.3
-      }
-      smoothed = next
-    }
+    frameSEma += (Math.min(0.1, 1 / Math.max(cameraFps, 10)) - frameSEma) * 0.1
+    smoothed = filter.filter(raw, now)
     state = 'tracking'
     detail = degraded ? ' · degraded (no iris)' : ''
   }
@@ -161,16 +173,10 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
     video,
 
     position(): Point3 | null {
-      if (!smoothed) return null
-      // Forward prediction hides some of the latency. When the face is lost the
-      // last good position is held rather than dropped: snapping the viewpoint
-      // to nothing is worse than a stale frame, and status() tells the truth.
-      const p = o.predictS
-      return {
-        x: smoothed.x + velocity.x * p,
-        y: smoothed.y + velocity.y * p,
-        z: smoothed.z + velocity.z * p,
-      }
+      // When the face is lost the last filtered position is held rather than
+      // dropped: snapping the viewpoint to nothing is worse than a stale frame,
+      // and status() tells the truth about it.
+      return smoothed
     },
 
     /**
@@ -184,6 +190,8 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
 
     status(): string {
       const ms = (this.latencyS() * 1000).toFixed(0)
+      const fps = cameraFps > 0 ? ` · ${cameraFps.toFixed(0)} fps` : ''
+      const dark = cameraFps > 0 && cameraFps < 18 ? ' · LOW LIGHT' : ''
       switch (state) {
         case 'idle':
           return 'camera off'
@@ -192,9 +200,9 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
         case 'failed':
           return `camera failed: ${detail}`
         case 'no-face':
-          return `NO FACE · ${ms} ms`
+          return `NO FACE · ${ms} ms${fps}${dark}`
         case 'tracking':
-          return `tracking · ${ms} ms${detail}`
+          return `tracking · ${ms} ms${fps}${dark}${detail}`
       }
     },
 
@@ -208,7 +216,12 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
           numFaces: 1,
         })
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 60, min: 15 },
+            facingMode: 'user',
+          },
         })
         video.srcObject = stream
         if (o.mount) o.mount.append(video)
@@ -232,6 +245,7 @@ export function cameraTracker(opts: CameraTrackerOptions = {}): Tracker & {
       landmarker = null
       state = 'idle'
       smoothed = null
+      filter.reset()
     },
   }
 }
