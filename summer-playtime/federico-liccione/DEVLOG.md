@@ -188,6 +188,40 @@ something said in conversation as though the interface had said it: a field hidd
 by a CSS rule, a keypress that only worked from one of two fields, and a button
 that did not exist.
 
+## A model that thinks whether or not you asked it to
+
+`max_tokens: 2048` returned `stop_reason: "max_tokens"` for a reply whose entire
+JSON payload is a few hundred tokens. My first instinct was right in shape and
+wrong in remedy: I raised the ceiling to 8192 and added a retry, on the reasoning
+that the budget must cover whatever the model spends before the JSON.
+
+Checking the reference instead of stopping there produced the actual mechanism.
+`claude-sonnet-5` runs **adaptive thinking by default** when `thinking` is
+omitted, at effort `high` — "Claude almost always thinks" — and those tokens
+count against `max_tokens` *and are billed*, while the default display setting
+returns them empty. So the symptom is a truncation with apparently nothing in the
+response to account for it, which is exactly what it looked like.
+
+The documented remedy is two levers and the ceiling is the lesser one:
+`max_tokens` is a cap rather than a reservation, so raising it is free when
+unused — but a larger ceiling also gives adaptive thinking more room to spend.
+The cost lever is `output_config.effort`, and the reference prefers lowering it to
+disabling thinking outright. Both calls now run at `effort: "low"` with a 16000
+ceiling, and the retry stops at 20000 because above 21,333 the SDK requires
+streaming.
+
+Two smaller corrections came with it. Thinking blocks arrive *before* the text
+block, so reading the first `type === "text"` block is right — but one must not
+assume a thinking block is present, because adaptive thinking sometimes skips
+entirely. And the cost panel has been under-reporting: thinking tokens are billed
+even when invisible, which `effort: "low"` minimises rather than removes.
+
+Worth recording as a pattern rather than a fact: this is the fourth time in this
+project that checking the documentation instead of reasoning from the symptom
+produced a different and better answer — after the metric-scale plan, the mask
+orientation, and the depth model's normalisation. The plausible diagnosis and the
+correct one keep being adjacent.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

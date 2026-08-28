@@ -560,9 +560,20 @@ or API shape.
 - The image content block goes **before** the text block. `source.data` is raw
   base64 with no `data:` URI prefix and no newlines — the output of
   `canvas.toDataURL()` must be stripped before it is sent.
-- `max_tokens: 2048`. `stop_reason: "max_tokens"` yields truncated,
-  unparseable JSON and `stop_reason: "refusal"` is not schema-valid either;
-  both are checked before any `JSON.parse`.
+- `max_tokens: 16000`, with `output_config.effort: "low"` alongside the format.
+  **This one was learned the hard way.** `claude-sonnet-5` runs *adaptive
+  thinking* by default when `thinking` is omitted, at effort `high`, and those
+  tokens count against `max_tokens` and are billed even though the default
+  display setting returns them empty — so a budget of 2048 was consumed by
+  reasoning before a few hundred tokens of JSON could be written, and the reply
+  came back truncated. The documented remedy is two-part and effort is the half
+  that matters: `max_tokens` is a cap rather than a reservation, so raising it
+  costs nothing unused, but a larger ceiling also gives adaptive thinking more
+  room to spend. Above 21,333 the SDK requires streaming, which bounds the
+  retry. `stop_reason` is checked for both `max_tokens` and `refusal` before any
+  `JSON.parse`, and the structured output is read from the first `text` block
+  because thinking blocks arrive before it — while never assuming one is there,
+  since adaptive thinking sometimes skips.
 - Cost, for the panel in §7.5: a 640×480 JPEG costs ceil(640/28) × ceil(480/28)
   = 414 visual tokens. With ~300 tokens of prompt and schema and ~500 out, a
   scan is about $0.0065 on Sonnet 5 and $0.0032 on Haiku 4.5. Prompt caching

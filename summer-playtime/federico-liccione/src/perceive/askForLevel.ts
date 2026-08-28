@@ -15,6 +15,25 @@ const ENDPOINT = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-5'
 const PRICE = { input: 2, output: 10 } as const
 
+/**
+ * Sized for a model that thinks whether or not you asked it to.
+ *
+ * 2048 came back truncated for a reply whose JSON is a few hundred tokens, and
+ * the cause is documented rather than mysterious: `claude-sonnet-5` runs
+ * **adaptive thinking by default** when `thinking` is omitted, at `effort: high`,
+ * and those tokens count against `max_tokens` — and are billed — even though the
+ * default display setting returns them empty. So the budget has to cover
+ * everything spent before the JSON, not just the JSON.
+ *
+ * The documented remedy is two-part, and the effort setting is the one that
+ * matters: `max_tokens` is a cap rather than a reservation, so raising it costs
+ * nothing unused, but a larger ceiling also gives adaptive thinking more room to
+ * spend. 16000 is the reference's non-streaming default; above 21,333 the SDK
+ * requires streaming, which is why the retry stops at 20000.
+ */
+const MAX_TOKENS = 16000
+const MAX_TOKENS_RETRY = 20000
+
 const SCHEMA = {
   type: 'object',
   properties: {
@@ -93,14 +112,19 @@ export type LevelDesignResult =
       readonly blurb: string; readonly cost: InventoryCost; readonly ms: number }
   | { readonly ok: false; readonly reason: string }
 
-export async function askForLevel(
+interface Payload {
+  stop_reason?: string
+  usage?: { input_tokens?: number; output_tokens?: number }
+  content?: Array<{ type: string; text?: string }>
+}
+
+type Attempt = { ok: true; payload: Payload } | { ok: false; reason: string }
+
+async function attempt(
   apiKey: string,
   description: string,
-): Promise<LevelDesignResult> {
-  if (!apiKey.trim()) return { ok: false, reason: 'no API key given' }
-  if (!description.trim()) return { ok: false, reason: 'describe a level first' }
-
-  const t0 = performance.now()
+  maxTokens: number,
+): Promise<Attempt> {
   let res: Response
   try {
     res = await fetch(ENDPOINT, {
@@ -115,34 +139,62 @@ export async function askForLevel(
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2048,
+        max_tokens: maxTokens,
         system: SYSTEM,
         messages: [{ role: 'user', content: description.trim().slice(0, 600) }],
-        output_config: { format: { type: 'json_schema', schema: SCHEMA } },
+        output_config: {
+          format: { type: 'json_schema', schema: SCHEMA },
+          // Thinking stays on — the reference prefers lowering effort to
+          // disabling it — but at the lowest level, because naming rectangles
+          // and laying out walls are not tasks that reward deliberation.
+          effort: 'low',
+        },
       }),
     })
   } catch (err) {
     return { ok: false, reason: `network: ${err instanceof Error ? err.message : String(err)}` }
   }
-
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     return { ok: false, reason: `HTTP ${res.status}: ${text.slice(0, 200)}` }
   }
-
-  const payload = (await res.json().catch(() => null)) as {
-    stop_reason?: string
-    usage?: { input_tokens?: number; output_tokens?: number }
-    content?: Array<{ type: string; text?: string }>
-  } | null
+  const payload = (await res.json().catch(() => null)) as Payload | null
   if (!payload) return { ok: false, reason: 'the response was not JSON' }
-  if (payload.stop_reason === 'max_tokens') {
-    return { ok: false, reason: 'the reply was cut off by max_tokens' }
-  }
-  if (payload.stop_reason === 'refusal') {
-    return { ok: false, reason: 'the model declined' }
-  }
+  return { ok: true, payload }
+}
 
+export async function askForLevel(
+  apiKey: string,
+  description: string,
+): Promise<LevelDesignResult> {
+  if (!apiKey.trim()) return { ok: false, reason: 'no API key given' }
+  if (!description.trim()) return { ok: false, reason: 'describe a level first' }
+
+  const t0 = performance.now()
+  let got = await attempt(apiKey, description, MAX_TOKENS)
+
+  /**
+   * One retry with a larger ceiling. A truncated structured reply is unparseable
+   * rather than merely short, and the ceiling has to cover whatever the model
+   * spends before the JSON — not just the JSON. Retried once and no further: if
+   * twice this budget is not enough the problem is not the budget.
+   */
+  if (got.ok && got.payload.stop_reason === 'max_tokens') {
+    got = await attempt(apiKey, description, MAX_TOKENS_RETRY)
+  }
+  if (!got.ok) return { ok: false, reason: got.reason }
+
+  const payload = got.payload
+  if (payload.stop_reason === 'max_tokens') {
+    return {
+      ok: false,
+      reason: `the reply was still cut off at ${MAX_TOKENS_RETRY} tokens`,
+    }
+  }
+  if (payload.stop_reason === 'refusal') return { ok: false, reason: 'the model declined' }
+
+  // The first text block: a thinking block, if the model emits one, comes before
+  // it and is not the structured output.
   const text = payload.content?.find((b) => b.type === 'text')?.text
   if (!text) return { ok: false, reason: 'the response carried no text block' }
 
