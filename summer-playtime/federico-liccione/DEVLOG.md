@@ -161,6 +161,33 @@ red, because `npm test 2>&1 | grep -E 'Tests'` succeeds on a *failing* run too �
 grep found its pattern. Both commits were amended, and the habit changed to
 running the checks and reading their exit codes before staging anything.
 
+## An edit that never happened, and a commit that said it had
+
+The level composer took four fixes, and the fourth one exposed why: **the wiring
+was never in the file at all.** Clicking "Build this level" refreshed the page,
+which is a form doing what forms do when nothing has called `preventDefault` —
+and nothing had, because the whole `designLevel` section had never been inserted.
+
+The mechanism was a scripted `str.replace` against a section marker that had been
+renamed in an earlier rewrite. No match, no error, no output: the edit silently
+did nothing. Typecheck and 393 tests stayed green, because the modules it should
+have called were complete, correct and tested — they were simply never called by
+anything. And the commit message asserted the feature was wired.
+
+That last part is the real failure. The code was fine; the *claim* was false, and
+it was false in a permanent artifact. Two habits changed as a result: scripted
+edits now assert that their target matched, and a feature is verified by looking
+for its wiring in the file and in the built bundle rather than by trusting that
+an edit command reported nothing.
+
+It rhymes with the vanished keyboard guard above. Both were edits that appeared
+to succeed, both left the test suite green, and in both cases the thing that was
+missing was a single line of wiring that no test can reach. Three of the four
+composer fixes were also the same mistake in different clothes — treating
+something said in conversation as though the interface had said it: a field hidden
+by a CSS rule, a keypress that only worked from one of two fields, and a button
+that did not exist.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

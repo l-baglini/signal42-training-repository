@@ -367,6 +367,97 @@ function updateAim(mvp: Float32Array): void {
   }
 }
 
+/* ---------------- a level from a sentence ---------------- */
+
+let designing = false
+
+/**
+ * The newest role for the model, and the cleanest statement of the architecture:
+ * the room scan asked a depth model where the surfaces *are*; this asks a language
+ * model where the walls *should go*. Not one line of the boundary or the engine
+ * changes, because both produce the same typed RoomScan and both are treated as
+ * hostile on arrival.
+ */
+async function designLevel(description: string): Promise<void> {
+  if (designing) return
+  const key = el<HTMLInputElement>('apikey').value
+  const panel = el('scan')
+  panel.style.display = 'block'
+  el('scanTitle').textContent = 'Designing a level'
+  el('scanStage').textContent = description
+  el('scanMeta').textContent = ''
+
+  if (!key.trim()) {
+    el('scanTitle').textContent = 'This one needs a key'
+    el('scanStage').textContent =
+      'Paste a Claude API key below the description. It is never stored, and the ' +
+      'three shipped levels need none.'
+    setTimeout(() => { panel.style.display = 'none' }, 5000)
+    return
+  }
+
+  designing = true
+  buildButton.disabled = true
+  buildButton.textContent = 'Asking…'
+  try {
+    const { askForLevel } = await import('./perceive/askForLevel')
+    const result = await askForLevel(key, description)
+    if (!result.ok) {
+      el('scanTitle').textContent = 'It could not build that'
+      el('scanStage').textContent = result.reason
+      return
+    }
+
+    const validated = validateScan(result.report.scan)
+    room = validated.scan
+    roomSource = `${result.name}, designed`
+    roomUv = new Map()
+    occluderLabels = new Map()
+    for (const o of room.occluders) occluderLabels.set(geomKey(o), o.label)
+    renderer.setRoomTexture(null)
+    roundSeed++
+    rebuildLineup()
+    recordCost(result.cost, result.ms, result.report.dropped, result.report.clamped)
+
+    el('roundTitle').textContent = result.name
+    el('roundBody').textContent = result.blurb
+    el('scanTitle').textContent = result.name
+    el('scanStage').textContent = result.blurb
+    // The whole point, in one line: what it proposed, and what survived.
+    el('scanMeta').textContent =
+      `proposed   ${result.report.proposed} walls, kept ${result.report.kept}` +
+      (result.report.clamped ? `, ${result.report.clamped} values clamped` : '') +
+      (result.report.dropped ? `, ${result.report.dropped} dropped` : '') +
+      `\ncandidates ${room.anchors.length} positions offered by the grid` +
+      `\nengine     kept ${enemies.length} as fair enemies for your body`
+  } catch (err) {
+    el('scanTitle').textContent = 'It could not build that'
+    el('scanStage').textContent = err instanceof Error ? err.message : String(err)
+  } finally {
+    designing = false
+    buildButton.disabled = false
+    buildButton.textContent = 'Build this level'
+    setTimeout(() => { panel.style.display = 'none' }, 9000)
+  }
+}
+
+const describeInput = el<HTMLInputElement>('describe')
+const buildButton = el<HTMLButtonElement>('build')
+
+/**
+ * A form rather than a keypress listener. Enter works from *either* field because
+ * that is what a form does, and there is a button because the only way in before
+ * was knowledge I had put in a chat message rather than in the product.
+ */
+el<HTMLFormElement>('compose').addEventListener('submit', (e) => {
+  e.preventDefault()
+  // Blurred on submit, or space would keep typing into the box instead of
+  // starting the round — which is the next thing anybody wants to do.
+  describeInput.blur()
+  el<HTMLInputElement>('apikey').blur()
+  void designLevel(describeInput.value)
+})
+
 /* ---------------- scanning ---------------- */
 
 async function runScan(): Promise<void> {
