@@ -209,14 +209,14 @@ COL_TEXT = (235, 235, 235)
 
 
 def draw_menu(img: np.ndarray, menu, layout) -> None:
-    """Draw the two-column practice menu over the video.
+    """Draw the practice menu over the video, one column per level of the tree.
 
     Everything about *what* is on screen comes from ``menu``; this only paints it. The
     same object drives the native shell, which is why none of the structure lives here.
 
-    The panel is drawn translucent rather than solid: it covers part of the fretboard, and
-    being able to see the neck through it is worth more than a crisp background — you are
-    choosing what to play on the instrument you are looking at.
+    The panel is translucent rather than solid: it covers part of the fretboard whichever
+    side it takes, and being able to read the notes through it is worth more than a crisp
+    background -- you are choosing what to play on the instrument you are looking at.
     """
     bx, by, bw, bh = layout.panel_rect(menu)
     h, w = img.shape[:2]
@@ -226,46 +226,38 @@ def draw_menu(img: np.ndarray, menu, layout) -> None:
         return
 
     panel = img[by:by + bh, bx:bx + bw]
-    # 0.62 rather than something solid. The neck is a long diagonal and the panel is tall,
-    # so on a 16:9 frame it will cover part of the board whichever side it takes -- being
-    # able to read the notes through it is worth more than a crisp background. The text
-    # carries its own halo (see _halo_text), so legibility does not depend on this.
+    # 0.62 rather than something solid. The text carries its own halo (see _halo_text), so
+    # legibility does not depend on this.
     cv2.addWeighted(np.full_like(panel, COL_PANEL, dtype=np.uint8), 0.62, panel, 0.38, 0,
                     dst=panel)
     cv2.rectangle(img, (bx, by), (bx + bw - 1, by + bh - 1), (90, 80, 70), 1, cv2.LINE_AA)
 
     scale = max(0.4, layout.row_h / 30 * 0.52)
-    for column, rows in ((0, menu.left), (1, menu.right)):
-        for index, row in enumerate(rows):
-            x, y, rw, rh = layout.row_rect(column, index)
-            if y + rh > by + bh:
+    columns = menu.columns
+    for c, nodes in enumerate(columns):
+        chosen = menu.index_at(c)
+        focused = menu.column == c
+        for index, node in enumerate(nodes):
+            x, y, rw, rh = layout.row_rect(c, index)
+            if y + rh > by + bh or x + rw > bx + bw:
                 break
-            focused = menu.column == column
-            at = index == (menu.left_index if column == 0 else menu.right_index)
-            if at and row.selection is not None or (column == 0 and at):
-                # Solid where the focus is, dimmer where it is not: with two columns you
-                # must be able to see which one the arrow keys are about to move.
-                colour = COL_ROW_ACTIVE if focused else COL_ROW_CURRENT
-                cv2.rectangle(img, (x, y), (x + rw - 2, y + rh - 2), colour, -1)
+            if index == chosen:
+                # Solid where the focus is, dimmer where it is not: with several columns
+                # you must be able to see which one the arrow keys are about to move.
+                cv2.rectangle(img, (x, y), (x + rw - 2, y + rh - 2),
+                              COL_ROW_ACTIVE if focused else COL_ROW_CURRENT, -1)
+            # A branch says so, so it is clear there is another column to step into.
+            arrow = " >" if node.is_branch and index == chosen else ""
+            on = index == chosen and focused
+            _halo_text(img, node.label + arrow, (x + 10, y + int(rh * 0.7)), scale=scale,
+                       colour=COL_OUTLINE if on else COL_TEXT, halo=0 if on else 1)
 
-            if row.heading:
-                _halo_text(img, row.label.upper(), (x + 8, y + int(rh * 0.7)),
-                           scale=scale * 0.78, colour=COL_HEADING, halo=1)
-            else:
-                on = at and (row.selection is not None or column == 0)
-                # No halo on the highlighted row: it is dark text on solid amber, which
-                # has all the contrast it needs, and an outline in the same dark colour
-                # would just thicken every stroke into its neighbour.
-                _halo_text(img, row.label, (x + 10, y + int(rh * 0.7)), scale=scale,
-                           colour=COL_OUTLINE if (on and focused) else COL_TEXT,
-                           halo=0 if (on and focused) else 1)
-
-    # What the highlighted row actually is: for a mode, its root, the chord it belongs
-    # over and where it is played. Shown once, for the current row, rather than under
-    # every label -- it is what you need while choosing, not a property of the list.
-    current = menu.right[menu.right_index] if menu.right else None
-    if current is not None and current.detail:
+    # What the chosen leaf actually is: for a mode, its root, the chord it belongs over
+    # and where it is played. Shown once, for the current entry, rather than under every
+    # label -- it is what you need while choosing, not a property of the list.
+    detail = menu.detail()
+    if detail:
         fx, fy, _fw, frh = layout.footer_rect(menu)
         if fy + frh <= by + bh:
-            _halo_text(img, current.detail, (fx + 10, fy + int(frh * 0.66)),
+            _halo_text(img, detail, (fx + 10, fy + int(frh * 0.66)),
                        scale=scale * 0.86, colour=COL_ROW_ACTIVE, halo=1)

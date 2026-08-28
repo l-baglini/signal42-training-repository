@@ -56,7 +56,7 @@ to internalise before claiming anything works.
 Provable here, in ~7 s, with no hardware:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 344 tests
+.venv/bin/python -m pytest tests/ -q      # 353 tests
 .venv/bin/python -m ruff check .          # must be clean
 ```
 
@@ -96,7 +96,8 @@ than no test — see the CI note in [.github/workflows/ci.yml](.github/workflows
 
 
 
-| `fretguide/menu.py` | The practice catalogue and cursor state. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. |
+| `fretguide/menu.py` | The practice catalogue as a tree, browsed as columns (Chords/Scales → key → kind of scale → shape), plus the cursor over it. **No drawing and no toolkit** — that is what lets the OpenCV app and the native shell render the same menu. Put structure and navigation here, painting in the renderer. `Menu.selection()` follows the deepest node, not the focused one, so moving through keys keeps showing the same mode. |
+
 | `fretguide/shell/` | The native shell. `layout.py` and `shaders.py` must stay Qt-free so they stay testable without the `[gui]` extra; `video.py` and `app.py` import Qt. |
 | `tools/probe_gl.py` | The GL gate. Anything touching the shader, the textures or the viewport: run this, it exits non-zero. It is not in pytest because that would mean a test that skips itself without a GL context. |
 | `dataset/labels.json` | **Hand-clicked and irreplaceable.** `dataset/frames/` is gitignored and regenerable; the labels are not. Never rewrite this programmatically without being asked. |

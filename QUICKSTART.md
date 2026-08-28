@@ -110,27 +110,39 @@ down and pick it up again — there is no lock to lose. Needs `models/fretnet.xm
 
 ### Choosing what to practise
 
-Press `TAB`. **Chords** and the twelve keys on the left; on the right, everything
-inside that key.
+Press `TAB`. The catalogue is a tree, browsed as columns — choose in one and the
+next shows what is inside:
 
-Arrow keys move, ←/→ switch column, mouse works throughout, `Esc` or `TAB`
-closes, clicking the video dismisses it. **The selection applies as you move** —
-the neck updates while you scroll, nothing to confirm. The panel takes whichever
-side of the frame hides less of the fretboard.
+```
+Chords ─── G, Am, Bm, C, D, Em, F#dim
+Scales ─── C, C#, D … ─── Modals ─────────── I Ionian … VII Locrian
+                          Minor pentatonic ─ 1st … 5th shape
+                          Major pentatonic ─ 1st … 5th shape
+                          Whole neck ─────── Blues, Harmonic minor, …
+```
+
+↑/↓ move within a column, →/← step in and out, the mouse works throughout,
+`Esc` or `TAB` closes, clicking the video dismisses it. A `>` marks an entry
+with another column behind it.
+
+**The selection applies as you move** — the neck updates while you scroll,
+nothing to confirm. It follows the *deepest* entry, not the one you are standing
+on, so stepping through keys keeps showing the same mode in each new key rather
+than resetting. The panel takes whichever side of the frame hides less of the
+fretboard.
 
 ### Modes, and why they are shown by key
 
-Pick a key and you get its seven modes as degrees:
+Pick a key, then Modals, and you get its seven modes as degrees:
 
 ```
-MODES OF G
-  I    Ionian       G  · over G       · pos II
-  II   Dorian       A  · over Am      · pos IV
-  III  Phrygian     B  · over Bm      · pos VII
-  IV   Lydian       C  · over C       · pos VII
-  V    Mixolydian   D  · over D7      · pos IX
-  VI   Aeolian      E  · over Em      · pos XI
-  VII  Locrian      F# · over F#m7♭5  · pos II
+I    Ionian       G  · over G       · pos II
+II   Dorian       A  · over Am      · pos IV
+III  Phrygian     B  · over Bm      · pos VII
+IV   Lydian       C  · over C       · pos VII
+V    Mixolydian   D  · over D7      · pos IX
+VI   Aeolian      E  · over Em      · pos XI
+VII  Locrian      F# · over F#m♭5   · pos II
 ```
 
 This is not a stylistic choice. **Every mode of a key is the same set of notes** —
@@ -140,28 +152,31 @@ that way they are unlearnable, because on those terms nothing distinguishes them
 
 What distinguishes them is the three things on each row: the **root**, the
 **chord it belongs over** (Dorian over Am, not over G — that is what makes it
-sound like Dorian), and the **position** of the four-fret box it is played in. So
-each mode is drawn as a box with finger numbers, not as the whole neck.
+sound like Dorian), and the **position** of the box it is played in. So each mode
+is drawn as a box with finger numbers, not as the whole neck.
 
 ### Pentatonics
 
-The same five shapes, one at a time. Take a modal box, remove the 4th and the
-7th, and what remains is the pentatonic in that position — two notes on every
-string, the same fingering, the same place on the neck.
+Five shapes each, minor and major, one at a time. Take a modal box, remove the
+4th and the 7th, and what remains is the pentatonic in that position — two notes
+on every string, the same fingering, the same place on the neck.
 
 That is not a convenient coincidence. The seven modal boxes occupy only **five
 distinct windows**, and five is exactly how many pentatonic positions there are,
-because they are the same five shapes. Each row says which mode it comes from,
-so the relationship stays in view.
+because they are the same five shapes. Each row says which mode it comes from, so
+the relationship stays in view.
 
-`G maj / E min` on every row is the other half of it: G major pentatonic and E
-minor pentatonic are one scale. The dots are identical; only which note you hear
-as home changes.
+Minor and major pentatonic are the same five shapes with the root moved: G major
+pentatonic and E minor pentatonic are one scale, identical dots, and only which
+note you hear as home changes. Both are listed because which one you are playing
+over changes everything about how it sounds and nothing about where your fingers
+go.
 
-Blues, harmonic minor and the whole-neck pentatonics are still there under
-**Whole neck**, for when you want the map rather than one position.
+**Whole neck** keeps blues, harmonic minor and the unboxed pentatonics, for when
+you want the map rather than one position.
 
-To print the boxes for a music stand, or to check them against your own material:
+To print the modal boxes for a music stand, or to check them against your own
+material:
 
 ```bash
 .venv/bin/python tools/print_boxes.py --key G       # -> diagnostics/boxes.png
@@ -176,12 +191,6 @@ The notes of a box are derivable; the fingering is not, and the sheet shows why.
 Four of the boxes span four frets and use one hand position. Three span five —
 and four fingers cannot cover five frets, so the hand shifts, and which strings
 it shifts on is a playing decision rather than a consequence of the notes.
-Dorico plays fret 5 with the index finger on the outer four strings and fret 4
-with it on the G and D strings.
-
-Two pairs are the same box. Frigio and Lidio share frets 7–10, differing only in
-the low E: Frigio's root B is fret 7, Lidio's root C is fret 8, so Lidio doesn't
-play that first note. Locrio and Ionico are the same pair one degree round.
 
 ### The older enrolment backend
 

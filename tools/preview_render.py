@@ -85,10 +85,10 @@ def main() -> int:
         print(f"unknown selection {sel.id!r}")
         return 2
 
-    menu = Menu()
+    menu = Menu(max_fret=max_fret)
     if args.menu:
         menu.open = True
-        menu.focus(1)
+        menu.focus(len(menu.columns) - 1)
         if not menu.sync_to(sel):
             print(f"note: {sel.id!r} is not in the menu catalogue; showing it from the top")
 

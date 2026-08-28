@@ -189,7 +189,7 @@ def main() -> int:
         cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
         cv2.resizeWindow(win, args.display_width,
                          int(args.display_width * src.height / src.width))
-    menu = Menu()
+    menu = Menu(max_fret=max_fret)
     menu.sync_to(sel)
     layout = Layout.for_frame(src.width, src.height)
     click: list[tuple[int, int]] = []
@@ -279,8 +279,10 @@ def main() -> int:
             if (arrow := ARROWS.get(key)) and menu.open:
                 if arrow in ("up", "down"):
                     menu.move(-1 if arrow == "up" else 1)
+                elif arrow == "right":
+                    menu.descend()
                 else:
-                    menu.focus(0 if arrow == "left" else 1)
+                    menu.ascend()
                 if (chosen := menu.selection()):
                     sel = chosen
                 continue
