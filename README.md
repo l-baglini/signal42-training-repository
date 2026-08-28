@@ -14,10 +14,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/mode-box.jpg" alt="Dorian in the key of G drawn on a fretboard with finger numbers" width="100%">
+  <img src="docs/images/mode-box.jpg" alt="A Dorian, the second mode of G, drawn on a fretboard with finger numbers" width="100%">
 </p>
 
-<p align="center"><sub><i>Dorian in the key of G. Red is the root, blue the scale, the number is the finger.</i></sub></p>
+<p align="center"><sub><i><b>Dorian, the second mode of G — so its root is A and it belongs over Am,</b> at the fourth fret.<br>
+Red is the root, blue the rest of the scale, the number is the finger. <a href="#modes-done-properly">Why it is named that way →</a></i></sub></p>
 
 ---
 
@@ -105,6 +106,11 @@ What distinguishes them is three things, and FretGuide shows all three:
 | **root** | G | A | B | C | D | E | F♯ |
 | **over the chord** | G | Am | Bm | C | D7 | Em | F♯m♭5 |
 | **position** | II | IV | VII | VII | IX | XI | II |
+
+This is also why a mode here is addressed by its **parent key and degree** rather than by its
+own root. "Dorian in the key of G" and "A dorian" name the same seven notes, but only the
+first tells you which six other modes it shares them with — and that shared set is the whole
+point. Every screen shows both: the key you chose, and the root that degree lands on.
 
 All seven box shapes are **transcribed from a teaching sheet**, never computed — four span
 four frets and use one hand position, three span five and the hand shifts between strings,
