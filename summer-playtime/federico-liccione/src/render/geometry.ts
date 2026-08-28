@@ -133,7 +133,8 @@ export const PALETTE = {
   targetRevealed: [1.0, 0.86, 0.35] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
-  hiding: [0.36, 0.72, 0.62] as Rgb,
+  hiding: [0.42, 0.95, 0.78] as Rgb,
+  hidingCold: [0.18, 0.34, 0.32] as Rgb,
   backdropA: [0.05, 0.07, 0.12] as Rgb,
   backdropB: [0.08, 0.11, 0.17] as Rgb,
 } as const
@@ -160,6 +161,13 @@ export interface SceneInput {
    * all — which is exactly how the first playtest read.
    */
   readonly hiding?: readonly Billboard[] | undefined
+  /**
+   * How close the player is to a viewpoint that reveals the target, 0..1. The
+   * outline brightens with it, so the search has a *gradient* — the complaint
+   * that the objective could not be found was really that the signal was binary:
+   * invisible, then suddenly visible, with nothing in between to home in on.
+   */
+  readonly hidingGlow?: number | undefined
   readonly backdropZ?: number
 }
 
@@ -179,8 +187,13 @@ export function buildScene(input: SceneInput): Mesh {
   ]
   for (const o of input.occluders) parts.push(occluderMesh(o, PALETTE.occluder))
   for (const o of input.hiding ?? []) {
+    const g = Number.isFinite(input.hidingGlow ?? 0)
+      ? Math.max(0, Math.min(1, input.hidingGlow ?? 0))
+      : 0
     // Nudged towards the viewer so it wins the depth test against its own face.
-    parts.push(frameMesh(o.z + 0.4, o.x0, o.x1, o.y0, o.y1, 2.2, PALETTE.hiding))
+    parts.push(
+      frameMesh(o.z + 0.4, o.x0, o.x1, o.y0, o.y1, 2.2, mix(PALETTE.hidingCold, PALETTE.hiding, g)),
+    )
   }
   input.targets.forEach((t, i) => {
     const on = input.revealed?.[i] ?? false

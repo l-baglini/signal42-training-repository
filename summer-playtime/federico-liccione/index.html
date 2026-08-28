@@ -60,6 +60,11 @@
   #round h2 { margin: 0 0 8px; font-size: 17px; }
   #round p { margin: 0 0 10px; }
   #round .note { font-size: 11px; opacity: .6; }
+  #warm { position: fixed; left: 50%; bottom: 168px; transform: translateX(-50%); z-index: 10;
+    width: 240px; display: none; text-align: center; }
+  #warm .track { height: 5px; border-radius: 3px; background: rgba(255,255,255,.10); overflow: hidden; }
+  #warm .fill { height: 100%; width: 0%; background: #4fb8a0; transition: width .08s linear; }
+  #warm .lbl { font-size: 10.5px; opacity: .55; margin-top: 4px; letter-spacing: .06em; }
   #hold { position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%); z-index: 10;
     width: 240px; display: none; text-align: center; }
   #hold .track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.13); overflow: hidden; }
@@ -122,6 +127,8 @@
 
   <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
 
+  <div id="warm"><div class="track"><div class="fill" id="warmFill"></div></div>
+    <div class="lbl" id="warmLabel">GETTING WARMER</div></div>
   <div id="hold"><div class="track"><div class="fill" id="holdFill"></div></div>
     <div class="lbl" id="holdLabel">HOLD IT</div></div>
   <div id="hint"><div class="arrow" id="hintArrow"></div><div class="text" id="hintText"></div></div>

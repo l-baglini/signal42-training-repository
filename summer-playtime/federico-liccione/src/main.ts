@@ -89,6 +89,9 @@ let hiding: Billboard[] = []
 /** Where the current hunt's revealing viewpoint is — and where threats go. */
 let peekAt: Point3 | null = null
 let holdFraction: number[] = []
+/** Distance to the revealing viewpoint when the hunt began, for the gradient. */
+let huntStartDistCm = 0
+let warmth = 0
 
 /** How long the player is left to search before the game offers a direction. */
 const HINT_AFTER_S = 2.5
@@ -138,6 +141,7 @@ function renderScene(): void {
           ? { at: round.threat.to, radius: round.threat.radius }
           : undefined,
       hiding: playing ? hiding : undefined,
+      hidingGlow: warmth,
     }),
   )
 }
@@ -157,6 +161,7 @@ function renderRound(): void {
   panel.style.display = 'block'
   el('hint').style.display = 'none'
   el('hold').style.display = 'none'
+  el('warm').style.display = 'none'
   if (level.kind === 'refusal') {
     el('roundTitle').textContent = 'No round to play'
     el('roundBody').textContent = 'This room will not make a fair level. Press w to put the furniture back.'
@@ -175,6 +180,17 @@ function renderRound(): void {
     el('roundBody').textContent =
       `${round.revealed} found, ${round.missed} missed, ${round.hits} hit, ${round.dodged} dodged.`
   }
+}
+
+function renderWarmth(index: number, distCm: number): void {
+  const panel = el('warm')
+  if (index < 0 || revealed[index] || !Number.isFinite(distCm)) {
+    panel.style.display = 'none'
+    return
+  }
+  panel.style.display = 'block'
+  el<HTMLElement>('warmFill').style.width = `${(warmth * 100).toFixed(0)}%`
+  el('warmLabel').textContent = `${distCm.toFixed(0)} cm FROM A VIEW OF IT`
 }
 
 function renderHold(heldS: number, index: number): void {
@@ -440,8 +456,10 @@ function frame(now: number): void {
     // hint can never point somewhere the rules disagree with.
     const active = round.active[0]
     const index = active?.index ?? -1
-    if (index !== huntIndex) {
+    const changedHunt = index !== huntIndex
+    if (changedHunt) {
       huntIndex = index
+      huntStartDistCm = 0
       huntMask =
         index >= 0 && targets[index]
           ? footprintMask(lattice, room.occluders, targets[index]!.at)
@@ -451,7 +469,18 @@ function frame(now: number): void {
       index >= 0 && targets[index]
         ? blockingOccluders(eye, targets[index]!.at, room.occluders)
         : []
-    peekAt = huntMask ? (nearestRevealing(lattice, huntMask, eye)?.at ?? null) : null
+    const near = huntMask ? nearestRevealing(lattice, huntMask, eye) : null
+    peekAt = near?.at ?? null
+    if (index !== huntIndex || huntStartDistCm === 0) {
+      huntStartDistCm = near?.distCm ?? 0
+    }
+    // A gradient instead of a binary. This is the fix for "I cannot tell where
+    // the objective is": the signal used to be invisible-then-visible with
+    // nothing in between, so there was nothing to home in on.
+    warmth = near && huntStartDistCm > 0
+      ? Math.max(0, Math.min(1, 1 - near.distCm / huntStartDistCm))
+      : 0
+    renderWarmth(index, near?.distCm ?? Infinity)
 
     holdFraction = targets.map(() => 0)
     if (active && index >= 0) {
