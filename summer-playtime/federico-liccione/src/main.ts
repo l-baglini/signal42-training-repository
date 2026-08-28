@@ -11,11 +11,8 @@ import {
   assessEnemies,
   blockingOccluders,
   chooseLineup,
-  nearestBreak,
   onScreen,
-  latticeOf,
   playEnvelope,
-  reachCm,
   threatCoverage,
   visible,
 } from './engine'
@@ -95,8 +92,6 @@ const PLAY_FRACTION = 0.68
 const COMFORT_CM = 14
 /** How deep the ordered lineup goes. Replacements come from it in order. */
 const LINEUP_DEPTH = 40
-/** How far the play envelope actually reaches. Set by `rebuildLineup`. */
-let playReachCm = 10
 let bodySource = 'reference body'
 let room = rooms[0]!.scan
 let roomSource = rooms[0]!.name
@@ -210,7 +205,6 @@ function rebuildLineup(): void {
    * further than this still works and still helps.
    */
   const play = playEnvelope(envelope, { fraction: PLAY_FRACTION, comfortCm: COMFORT_CM })
-  playReachCm = reachCm(latticeOf(play, 4), play.rest)
   const { assessments, lattice } = assessEnemies(room, play, {
     viewport,
     /**
@@ -347,31 +341,6 @@ function occupiedCover(eye: Point3): Array<{ box: Billboard; count: number }> {
   return [...tally.values()]
 }
 
-/**
- * Which way to move, and how badly.
- *
- * Answered for the enemy whose fuse is furthest along — the one that will actually
- * hit you — and only while something can see you. `nearestBreak` reads the same
- * `visible` the rule reads, so the direction it gives always works.
- *
- * The range offered is the play envelope's own, so the instruction is never to move
- * further than this body was measured to move.
- */
-function breakDirection(eye: Point3): { dx: number; dy: number; urgency: number } | undefined {
-  if (combat.phase !== 'playing') return undefined
-  let worst: { at: Point3; f: number } | null = null
-  for (const a of combat.active) {
-    const e = enemies[a.index]
-    if (!e || !exposed[a.index]) continue
-    const f = e.spec.fuseS > 0 ? a.exposedS / e.spec.fuseS : 0
-    if (!worst || f > worst.f) worst = { at: e.at, f }
-  }
-  if (!worst || worst.f <= 0.08) return undefined
-  const to = nearestBreak(eye, worst.at, room.occluders, playReachCm)
-  if (!to) return undefined
-  return { dx: to.x - eye.x, dy: to.y - eye.y, urgency: worst.f }
-}
-
 function renderScene(): void {
   const eye = tracker.position() ?? envelope.rest
   renderer.upload(
@@ -381,7 +350,6 @@ function renderScene(): void {
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
       occupied: occupiedCover(eye),
-      breakTo: breakDirection(eye),
       mood,
       skylineSeed,
       threatMarker:

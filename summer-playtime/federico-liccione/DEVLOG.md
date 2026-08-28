@@ -572,6 +572,32 @@ to be written against a case where the guard bites**, and if that case is hard t
 construct, that is information about the guard and not an excuse to assert the
 easy half.
 
+## Deleting a cue, and being consistent about why
+
+*"Ci sono dei riquadri rossastri in movimento... che cosa sono?"* They were
+`nearestBreak`'s indicator: three squares on the screen plane pointing at the
+nearest position that breaks the sightline of whatever was shooting, warming from
+blue to red as the fuse charged.
+
+They were built for the in-the-open verb, where they were not decoration but a
+requirement — if an enemy can see you sitting still, "get out of the way" has no
+direction in it and the mechanic is unplayable without one. That verb now ships at
+0, and for the verb that remains the arrow says nothing the player does not know:
+cover is where you came from. On top of which the fuse bar and the rising warning
+tone already carry the same fact, and this carried it across the middle of the
+screen at the moment the player is aiming.
+
+Worth recording the *asymmetry* in what I kept, because it looks inconsistent and
+is not. The in-the-open path stays: it is a parameter on a function the game
+calls every round, exercised by tests, with a guarantee (I11) attached and a
+documented switch. `nearestBreak` went: it was a helper whose only caller I was
+deleting, and keeping it would be exactly the failure this log describes three
+entries above — a function nothing calls, with passing tests, waiting to be
+mistaken for a working feature. Its tests went with it.
+
+The rule I want to hold myself to, stated so the next session can apply it: **a
+switch on a live path may stay; a leaf with no caller may not.**
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

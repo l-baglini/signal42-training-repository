@@ -32,46 +32,6 @@ export function visible(e: Point3, t: Point3, occluders: readonly Billboard[]): 
  * subject is not a hunt. Pointing at the furniture doing the hiding is the
  * smallest cue that makes the goal legible without giving the position away.
  */
-/**
- * The nearest place to stand that breaks this sightline.
- *
- * The dual of `nearestRevealing`, and needed for the same reason that one was:
- * without it the instruction "get out of the way" has no direction in it. An
- * enemy that can see the rest position is answered either by shooting it or by
- * moving, and moving is only a decision if the player can tell which way.
- *
- * Sampled on a fixed ring of directions rather than solved on the lattice, because
- * this runs every frame while the previous one ran once per level. Sixteen
- * `visible` tests, the same `visible` the rule uses — so the arrow can never point
- * somewhere that does not actually work.
- *
- * Returns null when nothing on the ring breaks it: the honest answer, and the game
- * should say nothing rather than point at a guess.
- */
-export function nearestBreak(
-  eye: Point3,
-  at: Point3,
-  occluders: readonly Billboard[],
-  maxCm: number,
-  steps = 3,
-): Point3 | null {
-  if (!visible(eye, at, occluders)) return null
-  const dirs: ReadonlyArray<readonly [number, number]> = [
-    [1, 0], [-1, 0], [0, 1], [0, -1],
-    [0.7071, 0.7071], [-0.7071, 0.7071], [0.7071, -0.7071], [-0.7071, -0.7071],
-  ]
-  // Nearest first: the ring is walked outwards, so the first hit is the shortest
-  // move that works.
-  for (let s = 1; s <= steps; s++) {
-    const r = (maxCm * s) / steps
-    for (const [dx, dy] of dirs) {
-      const p: Point3 = { x: eye.x + dx * r, y: eye.y + dy * r, z: eye.z }
-      if (!visible(p, at, occluders)) return p
-    }
-  }
-  return null
-}
-
 export function blockingOccluders(
   e: Point3,
   t: Point3,
