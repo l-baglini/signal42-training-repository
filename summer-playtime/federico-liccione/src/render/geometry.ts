@@ -16,7 +16,13 @@ export interface Mesh {
   readonly colors: Float32Array
   /** uv per vertex. Meaningless where `textured` is 0. */
   readonly uvs: Float32Array
-  /** 1 where the vertex should sample the room texture instead of its colour. */
+  /**
+   * Draw mode per vertex: 0 flat colour, 1 sample the texture, 2 procedural sky.
+   *
+   * A mode rather than a boolean, and stored in the same buffer, because a third
+   * vertex attribute for something with three states is a lot of plumbing to
+   * avoid one comparison in a shader.
+   */
   readonly textured: Float32Array
   readonly indices: Uint32Array
 }
@@ -42,6 +48,7 @@ export function quad(
   y1: number,
   colour: Rgb,
   uv?: UvRect,
+  mode = uv ? 1 : 0,
 ): Mesh {
   const positions = new Float32Array([
     x0, y0, z,
@@ -56,7 +63,7 @@ export function quad(
   const uvs = uv
     ? new Float32Array([uv.u0, uv.v1, uv.u1, uv.v1, uv.u0, uv.v0, uv.u1, uv.v0])
     : new Float32Array(8)
-  const textured = new Float32Array(4).fill(uv ? 1 : 0)
+  const textured = new Float32Array(4).fill(mode)
   return { positions, colors, uvs, textured, indices: new Uint32Array(QUAD_INDICES) }
 }
 
@@ -94,9 +101,22 @@ export const targetMesh = (t: Target, colour: Rgb): Mesh =>
   quad(t.at.z, t.at.x - t.radius, t.at.x + t.radius, t.at.y - t.radius, t.at.y + t.radius, colour)
 
 /**
- * A checkered wall at the back. Its only job is to give the eye something to
- * measure parallax against — a floating shape over a void reads as flat however
- * correct the projection is.
+ * The sky: one quad, shaded procedurally in the fragment shader.
+ *
+ * It replaced a checkerboard whose only job was to give the eye something to
+ * measure parallax against. The sky does that better — a horizon and drifting
+ * cloud give the parallax something *meaningful* to move against — and it costs
+ * nothing to occlusion, because everything behind the cover band occludes
+ * nothing by definition.
+ */
+export function skyMesh(z: number, halfW: number, halfH: number): Mesh {
+  return quad(z, -halfW, halfW, -halfH, halfH, [0, 0, 0],
+    { u0: 0, v0: 0, u1: 1, v1: 1 }, 2)
+}
+
+/**
+ * A checkered wall. Kept because the parallax and projection tests measure against
+ * it, and because it is the honest fallback when the sky is switched off.
  */
 export function backdropMesh(
   z: number,
@@ -304,6 +324,8 @@ export interface SceneInput {
    * it, and nobody has to be told that the level came from the room.
    */
   readonly occluderUvs?: readonly (UvRect | undefined)[] | undefined
+  /** False falls back to the checkerboard, which is what the geometry tests use. */
+  readonly sky?: boolean | undefined
   readonly enemies?: readonly EnemyView[] | undefined
   readonly backdropZ?: number
 }
@@ -318,9 +340,11 @@ export function backdropHalfExtent(backdropZ: number, screenHalf: number, eyeZ: 
 }
 
 export function buildScene(input: SceneInput): Mesh {
-  const backdropZ = input.backdropZ ?? -320
+  const backdropZ = input.backdropZ ?? -420
   const parts: Mesh[] = [
-    backdropMesh(backdropZ, 260, 170, 16, 11, PALETTE.backdropA, PALETTE.backdropB),
+    input.sky === false
+      ? backdropMesh(backdropZ, 420, 280, 16, 11, PALETTE.backdropA, PALETTE.backdropB)
+      : skyMesh(backdropZ, 420, 280),
   ]
   input.occluders.forEach((o, i) =>
     parts.push(occluderMesh(o, PALETTE.occluder, input.occluderUvs?.[i])),

@@ -45,6 +45,8 @@ uniform float uShake;
 uniform sampler2D uRoom;
 uniform float uHasRoom;
 uniform float uRoomLevel;
+uniform float uPosterise;
+uniform float uRain;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -52,9 +54,39 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm2(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) { v += vnoise(p) * a; p *= 2.0; a *= 0.5; }
+  return v;
+}
+
+/** Horizon, gradient, and cloud that drifts. Costs nothing to occlusion. */
+vec3 skyAt(vec2 uv, float t) {
+  vec3 low = vec3(0.09, 0.12, 0.19);
+  vec3 high = vec3(0.26, 0.34, 0.48);
+  vec3 c = mix(low, high, pow(clamp(uv.y, 0.0, 1.0), 0.75));
+  float cl = fbm2(vec2(uv.x * 3.2 + t * 0.010, uv.y * 2.2 - t * 0.003));
+  cl = smoothstep(0.46, 0.80, cl) * smoothstep(0.02, 0.45, uv.y);
+  c = mix(c, vec3(0.46, 0.50, 0.58), cl * 0.5);
+  // A band of haze at the horizon, which is what sells distance.
+  c = mix(c, vec3(0.20, 0.24, 0.31), smoothstep(0.22, 0.0, uv.y) * 0.7);
+  return c;
+}
+
 void main() {
   vec3 own = vColor;
-  if (vTextured > 0.5 && uHasRoom > 0.5) {
+  if (vTextured > 1.5) {
+    own = skyAt(vUv, uTime);
+  } else if (vTextured > 0.5 && uHasRoom > 0.5) {
     /**
      * The room's own pixels, posterised into the game's palette.
      *
@@ -66,14 +98,19 @@ void main() {
      * grab. A trace of the original hue survives so a red chair stays reddish.
      */
     vec3 tex = texture(uRoom, vUv).rgb;
-    float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
-    float steps = 5.0;
-    float q = floor(lum * steps + 0.5) / steps;
-    vec3 dark = vec3(0.055, 0.075, 0.125);
-    vec3 light = vec3(0.42, 0.52, 0.62);
-    vec3 ramp = mix(dark, light, pow(q, 0.85));
-    vec3 hue = tex - vec3(lum);
-    own = clamp(ramp + hue * 0.35, 0.0, 1.0) * uRoomLevel;
+    if (uPosterise > 0.5) {
+      // A photograph used as-is loses twice: bright it fights everything drawn
+      // over it, crushed to grey it looks like a bad photograph. Quantising keeps
+      // the structure, which is what makes a room recognisable, while reading as
+      // art. Procedural materials get none of this — they are already art.
+      float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
+      float q = floor(lum * 5.0 + 0.5) / 5.0;
+      vec3 ramp = mix(vec3(0.055, 0.075, 0.125), vec3(0.42, 0.52, 0.62), pow(q, 0.85));
+      own = clamp(ramp + (tex - vec3(lum)) * 0.35, 0.0, 1.0);
+    } else {
+      own = tex;
+    }
+    own *= uRoomLevel;
   }
 
   // Aerial perspective: a monocular depth cue that works on a flat panel.
@@ -84,6 +121,22 @@ void main() {
   // the window is, and costs one dot product.
   float r = length(vClip);
   c *= 1.0 - 0.42 * clamp(r * r * 0.55, 0.0, 1.0);
+
+  /**
+   * Rain, as columns of falling streaks. Screen-space on purpose: weather is
+   * between the player and the world rather than in it, and a particle system for
+   * something with no gameplay meaning would be a lot of buffers for one mood.
+   */
+  if (uRain > 0.001) {
+    float col = floor(gl_FragCoord.x / 3.0);
+    float speed = 300.0 + hash(vec2(col, 1.0)) * 260.0;
+    float yy = gl_FragCoord.y + uTime * speed;
+    float cell = floor(yy / 30.0);
+    float f = fract(yy / 30.0);
+    float on = step(0.93, hash(vec2(col, cell)));
+    float streak = on * smoothstep(0.0, 0.22, f) * (1.0 - smoothstep(0.22, 1.0, f));
+    c += vec3(0.58, 0.66, 0.80) * streak * uRain * 0.32;
+  }
 
   // Grain, and a red lift while the screen is shaking from a hit.
   float g = hash(gl_FragCoord.xy + vec2(uTime * 37.0, uTime * 17.0));
@@ -116,8 +169,12 @@ export class Renderer {
   private readonly texFlagBuf: WebGLBuffer
   private readonly idxBuf: WebGLBuffer
   private roomTex: WebGLTexture | null = null
-  /** How strongly the room's own pixels show. 0 turns the photograph off. */
+  /** How strongly the texture shows. 0 turns it off entirely. */
   roomLevel = 1
+  /** Quantise the texture into the palette. For photographs, not for materials. */
+  posterise = false
+  /** 0 to 1. Weather is a per-level property. */
+  rain = 0
   private indexCount = 0
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -249,6 +306,8 @@ export class Renderer {
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uShake'), shake)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uHasRoom'), this.roomTex ? 1 : 0)
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRoomLevel'), this.roomLevel)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uPosterise'), this.posterise ? 1 : 0)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uRain'), this.rain)
     gl.uniform1i(gl.getUniformLocation(this.prog, 'uRoom'), 0)
     if (this.roomTex) {
       gl.activeTexture(gl.TEXTURE0)

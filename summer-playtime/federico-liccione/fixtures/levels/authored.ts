@@ -102,7 +102,9 @@ const shelves: AuthoredLevel = {
 const parapet: AuthoredLevel = {
   id: 'parapet',
   name: 'Parapet',
-  blurb: 'A low wall you have to rise above, and two pillars you have to lean past.',
+  blurb:
+    'Rain on a low wall you have to rise above, and two pillars you have to lean ' +
+    'past. The weather comes from those words — see `weatherFor` in main.ts.',
   scan: {
     source: 'fixture',
     occluders: [

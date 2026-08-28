@@ -306,13 +306,21 @@ describe('room texturing', () => {
     expect(flagged).toBe(4) // exactly one quad
   })
 
+  it('the sky is its own draw mode, and there is exactly one of it', () => {
+    const m = buildScene({ occluders: room.occluders, targets: [] })
+    expect([...m.textured].filter((v) => v === 2).length).toBe(4)
+    const flat = buildScene({ occluders: room.occluders, targets: [], sky: false })
+    expect([...flat.textured].filter((v) => v === 2).length).toBe(0)
+  })
+
   it('a short or missing uv array is not an error', () => {
     // The array is built from a scan and the scan can be replaced at any moment;
     // a mismatch must degrade to flat colour rather than throw mid-frame.
     for (const uvs of [undefined, [], [undefined, uv]]) {
       const m = buildScene({ occluders: room.occluders, targets: [], occluderUvs: uvs })
       expect(m.indices.length).toBeGreaterThan(0)
-      for (const v of m.textured) expect(v === 0 || v === 1).toBe(true)
+      // 0 flat, 1 textured, 2 sky: a mode rather than a boolean.
+      for (const v of m.textured) expect([0, 1, 2]).toContain(v)
     }
   })
 })
