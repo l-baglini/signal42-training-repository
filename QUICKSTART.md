@@ -332,3 +332,14 @@ Sample a song as stills instead of watching it, one beat per frame:
 .venv/bin/python tools/preview_render.py --song yoursong.gp3 --beat 8 --frames 4 \
     --max-fret 21 --out diagnostics/song.png
 ```
+
+## Regenerating the documentation screenshots
+
+```bash
+.venv/bin/python tools/screenshots.py --song yoursong.gp3 --beat 96
+```
+
+Every image in [`docs/images/`](docs/images/) is rendered from the synthetic source, so they
+reproduce on any machine with no camera, no model and no dataset. They are build output, not
+assets — change the renderer and re-run this rather than editing a picture, or the README
+starts quietly describing an app that no longer exists.
