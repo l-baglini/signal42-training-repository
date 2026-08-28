@@ -132,8 +132,15 @@ let shake = 0
  * enemies are drawn — so the thing that hits you vanishes in the very frame it
  * hits you. A playtester reported being shot by enemies that were not there, and
  * they were not: they had just left. This marks the spot for a moment.
+ *
+ * The deadline is on the **wall clock**, not on `combat.tS`. It was on the round
+ * clock first, and a round clock restarts: a marker stamped at 45 s outlived the
+ * whole of the next round as an orange square hanging in the void with no body
+ * inside, unshootable and not shooting. Absolute time cannot be resurrected by a
+ * reset, and `rebuildLineup` clears it anyway — belt and braces, because this
+ * class of bug is invisible until somebody plays two rounds.
  */
-let shotFrom: { at: Point3; untilS: number } | null = null
+let shotFrom: { at: Point3; untilWallS: number } | null = null
 
 function rebuildLineup(): void {
   const { assessments } = assessEnemies(room, envelope, { viewport })
@@ -157,6 +164,8 @@ function rebuildLineup(): void {
   }))
   exposed = enemies.map(() => false)
   aimed = enemies.map(() => false)
+  // Nothing from the last round survives into this one, markers included.
+  shotFrom = null
   combat = newCombat(DEFAULT_COMBAT)
   /**
    * The scene has to be re-uploaded here, not only while a round is running.
@@ -194,7 +203,7 @@ function renderScene(): void {
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
       threatMarker:
-        shotFrom && shotFrom.untilS > combat.tS
+        shotFrom && shotFrom.untilWallS > performance.now() / 1000
           ? { at: shotFrom.at, radius: 16 }
           : undefined,
     }),
@@ -826,7 +835,7 @@ function frame(now: number): void {
       if (ev.kind === 'shot') {
         sfx.hurt()
         const from = enemies[ev.index]
-        if (from) shotFrom = { at: from.at, untilS: combat.tS + 1.1 }
+        if (from) shotFrom = { at: from.at, untilWallS: performance.now() / 1000 + 1.1 }
       }
     }
     firing = false

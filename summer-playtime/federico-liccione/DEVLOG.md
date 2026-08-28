@@ -235,6 +235,25 @@ could not be shot. Both were the same class of fault: the *rules* were consisten
 and the *picture* did not match them. A point-sized engagement test drawn as a
 rectangle, and a shooter drawn only while it still existed.
 
+## A marker that outlived its round
+
+A screenshot of an orange square hanging in the void: no body inside it, not
+shooting, unshootable. It was the "shot came from here" marker from a *previous*
+round. Its deadline was stored on `combat.tS`, the round clock, which restarts —
+so a marker stamped at 45 seconds sat through the whole of the next round, and the
+scoreboard honestly read "0 hit" because the hit had happened in a round that was
+over.
+
+A different class from the three below, and one no unit test in this suite could
+have caught: the pure modules are all deterministic functions of their inputs, and
+this was state in the app leaking across a lifecycle boundary. The deadline is now
+on the wall clock, which a reset cannot resurrect, and `rebuildLineup` clears it
+regardless.
+
+The generalisable bit: **a timestamp is only as trustworthy as the clock it is
+compared against.** Round-relative time is fine for anything inside a round and
+wrong for anything that can survive one.
+
 ## One mistake, three times
 
 A playtester worked out the third instance themselves: "the enemy was below the
