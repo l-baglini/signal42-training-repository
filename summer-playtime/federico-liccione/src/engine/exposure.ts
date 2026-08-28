@@ -71,6 +71,7 @@ export function engageableMask(
   occluders: Parameters<typeof footprintMask>[1],
   at: Point3,
   view: Viewport = DEFAULT_VIEWPORT,
+  radiusCm = 0,
 ): Uint8Array {
   const mask = footprintMask(lat, occluders, at)
   for (let k = 0; k < lat.nz; k++)
@@ -78,7 +79,7 @@ export function engageableMask(
       for (let i = 0; i < lat.nx; i++) {
         const n = cellIndex(lat, i, j, k)
         if (!mask[n]) continue
-        if (!onScreen(cellCentre(lat, i, j, k), at, view)) mask[n] = 0
+        if (!onScreen(cellCentre(lat, i, j, k), at, view, radiusCm)) mask[n] = 0
       }
   return mask
 }
@@ -274,7 +275,7 @@ export function assessEnemies(
 
   const view = opts.viewport ?? DEFAULT_VIEWPORT
   for (const at of scan.anchors) {
-    const exposed = engageableMask(lattice, scan.occluders, at, view)
+    const exposed = engageableMask(lattice, scan.occluders, at, view, radius)
     const cover = coverMask(lattice, exposed)
     const retreat = gapCm(lattice, exposed, cover)
     const fuseS = fuseForFairRetreat(env, retreat, opts.fuseMarginS)
@@ -284,7 +285,7 @@ export function assessEnemies(
         { at, radius, fuseS },
         env,
         exposed,
-        visible(env.rest, at, scan.occluders) && onScreen(env.rest, at, view),
+        visible(env.rest, at, scan.occluders) && onScreen(env.rest, at, view, radius),
         {
           reachCm: reach,
           ...(opts.jitterK === undefined ? {} : { jitterK: opts.jitterK }),

@@ -803,7 +803,9 @@ function frame(now: number): void {
   // the game would let an enemy shoot from off the edge of the screen — which is
   // exactly what a playtester ran into.
   exposed = enemies.map(
-    (e) => visible(eye, e.at, room.occluders) && onScreen(eye, e.at, screen),
+    // Radius included: an enemy whose centre clears the edge while nine tenths of
+    // its body is off the glass is not something a player can answer.
+    (e) => visible(eye, e.at, room.occluders) && onScreen(eye, e.at, screen, e.radius),
   )
   updateAim(mvp)
 

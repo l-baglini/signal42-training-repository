@@ -235,6 +235,35 @@ could not be shot. Both were the same class of fault: the *rules* were consisten
 and the *picture* did not match them. A point-sized engagement test drawn as a
 rectangle, and a shooter drawn only while it still existed.
 
+## One mistake, three times
+
+A playtester worked out the third instance themselves: "the enemy was below the
+bottom edge of the screen." It was — just above it, with nine tenths of its body
+below the glass. `onScreen` tested the enemy's **centre**, and the enemy is
+eighteen centimetres across, so it counted as in frame, charged its fuse, fired,
+and could not be seen.
+
+That is the same fault three times in this project, and the repetition is the
+interesting part:
+
+1. An occluder's centre deciding whether a sightline was blocked — which is
+   *correct*, and stays, because the solver's exactness depends on it.
+2. An enemy's centre deciding whether it was drawn, so one half behind cover
+   showed the edge of a socket while being unshootable.
+3. An enemy's centre deciding whether it was in frame.
+
+Each time the rules were self-consistent and the picture disagreed with them, and
+each time I fixed the instance rather than looking for the class. The third one
+now pads the screen rectangle by the object's own projected radius, so the whole
+of it has to be in frame — and the padding scales with depth, because the same
+enemy looms larger up close.
+
+Counter-intuitively this produced *more* playable enemies, not fewer: the
+`exposed-at-rest` rejection uses the same test, so an enemy that cannot fully see
+you from your resting position is no longer disqualified for being able to. Fair
+enemies went from 37/28/18/32 to 75/50/45/50 on the designed levels and from
+69/72/65 to 69/88/65 on the authored ones.
+
 ## Aliasing, and two wrong fixes before the right one
 
 "Far fewer enemies than before" was true and was my doing: the on-screen rule

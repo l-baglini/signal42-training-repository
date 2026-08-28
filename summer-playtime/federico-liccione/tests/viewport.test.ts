@@ -65,6 +65,32 @@ describe('onScreen', () => {
     expect(onScreen(EYE, at, { widthCm: 60, heightCm: 37 })).toBe(true)
   })
 
+  it('requires the whole body in frame, not just its middle', () => {
+    /**
+     * The third appearance of one mistake: a point test standing in for something
+     * with extent. A playtester was shot by an enemy sitting just above the bottom
+     * edge with nine tenths of its body below the glass — its centre was inside
+     * the rectangle, so it counted as in frame, fired, and could not be seen.
+     */
+    const nearEdge: Point3 = { x: 0, y: -34, z: -150 }
+    expect(onScreen(EYE, nearEdge, view, 0)).toBe(true)
+    expect(onScreen(EYE, nearEdge, view, 9)).toBe(false)
+  })
+
+  it('pads more for a near object than a far one, because it looms larger', () => {
+    // The padding is the radius times the projection scale, so the same enemy
+    // needs more clearance up close.
+    const shallow: Point3 = { x: 0, y: -12, z: -40 }
+    const deep: Point3 = { x: 0, y: -12, z: -400 }
+    expect(onScreen(EYE, shallow, view, 0)).toBe(true)
+    expect(onScreen(EYE, shallow, view, 9)).toBe(false)
+    expect(onScreen(EYE, deep, view, 9)).toBe(true)
+  })
+
+  it('refuses everything when the object is wider than the window', () => {
+    expect(onScreen(EYE, { x: 0, y: 0, z: -60 }, view, 200)).toBe(false)
+  })
+
   it('refuses degenerate eyes rather than dividing by zero', () => {
     expect(onScreen({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -100 }, view)).toBe(false)
     expect(onScreen(EYE, { x: 0, y: 0, z: 60 }, view)).toBe(false)
