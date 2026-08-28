@@ -33,6 +33,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,score]"
+          # NOT [audio]: a runner has no sound device, and fretguide/audio.py
+          # imports sounddevice lazily inside Player() so nothing in tests/
+          # touches it. Adding the extra here would install PortAudio to cover
+          # exactly nothing. What audio CAN be checked without a device --
+          # every waveform assertion in tests/test_synth.py -- runs above.
 
       - name: Install torch (CPU build)
         # From PyTorch's CPU index deliberately: the default PyPI wheel drags in

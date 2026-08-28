@@ -239,3 +239,51 @@ def test_elapsed_is_wall_clock_seconds():
     t = _play(bpm=120.0)
     t.seek(8.0)
     assert t.elapsed == pytest.approx(4.0)
+
+
+# --------------------------------------------------------------------------- #
+# Following an external clock
+# --------------------------------------------------------------------------- #
+
+
+def test_follow_puts_the_head_where_the_clock_says():
+    """When audio plays it owns the clock: the sound card's position decides
+    where in the song we are, not the video frame's timestamp."""
+    t = _play(bpm=120.0, bars=8)
+    t.follow(2.0)  # two seconds at 120 bpm is four beats
+    assert t.beat == pytest.approx(4.0)
+
+
+def test_follow_accounts_for_the_playback_rate():
+    """The buffer was rendered at `rate`, so it is longer at half speed. The
+    play head must not run through the song twice as fast to match it."""
+    t = _play(bpm=120.0, bars=8)
+    t.rate = 0.5
+    t.follow(2.0)  # two seconds of a half-speed buffer is one second of song
+    assert t.beat == pytest.approx(2.0)
+
+
+def test_follow_and_seconds_at_are_inverses():
+    t = _play(bpm=98.0, bars=8, tempos=(TempoChange(0.0, 98.0), TempoChange(12.0, 140.0)))
+    for beat in (0.0, 3.5, 12.0, 19.25, 31.0):
+        t.follow(t.song.seconds_at(beat))
+        assert t.beat == pytest.approx(beat, abs=1e-6)
+
+
+def test_following_clears_the_finished_flag():
+    t = _play(bars=1)
+    t.playing, t.loop = True, False
+    t.tick(10.0)
+    assert t.finished
+    t.follow(0.5)
+    assert not t.finished
+
+
+def test_beat_at_is_the_inverse_of_seconds_at_across_a_tempo_change():
+    song = _song(bars=8, tempos=(TempoChange(0.0, 60.0), TempoChange(8.0, 180.0)))
+    for beat in (0.0, 4.0, 8.0, 16.0, 31.5):
+        assert song.beat_at(song.seconds_at(beat)) == pytest.approx(beat, abs=1e-6)
+
+
+def test_beat_at_clamps_below_zero():
+    assert _song().beat_at(-3.0) == 0.0

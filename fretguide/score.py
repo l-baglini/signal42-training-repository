@@ -143,6 +143,25 @@ class Song:
             seconds += (min(nxt, beat) - t.start) * 60.0 / t.bpm
         return seconds
 
+    def beat_at(self, seconds: float) -> float:
+        """The inverse of :meth:`seconds_at` — where a wall clock has got to.
+
+        Needed when something other than this object owns the clock. Audio is
+        the case that matters: a sound card's playback position is in seconds
+        and is far steadier than a video frame's timestamp, so when audio plays
+        it drives the play head rather than the other way round.
+        """
+        if seconds <= 0.0:
+            return 0.0
+        elapsed = 0.0
+        for i, t in enumerate(self.tempos):
+            end = self.tempos[i + 1].start if i + 1 < len(self.tempos) else None
+            span = ((end - t.start) * 60.0 / t.bpm) if end is not None else float("inf")
+            if elapsed + span >= seconds:
+                return t.start + (seconds - elapsed) * t.bpm / 60.0
+            elapsed += span
+        return self.length
+
     def bpm_at(self, beat: float) -> float:
         """The tempo in force at ``beat`` — what a playing clock advances by."""
         current = self.tempos[0].bpm

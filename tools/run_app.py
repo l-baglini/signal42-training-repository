@@ -119,6 +119,40 @@ def load_song(args, max_fret: int) -> Transport:
     return Transport(song=song, track=track, playing=True)
 
 
+def start_audio(args, song):
+    """Render the part and open an output. Never fatal: no audio is a lesser
+    failure than no overlay, so a missing device downgrades to silence."""
+    from fretguide.audio import AudioUnavailable, Player
+    from fretguide.fingering import STANDARD_TUNING
+    from fretguide.synth import SAMPLE_RATE, render
+
+    t0 = time.perf_counter()
+    mix = render(song.track.notes, song.song, STANDARD_TUNING, rate=song.rate)
+    took = (time.perf_counter() - t0) * 1000
+    try:
+        player = Player(mix, SAMPLE_RATE, device=args.audio_device)
+    except AudioUnavailable as exc:
+        print(f"  audio off: {exc}")
+        return None
+    player.start()
+    song.playing = True
+    print(f"  audio: {len(mix) / SAMPLE_RATE:.0f} s synthesised in {took:.0f} ms")
+    return player
+
+
+def restart_audio(player, song):
+    """Re-mix after a tempo change and land where we already were.
+
+    Re-mixing is addition over a cached pluck per pitch, so it is milliseconds;
+    re-synthesising every note would not be, and the speed keys would stutter.
+    """
+    from fretguide.fingering import STANDARD_TUNING
+    from fretguide.synth import render
+
+    at = song.song.seconds_at(song.beat) / song.rate
+    player.replace(render(song.track.notes, song.song, STANDARD_TUNING, rate=song.rate), keep=at)
+
+
 def resolve_auto(args) -> str:
     """Pick a source for ``--source auto``.
 
@@ -178,6 +212,11 @@ def main() -> int:
     ap.add_argument("--refinger", action="store_true",
                     help="discard the tab's fingering and re-solve it, which is how a part "
                          "written above fret 12 can be brought into camera range")
+    ap.add_argument("--audio", action="store_true",
+                    help="synthesise the part and play it in time with the dots "
+                         "(needs the [audio] extra)")
+    ap.add_argument("--audio-device", default=None,
+                    help="output device for --audio; omit for the system default")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--no-smooth", action="store_true")
     args = ap.parse_args()
@@ -226,6 +265,7 @@ def main() -> int:
 
     max_fret = getattr(src, "max_fret", max_fret)
     song = load_song(args, max_fret) if args.song else None
+    player = start_audio(args, song) if (song and args.audio) else None
     sel = Selection("chord", "G")
     scale_i = gen_i = 0
     show_grid, show_fingers, mirror, frozen = True, True, False, False
@@ -286,7 +326,13 @@ def main() -> int:
                 # freezing the picture freezes the play head with it: `held`
                 # replays the same packet, the delta is zero, and the song
                 # stops where the frame did.
-                song.tick(packet.t - (song_t if song_t is not None else packet.t))
+                if player is not None and song.playing:
+                    # The stream is the clock. Integrating frame deltas as well
+                    # would let the dots drift away from the sound, and a dot
+                    # that disagrees with what you hear is worse than a mute one.
+                    song.follow(player.position)
+                else:
+                    song.tick(packet.t - (song_t if song_t is not None else packet.t))
                 song_t = packet.t
                 resolved = song.resolved()
             else:
@@ -364,16 +410,19 @@ def main() -> int:
                 break
             elif song is not None and k == ord("p"):
                 song.toggle()
-            elif song is not None and k == ord("["):
-                song.nudge_bars(-1)
-            elif song is not None and k == ord("]"):
-                song.nudge_bars(1)
-            elif song is not None and k == ord("-"):
-                song.scale_rate(1 / 1.25)
-            elif song is not None and k in (ord("="), ord("+")):
-                song.scale_rate(1.25)
-            elif song is not None and k == ord("0"):
-                song.seek(0.0)
+                if player is not None:
+                    player.start() if song.playing else player.stop()
+            elif song is not None and k in (ord("["), ord("]"), ord("0")):
+                if k == ord("0"):
+                    song.seek(0.0)
+                else:
+                    song.nudge_bars(-1 if k == ord("[") else 1)
+                if player is not None:
+                    player.seek(song.song.seconds_at(song.beat) / song.rate)
+            elif song is not None and k in (ord("-"), ord("="), ord("+")):
+                song.scale_rate(1 / 1.25 if k == ord("-") else 1.25)
+                if player is not None:
+                    restart_audio(player, song)
             elif ord("1") <= k <= ord("7"):
                 sel = Selection("chord", CHORD_IDS[k - ord("1")])
             elif k == ord("s"):
@@ -416,6 +465,8 @@ def main() -> int:
 
     if (summary := src.summary()):
         print(f"\n{summary}")
+    if player is not None:
+        player.close()
     if frame_times:
         print(f"display loop: {1.0 / float(np.mean(frame_times)):.1f} fps mean "
               f"over {shown} frames")

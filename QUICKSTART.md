@@ -255,7 +255,7 @@ In rough order of effect:
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q      # 434 tests, no camera or GPU needed
+.venv/bin/python -m pytest tests/ -q      # 467 tests, no camera or GPU needed
 ```
 
 ## Layout
@@ -296,6 +296,35 @@ you have, which brings most of those back into reach:
 ```bash
 .venv/bin/python tools/run_app.py --song yoursong.gp3 --track 1 --refinger -d 4
 ```
+
+### Hearing it
+
+```bash
+.venv/bin/pip install -e ".[audio]"
+.venv/bin/python tools/run_app.py --source synthetic --max-fret 21 \
+    --song yoursong.gp3 --audio
+```
+
+The part is synthesised — a Karplus–Strong plucked string, no soundfont — and
+played in time with the dots. **When audio is on it becomes the clock**: the
+play head follows the sound card rather than the video frames, because the two
+would otherwise drift apart and a dot that disagrees with what you hear is
+worse than a silent one. The speed and seek keys move both together.
+
+No sound device, or the `[audio]` extra missing, prints one line and carries on
+silently. The overlay is the product.
+
+To hear it without running the app at all — which needs neither `[audio]` nor a
+sound device, since synthesis is pure numpy and the file is written with the
+standard library:
+
+```bash
+.venv/bin/python tools/preview_audio.py --song yoursong.gp3 --bars 1-8 \
+    --out diagnostics/riff.wav
+paplay diagnostics/riff.wav
+```
+
+`--rate 0.5` writes it at half speed without changing the pitch.
 
 Sample a song as stills instead of watching it, one beat per frame:
 

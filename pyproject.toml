@@ -44,6 +44,12 @@ gui = [
 score = [
     "PyGuitarPro>=0.11",
 ]
+# Playing a song back. Separate from [score] because reading a file and making
+# a noise are different capabilities: the fingering evaluation wants the former
+# and no speakers, and CI wants neither a device nor PortAudio.
+audio = [
+    "sounddevice>=0.5",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.9",

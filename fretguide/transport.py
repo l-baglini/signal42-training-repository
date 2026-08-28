@@ -66,6 +66,18 @@ class Transport:
             else:
                 self.beat, self.playing, self.finished = end, False, True
 
+    def follow(self, seconds: float) -> None:
+        """Put the play head where an external clock says it is.
+
+        Used when audio is playing: the sound card's position, not the video
+        frame's timestamp, decides where in the song we are. ``seconds`` is
+        measured in the *buffer*, which was rendered at ``rate``, so a song
+        second is ``rate`` buffer seconds — at half speed the buffer is twice
+        as long and the play head must not advance twice as fast with it.
+        """
+        self.beat = self.song.beat_at(seconds * self.rate)
+        self.finished = False
+
     def toggle(self) -> None:
         if self.finished:
             self.beat, self.finished = 0.0, False

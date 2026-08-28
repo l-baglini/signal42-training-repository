@@ -1,5 +1,5 @@
 ---
-description: Run the full hardware-free check (ruff + 434 tests) and report honestly what it does and does not prove.
+description: Run the full hardware-free check (ruff + 467 tests) and report honestly what it does and does not prove.
 allowed-tools: Bash(.venv/bin/python -m pytest:*), Bash(.venv/bin/python -m ruff:*), Read, Grep
 ---
 
