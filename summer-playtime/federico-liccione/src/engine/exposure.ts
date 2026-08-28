@@ -32,6 +32,22 @@ export interface Enemy {
   readonly fuseS: number
 }
 
+/**
+ * How the player answers this enemy.
+ *
+ * `peek` is the original verb: it cannot see you where you sit, so seeing it — and
+ * therefore shooting it — costs a lean, and the lean is what exposes you.
+ *
+ * `duck` is the same rule read from the other end. Exposure has no direction, so
+ * an enemy whose engagement footprint already contains the rest position is one
+ * you can shoot **without moving at all** — and one that is already aiming at you.
+ * Shoot fast or get out of the way. It needs no new mechanic, only permission:
+ * these were being rejected wholesale as `exposed-at-rest`, which was right for the
+ * hunt this began as (nothing to find) and wrong for a cover shooter, where being
+ * already seen is half the game.
+ */
+export type EnemyVerb = 'peek' | 'duck'
+
 export type EnemyReject =
   | 'not-shootable' // no reachable position sees it, or sees it on screen
   | 'no-cover'      // every reachable position is exposed to it
@@ -53,6 +69,7 @@ export interface EnemyAssessment {
   readonly retreatCm: number
   /** cm the player can travel within the fuse, after reaction and latency. */
   readonly retreatBudgetCm: number
+  readonly verb: EnemyVerb
   readonly fair: boolean
   readonly reject: EnemyReject | null
 }
@@ -96,6 +113,26 @@ export function engageableMask(
  * The direction of the consequence is the usual one: a slower body, or a noisier
  * tracker, is given more time rather than a worse game.
  */
+/**
+ * cm from the rest position to the nearest position safe from this enemy.
+ *
+ * Distinct from `retreatCm`, which is the distance from the *nearest* exposed cell
+ * to cover. For an enemy that can already see you where you sit, the retreat that
+ * matters is the one starting where you actually are, and it can be much longer.
+ * Deriving the fuse from the other number would hand out fuses too short to beat.
+ */
+export function retreatFromRestCm(lat: Lattice, cover: Uint8Array, rest: Point3): number {
+  let best = Infinity
+  for (let k = 0; k < lat.nz; k++)
+    for (let j = 0; j < lat.ny; j++)
+      for (let i = 0; i < lat.nx; i++) {
+        if (!cover[cellIndex(lat, i, j, k)]) continue
+        const d = dist(cellCentre(lat, i, j, k), rest)
+        if (d < best) best = d
+      }
+  return best
+}
+
 export function fuseForFairRetreat(env: Envelope, retreatCm: number, marginS = 0.55): number {
   if (!(env.vmax > 0) || !Number.isFinite(retreatCm)) return Infinity
   return REACTION_S + env.latency + retreatCm / env.vmax + marginS
@@ -155,6 +192,14 @@ export interface AssessEnemyOptions {
   readonly leanFraction?: number
   /** Set by the caller from reachCm(lattice, rest); avoids recomputing per enemy. */
   readonly reachCm: number
+  /**
+   * Whether an enemy that can already see the rest position may ship. Off by
+   * default, so I2 and every test written against it hold unchanged; the game
+   * turns it on deliberately. See the `restExposed` branch of `assessEnemy`.
+   */
+  readonly allowInTheOpen?: boolean
+  /** cm from rest to the nearest cell safe from this enemy. Only read when it can see rest. */
+  readonly restRetreatCm?: number
 }
 
 /**
@@ -173,6 +218,7 @@ export function assessEnemy(
 ): EnemyAssessment {
   const jitterK = opts.jitterK ?? 2
   const leanFraction = opts.leanFraction ?? 0.3
+  const inTheOpen = opts.allowInTheOpen ?? false
   const cover = coverMask(lat, exposed)
   const exposedCells = maskCount(exposed)
   const coveredCells = maskCount(cover)
@@ -182,7 +228,7 @@ export function assessEnemy(
   if (exposedCells === 0) {
     return {
       ...base, leanCm: Infinity, windowCm: 0, retreatCm: Infinity, retreatBudgetCm: 0,
-      fair: false, reject: 'not-shootable',
+      verb: 'peek', fair: false, reject: 'not-shootable',
     }
   }
   if (coveredCells === 0) {
@@ -190,7 +236,7 @@ export function assessEnemy(
     // is no such thing as playing well against it.
     return {
       ...base, leanCm: 0, windowCm: 0, retreatCm: Infinity, retreatBudgetCm: 0,
-      fair: false, reject: 'no-cover',
+      verb: 'peek', fair: false, reject: 'no-cover',
     }
   }
 
@@ -208,7 +254,7 @@ export function assessEnemy(
   if (!Number.isFinite(enemy.fuseS)) {
     return {
       ...base, leanCm: Infinity, windowCm: 0, retreatCm: Infinity, retreatBudgetCm: 0,
-      fair: false, reject: 'cannot-retreat',
+      verb: 'peek', fair: false, reject: 'cannot-retreat',
     }
   }
 
@@ -224,11 +270,34 @@ export function assessEnemy(
   const retreatCm = gapCm(lat, exposed, cover)
   const usableS = Math.max(0, enemy.fuseS - REACTION_S - env.latency)
   const retreatBudgetCm = env.vmax * usableS
-  const full = { ...base, leanCm, windowCm, retreatCm, retreatBudgetCm }
+  const full = { ...base, leanCm, windowCm, retreatCm, retreatBudgetCm, verb: 'peek' as const }
 
-  // Sitting still must not be lethal. An enemy that can already shoot you where
-  // you rest is not a decision about exposure, it is a punishment for existing.
-  if (restExposed) return { ...full, fair: false, reject: 'exposed-at-rest' }
+  /**
+   * An enemy that can already shoot you where you sit.
+   *
+   * The original rule refused these outright — *sitting still must not be lethal* —
+   * and that was the right rule for the hunt this project began as, where an
+   * already-visible target left nothing to find. In a cover shooter it threw away
+   * the larger half of every room, and with it the other half of the verb. Because
+   * exposure is symmetric, an enemy that can see you at rest is one you can shoot
+   * at rest: the decision is *shoot it now or get out of the way*, and it is a real
+   * decision rather than a punishment.
+   *
+   * What makes it fair is the retreat, measured from **rest** rather than from the
+   * nearest exposed cell, and required to fit the budget the fuse allows. The
+   * window criterion does not apply: you are not being asked to find and hold a
+   * position, you are being asked to leave one.
+   */
+  if (restExposed) {
+    if (!inTheOpen) return { ...full, fair: false, reject: 'exposed-at-rest' }
+    const fromRest = opts.restRetreatCm ?? Infinity
+    if (!Number.isFinite(fromRest) || fromRest > retreatBudgetCm) {
+      return { ...full, retreatCm: fromRest, fair: false, reject: 'cannot-retreat' }
+    }
+    return {
+      ...full, leanCm: 0, retreatCm: fromRest, verb: 'duck', fair: true, reject: null,
+    }
+  }
   if (leanCm < leanFraction * opts.reachCm) {
     return { ...full, fair: false, reject: 'exposed-at-rest' }
   }
@@ -244,6 +313,7 @@ export function assessEnemy(
 }
 
 export interface EnemyLineupOptions {
+  readonly allowInTheOpen?: boolean
   readonly pitch?: number
   readonly viewport?: Viewport
   readonly jitterK?: number
@@ -278,16 +348,27 @@ export function assessEnemies(
     const exposed = engageableMask(lattice, scan.occluders, at, view, radius)
     const cover = coverMask(lattice, exposed)
     const retreat = gapCm(lattice, exposed, cover)
-    const fuseS = fuseForFairRetreat(env, retreat, opts.fuseMarginS)
+    const restExposed =
+      visible(env.rest, at, scan.occluders) && onScreen(env.rest, at, view, radius)
+    /**
+     * For an enemy that can see the rest position, the retreat that has to fit the
+     * fuse starts where the player actually is. `retreat` is the distance from the
+     * *nearest* exposed cell to cover, which for one of these is typically much
+     * shorter and would hand out a fuse nobody can beat.
+     */
+    const restRetreat = restExposed ? retreatFromRestCm(lattice, cover, env.rest) : 0
+    const fuseS = fuseForFairRetreat(env, Math.max(retreat, restRetreat), opts.fuseMarginS)
     assessments.push(
       assessEnemy(
         lattice,
         { at, radius, fuseS },
         env,
         exposed,
-        visible(env.rest, at, scan.occluders) && onScreen(env.rest, at, view, radius),
+        restExposed,
         {
           reachCm: reach,
+          restRetreatCm: restRetreat,
+          ...(opts.allowInTheOpen === undefined ? {} : { allowInTheOpen: opts.allowInTheOpen }),
           ...(opts.jitterK === undefined ? {} : { jitterK: opts.jitterK }),
           ...(opts.leanFraction === undefined ? {} : { leanFraction: opts.leanFraction }),
         },

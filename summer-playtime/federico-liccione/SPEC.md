@@ -373,6 +373,32 @@ of synthetic envelopes (including degenerate ones).
   the reason and the counts, never an empty-but-valid level.
 - **I9 — degenerate body.** An envelope the size of a 2 cm ball yields a refusal
   or an explicitly reduced mode. Never an unfair level.
+- **I11 — a lineup is escapable, not just each enemy in it.** Added after the
+  fact, and it is the price of a change I did not foresee when I wrote I2. The
+  combat path now ships a minority of enemies that can already see the rest
+  position — `verb: 'duck'`, at most a quarter of what stands — because exposure
+  is symmetric and one that can shoot you sitting still is one you can shoot
+  sitting still. That is the other half of the verb, and refusing it threw away
+  the largest class of candidate in every room.
+
+  I2 still holds where it was written (the hunt path, `generate`), and the enemy
+  path's exception is opt-in and named. But I2 was also doing a *second* job
+  nobody had written down: while every enemy needed a lean, the rest position was
+  safe from all of them at once, so the player always had somewhere to be. The
+  per-enemy theorem never said that — it says each enemy has cover and that its
+  own cover is reachable inside its own fuse, and never that the covers
+  intersect. So the guarantee has to be earned instead, and `chooseLineup`
+  earns it: **no lineup may leave the body without a refuge safe from everything
+  standing, wide enough to hold against its own tracker jitter, and reachable
+  inside the tightest fuse in the lineup.** The middle clause is not decoration —
+  requiring only that *some* cell be safe let a lineup through that threatened
+  the whole envelope at every distance, which the instrument caught and which is a
+  firing range rather than a game. A refuge is held against the same jitter a peek
+  window is held against, so it gets the same criterion. Tested in
+  `tests/lineup.test.ts`, including a test that the ordering the guard refuses
+  really does leave nowhere safe — the guard costs raw threat coverage, and that
+  trade is the point.
+
 - **I10 — the window is a window.** For any eye position in `E`, the **entire
   screen plane is invariant** under eye motion: a point at `z = 0` projects to
   the same place whatever the player does, and the four corners land on the four

@@ -19,6 +19,8 @@ import {
   latticeOf,
   maskCount,
   reachCm,
+  onScreen,
+  DEFAULT_VIEWPORT,
   visible,
 } from '../src/engine'
 import type { Billboard, Enemy, Envelope, Point3 } from '../src/engine'
@@ -242,5 +244,90 @@ describe('the fuse is derived from the body, not tuned', () => {
   it('a body that cannot move gets no enemies at all', () => {
     const still: Envelope = { ...env, vmax: 0 }
     expect(assessEnemies(room, still).assessments.every((a) => !a.fair)).toBe(true)
+  })
+})
+
+describe('enemies that can already see you', () => {
+  /**
+   * The other half of the verb, and the largest class the solver used to throw
+   * away: 75 to 176 candidates per level rejected as `exposed-at-rest`. That was
+   * right for the hunt this project began as — an already-visible target left
+   * nothing to find — and wrong for a cover shooter, where being seen is the
+   * situation rather than the failure. Because exposure is symmetric, one that can
+   * see you sitting still is one you can shoot sitting still.
+   */
+  const openRoom: RoomScan = {
+    source: 'fixture',
+    occluders: [{ z: -60, x0: -40, x1: -14, y0: -20, y1: 20, label: 'left block' }],
+    // Straight ahead, unobstructed from rest. Off to the left, hidden by the block.
+    anchors: [{ x: 0, y: 0, z: -200 }, { x: -60, y: 0, z: -200 }],
+    noSpawn: [],
+    provenance: { model: 'test', atISO: '2026-08-28T00:00:00.000Z', costCents: 0 },
+  }
+
+  it('are refused by default, which is I2 still holding', () => {
+    const { assessments } = assessEnemies(openRoom, seated())
+    expect(assessments[0]!.fair).toBe(false)
+    expect(assessments[0]!.reject).toBe('exposed-at-rest')
+  })
+
+  it('ship when asked for, as a different verb rather than a different rule', () => {
+    const { assessments } = assessEnemies(openRoom, seated(), { allowInTheOpen: true })
+    const a = assessments[0]!
+    expect(a.fair).toBe(true)
+    expect(a.verb).toBe('duck')
+    // Nothing to lean for: it is already looking at you, and you at it.
+    expect(a.leanCm).toBe(0)
+    // And the retreat it reports is the one that matters — from where you are.
+    expect(a.retreatCm).toBeGreaterThan(0)
+    expect(a.retreatCm).toBeLessThanOrEqual(a.retreatBudgetCm)
+  })
+
+  it('leave the ones that need a lean alone', () => {
+    const { assessments } = assessEnemies(openRoom, seated(), { allowInTheOpen: true })
+    expect(assessments[1]!.verb).toBe('peek')
+  })
+
+  it('give a slower body more time rather than a harder game', () => {
+    /**
+     * Worth being precise about what this checks, because I wrote the test wrong
+     * first. `assessEnemies` *derives* the fuse from the retreat, so the retreat
+     * always fits and `cannot-retreat` can never fire from a slow body — it fires
+     * when there is no retreat at all. What a slow body gets is a longer fuse, and
+     * that is the direction the whole solver cuts.
+     */
+    const slow = { ...seated(), vmax: seated().vmax / 3 }
+    const quick = assessEnemies(openRoom, seated(), { allowInTheOpen: true }).assessments[0]!
+    const crawl = assessEnemies(openRoom, slow, { allowInTheOpen: true }).assessments[0]!
+    expect(crawl.enemy.fuseS).toBeGreaterThan(quick.enemy.fuseS)
+    expect(crawl.fair).toBe(true)
+  })
+
+  it('can be shot from the rest position, which is the whole claim', () => {
+    /**
+     * The feature adds no mechanic, only permission, and this is why: exposure has
+     * no direction. If it can shoot you where you sit then you can shoot it where
+     * you sit, so *take it now or get out of the way* is a decision the existing
+     * rules already resolve. Asserted against the same two predicates the game
+     * checks every frame.
+     */
+    const env = seated()
+    const { assessments } = assessEnemies(openRoom, env, { allowInTheOpen: true })
+    const a = assessments[0]!
+    expect(a.verb).toBe('duck')
+    expect(visible(env.rest, a.enemy.at, openRoom.occluders)).toBe(true)
+    expect(onScreen(env.rest, a.enemy.at, DEFAULT_VIEWPORT, a.enemy.radius)).toBe(true)
+    // And it still has cover somewhere, or it would have been refused as no-cover.
+    expect(a.coveredCells).toBeGreaterThan(0)
+  })
+
+  it('get a fuse derived from the retreat from rest, not from the shortest one', () => {
+    // `retreatCm` in the general case is the gap from the *nearest* exposed cell to
+    // cover, which for one of these is typically far shorter than the move the
+    // player actually has to make. Deriving the fuse from it would hand out fuses
+    // nobody can beat.
+    const open = assessEnemies(openRoom, seated(), { allowInTheOpen: true }).assessments[0]!
+    const closed = assessEnemies(openRoom, seated()).assessments[0]!
+    expect(open.enemy.fuseS).toBeGreaterThanOrEqual(closed.enemy.fuseS)
   })
 })

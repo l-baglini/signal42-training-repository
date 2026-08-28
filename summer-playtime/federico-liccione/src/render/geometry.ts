@@ -432,6 +432,9 @@ export const PALETTE = {
   enemyAimed: [1.0, 0.66, 0.32] as Rgb,
   threat: [0.95, 0.32, 0.35] as Rgb,
   threatMarker: [1.0, 0.45, 0.28] as Rgb,
+  /** Which way to move to break a sightline. Cold when the fuse is young. */
+  breakCold: [0.55, 0.80, 1.0] as Rgb,
+  breakHot: [1.0, 0.30, 0.34] as Rgb,
   /** Cover with something behind it. Amber for one, hot for a crowd. */
   occupied: [1.0, 0.72, 0.24] as Rgb,
   occupiedHot: [1.0, 0.36, 0.30] as Rgb,
@@ -585,6 +588,16 @@ export interface SceneInput {
     readonly count: number
   }> | undefined
   /**
+   * Where to move to break the sightline of whatever is currently shooting at you,
+   * as an offset from the eye in cm, plus how urgent it is, 0..1.
+   *
+   * Drawn on the screen plane rather than in the world, because it is an
+   * instruction to the *body* and not an object in the room. An enemy that can see
+   * you where you sit is answered by shooting it or by moving, and moving is only a
+   * decision if the direction is legible.
+   */
+  readonly breakTo?: { readonly dx: number; readonly dy: number; readonly urgency: number } | undefined
+  /**
    * Where each occluder came from in the scan's frame, so the cover can be drawn
    * with the pixels it was measured from. Parallel to `occluders`.
    *
@@ -648,6 +661,27 @@ export function buildScene(input: SceneInput): Mesh {
     if (n <= 0) continue
     const tone = mix(PALETTE.occupied, PALETTE.occupiedHot, (n - 1) / 2)
     parts.push(frameMesh(box.z + 0.4, box.x0, box.x1, box.y0, box.y1, 2.2, tone))
+  }
+
+  if (input.breakTo) {
+    const { dx, dy, urgency } = input.breakTo
+    const u = Number.isFinite(urgency) ? Math.max(0, Math.min(1, urgency)) : 0
+    const len = Math.hypot(dx, dy)
+    if (len > 0.5) {
+      // A short bar on the screen plane, pointing the way and brightening with the
+      // fuse. Nudged in front of everything: it is an overlay, not scenery.
+      const nx = dx / len
+      const ny = dy / len
+      const reach = 9 + 7 * u
+      const half = 1.6 + 1.2 * u
+      const tone = mix(PALETTE.breakCold, PALETTE.breakHot, u)
+      for (let k = 1; k <= 3; k++) {
+        const cx = nx * reach * (k / 3)
+        const cy = ny * reach * (k / 3)
+        const r = half * (k / 3)
+        parts.push(quad(1.5, cx - r, cx + r, cy - r, cy + r, tone))
+      }
+    }
   }
 
   input.targets.forEach((t, i) => {

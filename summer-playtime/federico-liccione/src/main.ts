@@ -11,8 +11,11 @@ import {
   assessEnemies,
   blockingOccluders,
   chooseLineup,
+  nearestBreak,
   onScreen,
+  latticeOf,
   playEnvelope,
+  reachCm,
   threatCoverage,
   visible,
 } from './engine'
@@ -97,6 +100,8 @@ let envelope: Envelope = referenceBody(tracker.latencyS())
  */
 const PLAY_FRACTION = 0.68
 const COMFORT_CM = 14
+/** How far the play envelope actually reaches. Set by `rebuildLineup`. */
+let playReachCm = 10
 let bodySource = 'reference body'
 let room = rooms[0]!.scan
 let roomSource = rooms[0]!.name
@@ -210,7 +215,22 @@ function rebuildLineup(): void {
    * further than this still works and still helps.
    */
   const play = playEnvelope(envelope, { fraction: PLAY_FRACTION, comfortCm: COMFORT_CM })
-  const { assessments, lattice } = assessEnemies(room, play, { viewport })
+  playReachCm = reachCm(latticeOf(play, 4), play.rest)
+  const { assessments, lattice } = assessEnemies(room, play, {
+    viewport,
+    /**
+     * Enemies that can already see the rest position may ship.
+     *
+     * They were the largest rejected class in every room — 75 to 176 candidates per
+     * level — and refusing them was correct for the hunt this began as, where an
+     * already-visible target left nothing to find. In a cover shooter it threw away
+     * the other half of the verb. Exposure is symmetric, so one that can see you
+     * sitting still is one you can shoot sitting still: the decision is *take it now
+     * or get out of the way*. `chooseLineup` guarantees there is still somewhere
+     * safe from everything standing, and that it is reachable in time.
+     */
+    allowInTheOpen: true,
+  })
   rejectCounts = {}
   for (const a of assessments) {
     if (!a.fair && a.reject) rejectCounts[a.reject] = (rejectCounts[a.reject] ?? 0) + 1
@@ -228,7 +248,14 @@ function rebuildLineup(): void {
     radius: a.enemy.radius,
     // The game's own difficulty measure, so the lineup opens with the enemies it
     // scores lowest and saves the long, precise ones for later in the round.
-    cost: pointsFor({ leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS }),
+    cost: pointsFor({
+      leanCm: a.leanCm,
+      windowCm: a.windowCm,
+      fuseS: a.enemy.fuseS,
+      verb: a.verb,
+      retreatCm: a.retreatCm,
+    }),
+    retreatBudgetCm: a.retreatBudgetCm,
   }))
   const order = chooseLineup(lattice, play, room.occluders, cands, { viewport, seed: roundSeed })
   // Deep enough that a whole round of replacements is still new ground. They
@@ -242,7 +269,13 @@ function rebuildLineup(): void {
   enemies = chosen.map((a) => ({
     at: a.enemy.at,
     radius: a.enemy.radius,
-    spec: { leanCm: a.leanCm, windowCm: a.windowCm, fuseS: a.enemy.fuseS },
+    spec: {
+      leanCm: a.leanCm,
+      windowCm: a.windowCm,
+      fuseS: a.enemy.fuseS,
+      verb: a.verb,
+      retreatCm: a.retreatCm,
+    },
     leanCm: a.leanCm,
     windowCm: a.windowCm,
     retreatCm: a.retreatCm,
@@ -305,14 +338,41 @@ function occupiedCover(eye: Point3): Array<{ box: Billboard; count: number }> {
   return [...tally.values()]
 }
 
+/**
+ * Which way to move, and how badly.
+ *
+ * Answered for the enemy whose fuse is furthest along — the one that will actually
+ * hit you — and only while something can see you. `nearestBreak` reads the same
+ * `visible` the rule reads, so the direction it gives always works.
+ *
+ * The range offered is the play envelope's own, so the instruction is never to move
+ * further than this body was measured to move.
+ */
+function breakDirection(eye: Point3): { dx: number; dy: number; urgency: number } | undefined {
+  if (combat.phase !== 'playing') return undefined
+  let worst: { at: Point3; f: number } | null = null
+  for (const a of combat.active) {
+    const e = enemies[a.index]
+    if (!e || !exposed[a.index]) continue
+    const f = e.spec.fuseS > 0 ? a.exposedS / e.spec.fuseS : 0
+    if (!worst || f > worst.f) worst = { at: e.at, f }
+  }
+  if (!worst || worst.f <= 0.08) return undefined
+  const to = nearestBreak(eye, worst.at, room.occluders, playReachCm)
+  if (!to) return undefined
+  return { dx: to.x - eye.x, dy: to.y - eye.y, urgency: worst.f }
+}
+
 function renderScene(): void {
+  const eye = tracker.position() ?? envelope.rest
   renderer.upload(
     buildScene({
       occluders: room.occluders,
       occluderUvs: showPhoto ? room.occluders.map((o) => roomUv.get(geomKey(o))) : undefined,
       targets: [],
       enemies: combat.phase === 'playing' ? views() : [],
-      occupied: occupiedCover(tracker.position() ?? envelope.rest),
+      occupied: occupiedCover(eye),
+      breakTo: breakDirection(eye),
       mood,
       skylineSeed,
       threatMarker:
@@ -378,12 +438,23 @@ function renderRound(): void {
   el('hold').style.display = 'none'
   el('warm').style.display = 'none'
 
-  if (enemies.length === 0) {
+  /**
+   * Too thin counts as a refusal, not just empty.
+   *
+   * A playtester found a level presenting its targets in one specific spot, and the
+   * cause was that it had four fair positions and the game cheerfully stood eight
+   * enemies on them. Refusal is a first-class outcome in this project; "not enough
+   * to make a round" is a refusal, and saying so with the counts is more use than
+   * playing a broken round.
+   */
+  if (enemies.length < DEFAULT_COMBAT.waveSize) {
     el('roundTitle').textContent = 'No round to play'
     el('roundBody').textContent =
-      `Nothing in this room can be fought fairly. ${
-        Object.entries(rejectCounts).map(([k, n]) => `${n} ${k}`).join(', ')
-      }.`
+      (enemies.length === 0
+        ? 'Nothing in this room can be fought fairly. '
+        : `Only ${enemies.length} position${enemies.length === 1 ? '' : 's'} in this room ` +
+          `can be fought fairly, and a round needs ${DEFAULT_COMBAT.waveSize}. `) +
+      `${Object.entries(rejectCounts).map(([k, n]) => `${n} ${k}`).join(', ')}.`
     return
   }
   if (combat.phase === 'ready') {
@@ -846,7 +917,7 @@ addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase()
   if (k === ' ') {
     e.preventDefault()
-    if (combat.phase !== 'playing' && enemies.length > 0) {
+    if (combat.phase !== 'playing' && enemies.length >= DEFAULT_COMBAT.waveSize) {
       roundSeed++
       rebuildLineup()
       combat = startCombat(DEFAULT_COMBAT)
@@ -970,7 +1041,7 @@ function frame(now: number): void {
       firing,
     })
     for (const ev of combat.events) {
-      if (ev.kind === 'spawned') sfx.arrive()
+      if (ev.kind === 'spawned' || ev.kind === 'moved') sfx.arrive()
       if (ev.kind === 'miss' || ev.kind === 'killed') sfx.shot()
       if (ev.kind === 'killed') sfx.kill()
       if (ev.kind === 'shot') {

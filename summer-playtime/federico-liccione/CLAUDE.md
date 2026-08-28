@@ -183,6 +183,21 @@ wider than its own front face, which would promise cover the solver does not
 grant. `coverMesh` bevels *inwards* and a test asserts every vertex is inside the
 rectangle and at exactly its depth.
 
+**Two verbs, not one.** Most enemies need a lean to be seen (`verb: 'peek'`).
+A minority — capped at a quarter of the lineup by `inTheOpenShare` — can already
+see the rest position (`verb: 'duck'`), which by the symmetry means they can be
+shot from it: take it now or get out of the way. This is opt-in via
+`allowInTheOpen` and **off by default**, so I2 and every test written against it
+still hold for the hunt path. What replaced I2's silent second job — that rest is
+safe from everything at once — is I11, enforced by `escapable` in
+`src/engine/lineup.ts`. Do not weaken it to "some cell is safe": that version let
+through a lineup threatening 100% of the body's range.
+
+**Enemies reposition rather than move.** `repositionAfterS` steps an unobserved
+enemy with a cold fuse to another position **the solver has already judged**. Do
+not make them move freely: fairness here is a claim about a position, and a
+trajectory would need a different theorem.
+
 **The room stands full.** Eight enemies from the first tick, they never leave, and
 a kill is replaced after a beat. *Which* eight is `chooseLineup` in
 `src/engine/lineup.ts` — greedy maximum coverage, weighted by where the body

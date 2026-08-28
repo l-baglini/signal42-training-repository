@@ -34,12 +34,19 @@
  * all and no candidate can reach them, which is not a waste — it is the invariant
  * being inert, exactly as it should be.
  *
- * Two things this deliberately does not do. It does not try to cover the whole
- * envelope: the safe pocket has to survive, and it does, because I2 guarantees no
- * shipped enemy can engage from the rest position — so the complement of the
- * union always contains it, whatever the lineup. And it does not touch fairness:
- * every candidate handed to it has already been judged one at a time, and
- * ordering fair things cannot make them unfair.
+ * What it must not do is cover the whole envelope. The safe pocket has to survive,
+ * and while every enemy needed a lean it survived for free: I2 guaranteed none of
+ * them could engage from the rest position, so the complement of the union
+ * contained it whatever the lineup. Enemies that can see you at rest remove that
+ * free guarantee, so `escapable` earns it instead — no lineup is allowed to leave
+ * the body with nowhere safe, or with the only safe place further away than the
+ * tightest fuse in the lineup allows. That is a *stronger* statement than the
+ * per-enemy theorem, which only ever said each enemy's own cover was reachable and
+ * never that the covers intersect.
+ *
+ * It still does not touch fairness in the other direction: every candidate handed
+ * to it has already been judged one at a time, and ordering fair things cannot
+ * make them unfair.
  *
  * Pure, deterministic, and inside the engine, because it decides what the player
  * faces. Perception proposed these positions; it has no say in which ones stand.
@@ -47,7 +54,8 @@
 import type { Billboard, Envelope, Point3 } from './types'
 import { scaledAbout } from './envelope'
 import { cellCentre, cellIndex, latticeOf, reachCm, type Lattice } from './lattice'
-import { engageableMask } from './exposure'
+import { engageableMask, gapCm } from './exposure'
+import { inradiusCm } from './footprint'
 import { DEFAULT_VIEWPORT, type Viewport } from './viewport'
 
 export interface PlayRangeOptions {
@@ -109,6 +117,57 @@ export interface LineupCandidate {
    * `leanCm` and get sensible behaviour.
    */
   readonly cost: number
+  /**
+   * cm this body can travel inside this enemy's fuse, after reaction and latency.
+   * From the assessment. Used to keep a *lineup* escapable, which is a stronger
+   * statement than each enemy in it being escapable — see `escapable`.
+   */
+  readonly retreatBudgetCm?: number
+  /** From the assessment. `duck` ones can already see the rest position. */
+  readonly verb?: 'peek' | 'duck'
+}
+
+/**
+ * Is there somewhere safe from **all** of these at once, is it big enough to hold,
+ * and can it be reached in time?
+ *
+ * The per-enemy theorem says each enemy has cover and that the cover is reachable
+ * inside that enemy's fuse. It does not say the covers *intersect*, and it never
+ * did — a gap that was harmless while every enemy needed a lean, because the rest
+ * position was then safe from all of them by construction (I2). Allowing enemies
+ * that can see you at rest removes that free guarantee, so it has to be earned.
+ *
+ * Three conditions, and the middle one I got wrong first. Requiring merely that
+ * *some* cell be safe let a lineup through that threatened essentially the whole
+ * envelope: the tool reported 100% of the body's range under threat at every
+ * distance, which is a firing range and not a game. A refuge has to be **held**,
+ * against the same tracker jitter that a peek window has to be held against — so
+ * it gets the same criterion, `inradius > jitterK * jitter`. The symmetry is not a
+ * coincidence: standing somewhere precise is exactly as hard whichever direction
+ * the bullets are going.
+ *
+ * Checked on the union rather than pairwise, so it costs two distance transforms
+ * per enemy accepted rather than one per pair.
+ */
+function escapable(
+  lat: Lattice,
+  env: Envelope,
+  union: Uint8Array,
+  budgetCm: number,
+  jitterK: number,
+): boolean {
+  const safe = new Uint8Array(union.length)
+  let safeCells = 0
+  for (let i = 0; i < union.length; i++) {
+    if (lat.inside[i] && !union[i]) {
+      safe[i] = 1
+      safeCells++
+    }
+  }
+  if (safeCells === 0) return false
+  if (inradiusCm(lat, safe) <= jitterK * env.jitter) return false
+  const gap = gapCm(lat, union, safe)
+  return Number.isFinite(gap) && gap <= budgetCm
 }
 
 export interface LineupOptions {
@@ -118,6 +177,21 @@ export interface LineupOptions {
    * tie in preference, never the coverage decision itself.
    */
   readonly seed?: number
+  /**
+   * What share of the lineup may be enemies that can already see the rest position.
+   *
+   * A cap rather than a ban, and it has to be a *share of the whole order* rather
+   * than a count per covering block — which is how I wrote it first, and the tool
+   * caught it immediately: the first eight positions span three or four covering
+   * blocks, so a cap of two per block let eight through. Coverage is weighted
+   * towards where the body spends its time and these cover exactly that, so left
+   * uncapped they win every pick and the room becomes a firing line with no cover
+   * in it. A quarter is two in the eight that stand: the room is already looking at
+   * you when the round starts, and the rest of it still has to be found by leaning.
+   */
+  readonly inTheOpenShare?: number
+  /** Multiple of tracker jitter a refuge must be wider than. Matches the solver's. */
+  readonly jitterK?: number
 }
 
 /** A hash, not a generator: same index and seed, same number, no state. */
@@ -172,6 +246,8 @@ export function chooseLineup(
 ): readonly number[] {
   const view = opts.viewport ?? DEFAULT_VIEWPORT
   const seed = opts.seed ?? 1
+  const inTheOpenShare = Math.max(0, Math.min(1, opts.inTheOpenShare ?? 0.25))
+  const jitterK = opts.jitterK ?? 2
   const masks = masksFor(lat, occluders, candidates, view)
   const weight = occupancyWeights(lat, env)
   // A few per cent of jitter on the preference, so two rounds of the same level
@@ -182,15 +258,25 @@ export function chooseLineup(
   const order: number[] = []
   const taken = new Set<number>()
   const union = new Uint8Array(lat.inside.length)
+  const trial = new Uint8Array(lat.inside.length)
+  // Counted across the whole order, not per covering block. See `inTheOpenShare`.
+  let inTheOpen = 0
 
   for (;;) {
     union.fill(0)
     let added = 0
+    let budget = Infinity
+    // Candidates refused by the escapability check, for this covering round only.
+    const blocked = new Set<number>()
     for (;;) {
       let best = -1
       let bestGain = 0
       for (let i = 0; i < candidates.length; i++) {
-        if (taken.has(i)) continue
+        if (taken.has(i) || blocked.has(i)) continue
+        if (
+          candidates[i]!.verb === 'duck' &&
+          inTheOpen >= Math.floor((order.length + 1) * inTheOpenShare)
+        ) continue
         const m = masks[i]!
         let gain = 0
         for (let n = 0; n < m.length; n++) if (m[n] && !union[n]) gain += weight[n]!
@@ -201,11 +287,28 @@ export function chooseLineup(
         }
       }
       if (best < 0) break
+
+      /**
+       * Verified **after** choosing rather than filtered before it: the check costs
+       * a distance transform, and the greedy loop looks at every candidate on every
+       * pick. This way it is one verification per accepted enemy plus one per
+       * rejection, not one per candidate per pick.
+       */
+      const m = masks[best]!
+      trial.set(union)
+      for (let n = 0; n < m.length; n++) if (m[n]) trial[n] = 1
+      const nextBudget = Math.min(budget, candidates[best]!.retreatBudgetCm ?? Infinity)
+      if (!escapable(lat, env, trial, nextBudget, jitterK)) {
+        blocked.add(best)
+        continue
+      }
+
       taken.add(best)
       order.push(best)
       added++
-      const m = masks[best]!
-      for (let n = 0; n < m.length; n++) if (m[n]) union[n] = 1
+      if (candidates[best]!.verb === 'duck') inTheOpen++
+      budget = nextBudget
+      union.set(trial)
     }
     if (added === 0) break
   }

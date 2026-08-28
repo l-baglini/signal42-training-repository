@@ -39,6 +39,21 @@ export interface CombatConfig {
   readonly hitPenaltyS: number
   /** The beat before a killed enemy is replaced, so the kill reads. */
   readonly waveGapS: number
+  /**
+   * How long an enemy will hold a position nobody has looked at before moving to
+   * another one.
+   *
+   * The answer to *"il bersaglio continua a presentarsi in un solo punto
+   * specifico"*, and to the playtester's own suggestion of moving targets — in the
+   * only form this engine can honestly support. A freely moving enemy would make
+   * every mask time-varying and fairness a statement about a trajectory, which is
+   * not provable at the cost of the rest of the solver. An enemy that **steps
+   * between positions the solver has already judged** costs nothing: every place
+   * it can be has been proved fair, escapable and on-screen before the round
+   * started. It only ever moves while unobserved, so nothing ever teleports in
+   * front of the player.
+   */
+  readonly repositionAfterS: number
   /** How fast the fuse drains once you are back behind cover, as a multiple. */
   readonly coverDrain: number
   /**
@@ -58,6 +73,7 @@ export const DEFAULT_COMBAT: CombatConfig = {
   waveSize: 8,
   hitPenaltyS: 6,
   waveGapS: 0.8,
+  repositionAfterS: 6,
   // Forgiving on purpose: ducking should feel like safety, and a tracker flicker
   // must not hand the player a free reset either.
   coverDrain: 3,
@@ -68,6 +84,14 @@ export const DEFAULT_COMBAT: CombatConfig = {
 export interface EnemySpec {
   readonly leanCm: number
   readonly windowCm: number
+  /**
+   * How the player answers it. `duck` enemies can see the rest position, which by
+   * the symmetry means they can be shot from it — so they score on how far you
+   * must move to escape rather than on how far you must lean to see.
+   */
+  readonly verb?: 'peek' | 'duck'
+  /** cm from rest to the nearest position safe from it. Only meaningful for `duck`. */
+  readonly retreatCm?: number
   /** How long the player may be exposed before the shot lands. */
   readonly fuseS: number
 }
@@ -84,6 +108,7 @@ export type CombatEvent =
   | { readonly kind: 'shot'; readonly index: number; readonly penaltyS: number }
   | { readonly kind: 'miss' }
   | { readonly kind: 'spawned'; readonly index: number }
+  | { readonly kind: 'moved'; readonly index: number }
   | { readonly kind: 'over' }
 
 export interface CombatState {
@@ -106,6 +131,13 @@ export interface CombatState {
    * spot. Correct by the old rule and absurd on screen.
    */
   readonly dead: readonly number[]
+  /**
+   * Positions vacated by an enemy that moved on. Excluded from the next pick for
+   * the same reason the dead are: the top-up takes the front of the coverage order,
+   * so without this a body that just left a position would be handed straight back
+   * to it — the identical mistake as the respawn, one tick apart.
+   */
+  readonly parked: readonly number[]
   /** How many times the room has been topped up. */
   readonly wave: number
   readonly events: readonly CombatEvent[]
@@ -127,6 +159,12 @@ export interface CombatTick {
  * far you had to lean out, and how precisely you had to hold it there.
  */
 export function pointsFor(spec: EnemySpec): number {
+  // One that can already see you is not scored on finding it — there is nothing to
+  // find. It is scored on how far you have to get out of the way, which is the
+  // whole cost it imposes.
+  if (spec.verb === 'duck') {
+    return Math.max(10, Math.round(16 * (spec.retreatCm ?? 0) + 40))
+  }
   return Math.max(10, Math.round(14 * spec.leanCm + 180 / Math.max(spec.windowCm, 0.5)))
 }
 
@@ -142,6 +180,7 @@ export function newCombat(cfg: CombatConfig = DEFAULT_COMBAT): CombatState {
     active: [],
     nextWaveAtS: 0,
     dead: [],
+    parked: [],
     wave: 0,
     events: [],
   }
@@ -166,6 +205,7 @@ export function step(
   const tS = tick.tS
   let { score, killed, timesShot, shotsFired, wave, nextWaveAtS, endsAtS } = state
   let dead = state.dead
+  let parked = state.parked
 
   /**
    * The trigger resolves before the fuses. A player who fires and ducks on the
@@ -231,6 +271,29 @@ export function step(
   }
 
   /**
+   * An enemy nobody has looked at moves on.
+   *
+   * Only while it is unobserved and only if its fuse is cold, so it never
+   * disappears out from under a shot or materialises in front of the player. The
+   * position it vacates goes back into the pool, which is the point: a room whose
+   * bodies never move presents the same specific spot for ninety seconds.
+   */
+  if (cfg.repositionAfterS > 0) {
+    const staying: ActiveEnemy[] = []
+    for (const a of active) {
+      const stale = tS - a.bornS >= cfg.repositionAfterS
+      if (stale && !tick.exposed[a.index] && a.exposedS <= 0) {
+        events.push({ kind: 'moved', index: a.index })
+        parked = [...parked, a.index]
+        nextWaveAtS = Math.min(nextWaveAtS, tS)
+        continue
+      }
+      staying.push(a)
+    }
+    active = staying
+  }
+
+  /**
    * Top the room up.
    *
    * At the start of a round it fills all at once — that is the whole point, and it
@@ -245,9 +308,9 @@ export function step(
    */
   if (active.length < cfg.waveSize && tS >= nextWaveAtS) {
     const standing = new Set(active.map((a) => a.index))
-    const buried = new Set(dead)
+    const spent = new Set([...dead, ...parked])
     const fresh: number[] = []
-    for (let i = 0; i < specs.length; i++) if (!standing.has(i) && !buried.has(i)) fresh.push(i)
+    for (let i = 0; i < specs.length; i++) if (!standing.has(i) && !spent.has(i)) fresh.push(i)
     /**
      * A cleared room refills from the start rather than ending the round early.
      * Ninety seconds is the contract; running out of bodies with thirty left would
@@ -255,8 +318,18 @@ export function step(
      * they can read.
      */
     if (fresh.length === 0) {
-      dead = []
-      for (let i = 0; i < specs.length; i++) if (!standing.has(i)) fresh.push(i)
+      // Vacated positions come back before killed ones do: nobody died there.
+      if (parked.length > 0) {
+        parked = []
+        for (let i = 0; i < specs.length; i++) {
+          if (!standing.has(i) && !new Set(dead).has(i)) fresh.push(i)
+        }
+      }
+      if (fresh.length === 0) {
+        dead = []
+        parked = []
+        for (let i = 0; i < specs.length; i++) if (!standing.has(i)) fresh.push(i)
+      }
     }
     const candidates = fresh
     /**
@@ -293,6 +366,7 @@ export function step(
     active: phase === 'over' ? [] : active,
     nextWaveAtS,
     dead,
+    parked,
     wave,
     events,
   }

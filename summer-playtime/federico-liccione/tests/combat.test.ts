@@ -222,6 +222,59 @@ describe('the room stands full', () => {
     expect(d.state.phase).toBe('playing')
   })
 
+  it('an enemy nobody looks at moves on rather than holding one spot all round', () => {
+    /**
+     * *"Il bersaglio continua a presentarsi in un solo punto specifico."* The
+     * playtester's own suggestion was moving targets, and this is that in the only
+     * form the engine can honestly support: a step between positions the solver has
+     * **already judged**, so every place it can be was proved fair, escapable and on
+     * screen before the round began. A freely moving enemy would make fairness a
+     * claim about a trajectory, which is not provable at the price of the rest of
+     * the solver.
+     */
+    const specs: EnemySpec[] = [
+      { leanCm: 7, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 8, windowCm: 4, fuseS: 1.4 },
+    ]
+    const d = driver({ ...cfg, waveSize: 1, repositionAfterS: 2 }, specs).at(0)
+    const first = d.index
+    d.span(0.05, 1.5)
+    expect(d.index).toBe(first)
+    d.span(1.55, 3.5)
+    expect(d.events.some((e) => e.kind === 'moved')).toBe(true)
+    expect(d.index).not.toBe(first)
+    // And nobody died for it.
+    expect(d.state.killed).toBe(0)
+    expect(d.state.dead).toEqual([])
+  })
+
+  it('does not move one the player is currently looking at', () => {
+    // Or something would vanish out from under a shot, and something else would
+    // materialise in front of a player who had earned the kill.
+    const specs: EnemySpec[] = [
+      { leanCm: 7, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 8, windowCm: 4, fuseS: 1.4 },
+    ]
+    const d = driver({ ...cfg, waveSize: 1, repositionAfterS: 2 }, specs).at(0)
+    const first = d.index
+    d.span(0.05, 4, { exposed: specs.map((_, i) => i === first) })
+    expect(d.index).toBe(first)
+  })
+
+  it('never hands a vacated position straight back to the body that left it', () => {
+    // The identical mistake as the respawn, one tick apart: the top-up takes the
+    // front of the coverage order, and the position just vacated is at the front.
+    const specs: EnemySpec[] = [
+      { leanCm: 7, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 8, windowCm: 4, fuseS: 1.4 },
+      { leanCm: 9, windowCm: 4, fuseS: 1.4 },
+    ]
+    const d = driver({ ...cfg, waveSize: 1, repositionAfterS: 1 }, specs).at(0)
+    const first = d.index
+    d.span(0.05, 2.5)
+    expect(d.index).not.toBe(first)
+  })
+
   it('never has the same enemy in play twice', () => {
     const wide: CombatConfig = { ...cfg, waveSize: 2, waveGapS: 0.1 }
     const d = driver(wide).span(0, 8)
