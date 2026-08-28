@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "probe": "vitest run --config vitest.tools.config.ts tools/probe.test.ts --reporter=basic",
     "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic",
-    "setup": "node tools/setup-assets.mjs"
+    "setup": "node tools/setup-assets.mjs",
+    "levels": "vitest run --config vitest.tools.config.ts tools/levels.test.ts --reporter=basic"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",

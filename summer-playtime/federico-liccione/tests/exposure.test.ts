@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assessEnemies,
   assessEnemy,
+  cellCentre,
   fuseForFairRetreat,
   coverMask,
   footprintMask,
@@ -64,6 +65,51 @@ describe('the symmetry', () => {
 })
 
 describe('the gap between exposure and cover', () => {
+  it('agrees with brute force, which is what it replaced', () => {
+    /**
+     * gapCm used to compare every exposed cell against every covered one — up to
+     * a million distances per enemy, which was fine for eight anchors and a
+     * two-minute timeout for four hundred. It now goes through the distance
+     * transform in linear time, so it is worth proving the two agree.
+     */
+    const small = latticeOf(env, 6)
+    const brute = (a: Uint8Array, b: Uint8Array): number => {
+      let best = Infinity
+      for (let i = 0; i < a.length; i++) {
+        if (!a[i]) continue
+        const ki = Math.floor(i / (small.nx * small.ny))
+        const ji = Math.floor((i - ki * small.nx * small.ny) / small.nx)
+        const ii = i - ki * small.nx * small.ny - ji * small.nx
+        const p = cellCentre(small, ii, ji, ki)
+        for (let j = 0; j < b.length; j++) {
+          if (!b[j]) continue
+          const kj = Math.floor(j / (small.nx * small.ny))
+          const jj = Math.floor((j - kj * small.nx * small.ny) / small.nx)
+          const ij = j - kj * small.nx * small.ny - jj * small.nx
+          const q = cellCentre(small, ij, jj, kj)
+          const d = Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z)
+          if (d < best) best = d
+        }
+      }
+      return best
+    }
+
+    let compared = 0
+    for (const at of room.anchors.slice(0, 6)) {
+      const exposed = footprintMask(small, room.occluders, at)
+      const cover = coverMask(small, exposed)
+      const fast = gapCm(small, exposed, cover)
+      const slow = brute(exposed, cover)
+      if (!Number.isFinite(slow)) {
+        expect(fast).toBe(Infinity)
+        continue
+      }
+      expect(fast).toBeCloseTo(slow, 6)
+      compared++
+    }
+    expect(compared).toBeGreaterThan(2)
+  })
+
   it('is zero when the two sets touch, and they always touch here', () => {
     // On a 2 cm lattice an exposed cell and a covered cell are neighbours at the
     // silhouette edge, so the retreat is one cell. That is the mechanic working:

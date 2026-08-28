@@ -8,7 +8,7 @@
  * `perceive/tracker.ts` is for.
  */
 import { assessEnemies, visible } from './engine'
-import type { Billboard, Envelope, Point3, RoomScan } from './engine'
+import type { Billboard, Envelope, Point3 } from './engine'
 import { validateScan } from './boundary/validate'
 import { buildScene, type EnemyView, type UvRect } from './render/geometry'
 import { Renderer } from './render/renderer'
@@ -30,6 +30,8 @@ import {
   step as stepCombat,
 } from './game/combat'
 import type { CombatState, EnemySpec } from './game/combat'
+import { LEVELS } from '../fixtures/levels/authored'
+import type { AuthoredLevel } from '../fixtures/levels/authored'
 import roomJson from '../fixtures/desk.room.json'
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -53,16 +55,30 @@ try {
   fatal(err instanceof Error ? err.message : String(err))
 }
 
-const validated = validateScan(roomJson)
-const fixtureRoom: RoomScan = validated.scan
+/**
+ * Every layout goes through the boundary validator, authored ones included. A
+ * level I wrote by hand is not more trustworthy than one a model wrote — it is
+ * just written by someone with a worse memory for units.
+ */
+const rooms: AuthoredLevel[] = [
+  ...LEVELS,
+  {
+    id: 'desk',
+    name: 'The desk',
+    blurb: 'The first room, written by hand before any of the tools existed.',
+    scan: validateScan(roomJson).scan,
+  },
+].map((l) => ({ ...l, scan: validateScan(l.scan).scan }))
+
+let roomIndex = 0
 
 let tracker: Tracker = keyboardTracker()
 void tracker.start()
 
 let envelope: Envelope = referenceBody(tracker.latencyS())
 let bodySource = 'reference body'
-let room = fixtureRoom
-let roomSource = 'hand-authored fixture'
+let room = rooms[0]!.scan
+let roomSource = rooms[0]!.name
 let farWallCm = 320
 let scanning = false
 /**
@@ -219,11 +235,12 @@ function renderRound(): void {
     return
   }
   if (combat.phase === 'ready') {
-    el('roundTitle').textContent = 'Blind Spot'
+    el('roundTitle').textContent = rooms[roomIndex]!.name
     el('roundBody').textContent =
-      'Enemies hide behind the furniture. Leaning out is the only way to see one — and the ' +
-      'only way for it to see you. Lean with WASD (or your head, press c), aim and shoot with ' +
-      'the mouse, and get back into cover before it fires.'
+      `${rooms[roomIndex]!.blurb}\n\n` +
+      'Leaning out is the only way to see an enemy — and the only way for it to see you. ' +
+      'Lean with WASD (or your head, press c), aim and shoot with the mouse, and get back ' +
+      'into cover before it fires.'
   } else {
     el('roundTitle').textContent = `${combat.score} points`
     el('roundBody').textContent =
@@ -591,6 +608,17 @@ addEventListener('keydown', (e) => {
   } else if (k === 'o') {
     mode = mode === 'window' ? 'dolly' : 'window'
     renderHud()
+  } else if (k === '[' || k === ']') {
+    roomIndex = (roomIndex + (k === ']' ? 1 : rooms.length - 1)) % rooms.length
+    const next = rooms[roomIndex]!
+    room = next.scan
+    roomSource = next.name
+    roomUv = new Map()
+    occluderLabels = new Map()
+    renderer.setRoomTexture(null)
+    roundSeed++
+    rebuildLineup()
+    el('roundBody').textContent = next.blurb
   } else if (k === 'c') {
     void useCamera()
   } else if (k === 'm') {
@@ -623,6 +651,14 @@ addEventListener('resize', updateRuler)
 let lastStatus = 0
 // Collapsed by default: it plays as a game and expands into an instrument.
 el('hud').classList.add('collapsed')
+/**
+ * The photograph is off unless asked for. A playtester's judgement, and it was
+ * right twice over: a beige wall is a beige rectangle whatever the shader does to
+ * it, and generating the level from the player's furniture makes the quality of
+ * the experience hostage to their furniture. The scan stays a capability, not the
+ * game.
+ */
+renderer.roomLevel = 0
 rebuildLineup()
 renderScene()
 

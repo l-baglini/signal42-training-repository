@@ -16,7 +16,7 @@
  */
 import type { Envelope, Point3, RoomScan } from './types'
 import { cellCentre, cellIndex, latticeOf, reachCm, type Lattice } from './lattice'
-import { footprintMask } from './footprint'
+import { edtSquared, footprintMask } from './footprint'
 import { visible } from './sightline'
 import { dist } from './vec'
 import { inradiusCm, maskCount } from './footprint'
@@ -87,28 +87,39 @@ export function coverMask(lat: Lattice, exposed: Uint8Array): Uint8Array {
   return out
 }
 
-/** Shortest distance between two lattice sets, in cm. Infinity if either is empty. */
+/**
+ * Shortest distance between two lattice sets, in cm. Infinity if either is empty.
+ *
+ * Via the distance transform rather than pairwise. The first version compared
+ * every exposed cell against every covered one, which is up to a million
+ * distances per enemy — fine for the eight anchors a hand-written fixture had,
+ * and a two-minute timeout the moment a level offered four hundred candidates.
+ * The transform answers "how far to the nearest cover" for every cell at once, in
+ * linear time, and the gap is the minimum of that over the exposed set.
+ */
 export function gapCm(lat: Lattice, a: Uint8Array, b: Uint8Array): number {
-  const from: Point3[] = []
-  for (let k = 0; k < lat.nz; k++)
-    for (let j = 0; j < lat.ny; j++)
-      for (let i = 0; i < lat.nx; i++) {
-        if (a[cellIndex(lat, i, j, k)]) from.push(cellCentre(lat, i, j, k))
-      }
-  if (from.length === 0) return Infinity
+  let hasA = false
+  let hasB = false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i]) hasA = true
+    if (b[i]) hasB = true
+    if (hasA && hasB) break
+  }
+  if (!hasA || !hasB) return Infinity
+
+  // edtSquared measures from cells that are 1 to the nearest cell that is 0, so
+  // the sources are the members of `b`.
+  const from = new Uint8Array(b.length)
+  for (let i = 0; i < b.length; i++) from[i] = b[i] ? 0 : 1
+  const d2 = edtSquared(from, lat.nx, lat.ny, lat.nz)
 
   let best = Infinity
-  for (let k = 0; k < lat.nz; k++)
-    for (let j = 0; j < lat.ny; j++)
-      for (let i = 0; i < lat.nx; i++) {
-        if (!b[cellIndex(lat, i, j, k)]) continue
-        const c = cellCentre(lat, i, j, k)
-        for (const p of from) {
-          const d = dist(p, c)
-          if (d < best) best = d
-        }
-      }
-  return best
+  for (let i = 0; i < a.length; i++) {
+    if (!a[i]) continue
+    const d = d2[i]!
+    if (d < best) best = d
+  }
+  return best === Infinity ? Infinity : Math.sqrt(best) * lat.pitch
 }
 
 export interface AssessEnemyOptions {
