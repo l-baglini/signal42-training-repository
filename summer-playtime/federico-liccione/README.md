@@ -159,6 +159,24 @@ the reworked levels — each answers a specific complaint, and each complaint is
 quoted in the commit that answers it. `git log --oneline` is a readable account of
 the whole thing.
 
+## If the mouse stops responding while you lean
+
+Only on the keyboard path, only on a laptop, and it is not this game: GNOME and
+libinput **disable the touchpad while you type**, and holding `W`/`A`/`S`/`D` counts
+as typing. So for as long as you are leaning, the touchpad is switched off at the
+system level and the crosshair cannot be moved — which makes an enemy that is
+visible only while you lean impossible to shoot.
+
+An external mouse is unaffected. To turn it off:
+
+```
+gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing false
+```
+
+Nothing to do with the webcam path, where leaning is your head and the hand stays
+on the mouse — which is the arrangement the whole design is built around, and the
+reason the keyboard is a stand-in rather than a mode.
+
 ## What is not verified
 
 Stated plainly, because the tests prove less than a green suite suggests.
