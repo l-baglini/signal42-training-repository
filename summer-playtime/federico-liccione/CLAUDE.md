@@ -104,6 +104,14 @@ There are no pixels below the renderer. Fields carry their unit in the name
   touches a network. They prove a wrong model answer stays harmless. Whether the
   room scan actually finds the chair is unverified and belongs to a human with a
   real room and a real key.
+- **`import.meta.env.X` must be written as that literal expression.** It is a
+  textual substitution, not a runtime value: aliasing `import.meta` to satisfy
+  TypeScript makes the bundler substitute nothing and leaves a fallback that looks
+  fine and is wrong — and it still works under `npm run dev`, because the dev server
+  serves a real `import.meta.env`. It cost a deploy. Types for the two flags this
+  project uses are in `src/env.d.ts`; asset paths deliberately use
+  `document.baseURI` instead, so they depend on no substitution at all.
+
 - **A leaf with no caller may not stay; a switch on a live path may.** Three
   separate features have been silently deleted here by having their call site
   removed while their tests stayed green — the typing guard, a whole `designLevel`

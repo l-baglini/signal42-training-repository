@@ -798,9 +798,12 @@ el<HTMLFormElement>('compose').addEventListener('submit', (e) => {
  * answer to what a static host can and cannot carry: the whole game, four levels
  * and the webcam need none of it.
  */
-const SCAN_AVAILABLE =
-  (import.meta as ImportMeta & { readonly env?: { readonly VITE_NO_SCAN?: string } })
-    .env?.VITE_NO_SCAN !== '1'
+// Written as the bare literal expression on purpose: this is a **textual**
+// substitution the bundler performs on `import.meta.env.VITE_NO_SCAN` and nothing
+// else. Aliasing it through a variable — which is the obvious way to satisfy
+// TypeScript — silently turns the substitution off and leaves a runtime lookup that
+// finds nothing. That cost a deploy once already; see `perceive/assets.ts`.
+const SCAN_AVAILABLE = import.meta.env.VITE_NO_SCAN !== '1'
 
 async function runScan(): Promise<void> {
   if (scanning) return

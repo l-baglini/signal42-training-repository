@@ -878,6 +878,62 @@ is the part worth reading anyway, and it is not flattering: every design correct
 in this project came from a person playing it, and the model's failure mode is not
 incorrectness but confidently building the wrong thing correctly.
 
+## A type annotation that switched off a build-time feature
+
+The webcam did not work on the deployed link. It worked perfectly on localhost, and
+that combination is the whole story.
+
+The first cause was ordinary and I had already found it: every model path started
+with a slash, which is correct exactly once — when the app is at the root of its
+origin. GitHub Pages serves a project site from a subdirectory, so `/mediapipe/...`
+resolved to the wrong root and 404'd. Fixed by routing every path through
+`import.meta.env.BASE_URL`.
+
+**That fix did not work, and the reason is invisible.**
+`import.meta.env.BASE_URL` is not a runtime value. It is a **textual substitution**
+the bundler performs on that exact expression. TypeScript objected — `ImportMeta`
+has no `env` without pulling in `vite/client` — so I satisfied it the obvious way:
+
+```ts
+const meta = import.meta as ImportMeta & { readonly env?: { BASE_URL?: string } }
+const BASE = meta.env?.BASE_URL ?? '/'
+```
+
+At which point the literal expression appears nowhere in the source, the bundler
+substitutes nothing, `env` is `undefined` in the built chunk, and the `?? '/'`
+fallback **quietly restores the exact bug it was written to fix.** The built file
+read `const A1 = import.meta; const Vn = A1.env?.BASE_URL ?? "/"`, which is a
+perfectly reasonable-looking line that always evaluates to `"/"`.
+
+And it could not fail locally. `npm run dev` serves `import.meta.env` as a real
+object at runtime, so the aliased version works — in development, and only in
+development. Every local check passed. The tests passed. The type checker passed.
+The build succeeded. The one environment where it was wrong was the only one
+anybody else would ever use.
+
+Two things came out of it.
+
+**The fix is to remove the dependency, not to repair it.** Paths now come from
+`document.baseURI`, an ordinary runtime value that no transform can silently drop,
+correct in dev and in production and at any base. The class of bug is gone rather
+than patched. Where a genuine build-time flag is still needed — `VITE_NO_SCAN` —
+it is written as the bare literal expression with an ambient type in `src/env.d.ts`,
+and there is a comment saying why it may not be aliased.
+
+**And I deployed twice because I did not check the artefact.** The first deploy was
+verified by fetching every file and getting 200s, which proved the *server* was
+right and said nothing about the *bundle*. The second was verified by reading the
+built JavaScript before pushing it and confirming the substitution had actually
+happened. That is the same lesson as the `grep -E 'Tests'` that let two red commits
+through, and as the three features deleted by having their call site removed:
+**checking the thing you built is not the same as checking the thing you shipped.**
+
+The general form is worth stating because it will happen again in some other
+project: **a build-time substitution is a contract about source text.** Anything
+that hides the text — an alias, a wrapper, a helper, a type cast in the wrong place
+— turns the feature off without an error, and the fallback you wrote for safety is
+what conceals it.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The
