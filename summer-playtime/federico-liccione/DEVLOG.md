@@ -934,6 +934,52 @@ that hides the text — an alias, a wrapper, a helper, a type cast in the wrong 
 — turns the feature off without an error, and the fallback you wrote for safety is
 what conceals it.
 
+## The keyboard could only stand in two places
+
+*"Quando il gioco è tramite la keyboard, se non erro non è possibile muovere la
+visuale e contestualmente il mouse, il che rende praticamente impossibile eliminare
+i nemici... sto sbagliando qualcosa?"* No. It was unwinnable, and the arithmetic
+says so exactly.
+
+The keyboard tracker moved the head at 70 cm/s while a key was held and sprang it
+back to rest at 56 cm/s when released. That is a perfectly reasonable-sounding
+design — cover is the default, leaning is something you do — and it has one
+consequence nobody wrote down: **the only positions it can hold are rest and the
+extremes.** Everywhere in between, you are either travelling out or travelling
+back. There is no equilibrium.
+
+Now put the level's numbers next to it. The solver ships enemies that need a lean
+of 4 to 12 cm, held inside a peek window 1 to 3.5 cm wide. At 70 cm/s a
+two-centimetre window is crossed in **twenty-nine milliseconds**. There was no
+version of arriving, noticing, aiming and clicking inside that — with the mouse or
+without it. The webcam path never showed the defect because a real head *stops
+where you put it*, which is the one property the stand-in did not copy.
+
+The fix is that a key sets a velocity and releasing stops the head. What survives
+of the spring is a slow drift home — 3.5 cm/s, an afterthought rather than a
+fight — and `shift`, which is the retreat: reaching cover fast is the movement this
+game asks for under time pressure, and on a keyboard that deserves its own key
+rather than being the *absence* of another. The speed came from the levels rather
+than from feel: 26 cm/s makes a two-centimetre window five frames wide.
+
+Three things worth keeping from it.
+
+**The defect was arithmetic, and it was invisible.** Three lines inside a closure,
+no test could reach them, and every one of the project's 577 tests passed the whole
+time. It is now a pure `step(at, held, dt, opts)` with thirteen tests, which is the
+same move as `isTypingIn`, `reacquire.ts` and `combat.ts` — and the fourth time
+this project has been bitten by a decision that lived only in a handler.
+
+**It was found by playing, not by testing** — like every other design fault here.
+Worth being precise about what the tests were doing instead: they were checking
+that the *engine* would never ship an enemy the body could not reach, and they were
+right, and they were about the wrong body. `referenceBody` describes a neck that can
+stop anywhere. The keyboard could not. Nothing compared the two.
+
+**And "is the player doing something wrong?" deserved a real answer.** It would have
+been easy to explain the controls again. The question was better than that: it was a
+correct bug report phrased as self-doubt, and the arithmetic was three lines away.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

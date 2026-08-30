@@ -170,6 +170,13 @@ rectangle and at exactly its depth.
   to lock is not an error: absolute aiming keeps working and the slider marks
   itself inert.
 
+- **The keyboard's head must be able to stop.** A key sets a velocity and releasing
+  stops it; `shift` is the fast retreat. Do not reintroduce a spring back to rest on
+  release — that version could only hold rest and the extremes, while the levels ask
+  for 4 to 12 cm held inside a 1 to 3.5 cm window, and it made the no-webcam path
+  unwinnable without failing a single test. The speed is set against the narrowest
+  window the solver ships, not by feel: `tests/keyboard.test.ts` pins that.
+
 ### The round
 
 **The room stands full.** Eight enemies from the first tick, they never leave, and
