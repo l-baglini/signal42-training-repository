@@ -78,6 +78,9 @@ describe('the words choose the palette', () => {
     ['a concrete bunker', 'industrial'],
     ['a neon arcade', 'neon'],
     ['corridoio cyber con laser', 'neon'],
+    ['a forest clearing with two trees', 'forest'],
+    ['un prato con alberi', 'forest'],
+    ['uno scenario naturale', 'forest'],
   ]
   for (const [text, expected] of cases) {
     it(`${text} -> ${expected}`, () => {

@@ -736,6 +736,55 @@ alone: **when a fix adds a second estimator, it adds a seam.** Adding a third
 without noticing that they all need one hand-off rule is how a jitter fix becomes a
 jitter report.
 
+## Rain that was a texture, and a question about trust
+
+Three things from one playtest, and the third is the one that mattered.
+
+**The rain was one layer of identical columns.** *"Non è realistica dato che scorre
+in colonne tutte uguali a velocità elevata."* Correct, and the diagnosis is more
+general than the fix: rain does not look like rain because of the drops, it looks
+like rain because the drops **disagree**. The old version had every column the same
+width, the same period, nearly the same speed, and every streak the same length and
+brightness — so it read as a moving texture, which is what it was. Three layers that
+disagree on all five, plus a slant and a per-column phase, and it reads as weather.
+Also normalised to CSS pixels: it had been half-size on a high-DPI display, which
+nobody had noticed because nobody had compared two screens.
+
+**"Can I ask for a particular setting?"** Yes, and it already worked — the palette
+is read from the words in the level's name and blurb — but nothing said so, which
+makes a feature that exists indistinguishable from one that does not. Now the
+composer's note names the six settings, and the model's system prompt is told that
+*it* chooses the palette by what it writes and that there is no separate field for
+it. One was also missing: "scenario naturale" landed on `DAY`, which has a cyan sky
+and a grass-coloured floor and was therefore the right answer by accident. There is
+a `FOREST` palette now, and its first draft failed the palette test with the cover
+three hundredths of a luminance from its own floor — pretty and invisible, which is
+exactly the failure that test was written for.
+
+**"Is an AI-built level as valid as one you made and tested?"** The honest answer
+had two halves and only one of them was yes.
+
+On **fairness**, yes, and it needed no code: a designed room goes through the same
+validator and the same solver as a shipped one, so I1, I2 and I11 hold over it
+identically, and a room that cannot supply a lineup is refused with its counts.
+That was the point of the architecture and it held.
+
+On **quality**, no — and I had not noticed. The shipped levels have their positions
+**swept**: several hundred candidates pushed through the solver with only the
+provable ones kept. A designed room got a coarse deterministic grid at 9 cm pitch.
+Same walls, same solver, thinner pool, for no reason other than which code path
+produced them. So `sweepFairAnchors` now runs for designed rooms *and* for scanned
+ones, and the scan panel reports the banded threat profile afterwards — the same
+number the shipped levels were iterated against.
+
+The general lesson is about where the two code paths diverged. The architecture's
+whole claim is that it is **indifferent to who proposes**, and it was — at the
+boundary, which is where I had been checking. The divergence was upstream of the
+boundary, in how generously each path proposed, and a difference in generosity is
+invisible to every test that asks whether the output is safe. "Same guarantees" and
+"same quality" are different claims, and this project had been quietly conflating
+them.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

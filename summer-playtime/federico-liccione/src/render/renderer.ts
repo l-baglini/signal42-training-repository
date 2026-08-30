@@ -45,6 +45,8 @@ uniform float uShake;
 uniform float uRain;
 uniform vec3 uSkyLow;
 uniform vec3 uSkyHigh;
+/** Device pixels per CSS pixel, so the rain is the same size on every display. */
+uniform float uPxScale;
 out vec4 frag;
 
 // Cheap hash for the grain. Deterministic in space, animated by uTime.
@@ -86,19 +88,55 @@ void main() {
   c *= 1.0 - 0.12 * clamp(r * r * 0.55, 0.0, 1.0);
 
   /**
-   * Rain, as columns of falling streaks. Screen-space on purpose: weather is
-   * between the player and the world rather than in it, and a particle system for
-   * something with no gameplay meaning would be a lot of buffers for one mood.
+   * Rain, in three depths.
+   *
+   * Screen-space on purpose: weather is between the player and the world rather
+   * than in it, and a particle system for something with no gameplay meaning would
+   * be a lot of buffers for one mood.
+   *
+   * The first version was one layer of identical columns, all the same width, all
+   * the same period, all falling at nearly the same speed, and it read as exactly
+   * what it was — *"non è realistica dato che scorre in colonne tutte uguali a
+   * velocità elevata"*. Rain does not look like rain because of the drops. It looks
+   * like rain because the drops disagree: near ones are long, fast, bright and
+   * sparse, far ones are short, slow, dim and dense, and none of them share a
+   * period. So this is three layers that disagree on all five, plus a slant, plus
+   * a per-column phase so no two columns start their cycle together.
+   *
+   * Everything is in CSS pixels rather than device pixels, because otherwise the
+   * rain is half the size on a high-DPI screen.
    */
   if (uRain > 0.001) {
-    float col = floor(gl_FragCoord.x / 3.0);
-    float speed = 300.0 + hash(vec2(col, 1.0)) * 260.0;
-    float yy = gl_FragCoord.y + uTime * speed;
-    float cell = floor(yy / 30.0);
-    float f = fract(yy / 30.0);
-    float on = step(0.93, hash(vec2(col, cell)));
-    float streak = on * smoothstep(0.0, 0.22, f) * (1.0 - smoothstep(0.22, 1.0, f));
-    c += vec3(0.58, 0.66, 0.80) * streak * uRain * 0.32;
+    vec2 px = gl_FragCoord.xy / max(uPxScale, 0.5);
+    float wet = 0.0;
+    for (int i = 0; i < 3; i++) {
+      float k = float(i);
+      // Near layer first: wide columns, long fast streaks, few of them.
+      float colW = 9.0 - 2.5 * k;
+      float len = 26.0 - 7.0 * k;
+      float speed = 210.0 - 55.0 * k;
+      float density = 0.10 + 0.07 * k;
+      float bright = 0.55 - 0.15 * k;
+      float slant = 0.10 + 0.03 * k;
+
+      // The slant is applied to the sampling grid, so the columns lean rather than
+      // the drops being sheared inside upright columns.
+      float x = px.x + px.y * slant;
+      float col = floor(x / colW) + k * 37.0;
+      float phase = hash(vec2(col, 3.0));
+      // Per-column speed and period. Two columns of rain that share a period read
+      // as a texture; this is most of the difference.
+      float sp = speed * (0.80 + 0.45 * phase);
+      float period = len * (3.0 + 4.0 * hash(vec2(col, 11.0)));
+      float y = px.y + uTime * sp + phase * 997.0;
+      float cell = floor(y / period);
+      float within = (y / period - cell) * period;
+      float on = step(1.0 - density, hash(vec2(col, cell + 0.5)));
+      // A streak that fades along its own length, and a drop-by-drop brightness.
+      float s = on * clamp(1.0 - within / len, 0.0, 1.0);
+      wet += s * s * bright * (0.55 + 0.45 * hash(vec2(col, cell)));
+    }
+    c += vec3(0.62, 0.70, 0.84) * wet * uRain * 0.30;
   }
 
   // A red lift while the screen is shaking from a hit. The film grain that used
@@ -134,6 +172,8 @@ export class Renderer {
   fog: [number, number, number] = [0.68, 0.80, 0.94]
   /** 0 to 1. Weather is a per-level property. */
   rain = 0
+  /** Device pixels per CSS pixel. Set by `resize`; keeps the rain a constant size. */
+  private pxScale = 1
   /** The sky's two bands, per level. See `render/mood.ts`. */
   skyLow: [number, number, number] = [0.62, 0.82, 0.97]
   skyHigh: [number, number, number] = [0.29, 0.57, 0.92]
@@ -212,6 +252,7 @@ export class Renderer {
    */
   resize(widthCm: number): Screen {
     const dpr = Math.min(devicePixelRatio || 1, 2)
+    this.pxScale = dpr
     const w = Math.max(1, Math.round(this.canvas.clientWidth * dpr))
     const h = Math.max(1, Math.round(this.canvas.clientHeight * dpr))
     if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -246,6 +287,7 @@ export class Renderer {
     gl.uniform1f(gl.getUniformLocation(this.prog, 'uRain'), this.rain)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyLow'), ...this.skyLow)
     gl.uniform3f(gl.getUniformLocation(this.prog, 'uSkyHigh'), ...this.skyHigh)
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uPxScale'), this.pxScale)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.bindVertexArray(this.vao)
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0)

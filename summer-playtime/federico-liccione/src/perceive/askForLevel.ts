@@ -8,6 +8,7 @@
  * What it is not told is where enemies go: it lays out walls, and the engine
  * decides what can be fought from where.
  */
+import { MOOD_HINTS } from '../render/mood'
 import { costOf, type InventoryCost } from './inventory'
 import { COVER_BAND, EXTENT, MAX_COVER, levelFromRects, type DesignReport } from './levelDesign'
 
@@ -105,7 +106,17 @@ WHAT MAKES A GOOD LAYOUT.
 - Overlap deliberately. Two rectangles that between them wall off one side create
   a genuinely hard corner, but check you have not walled off every side.
 
-Answer with the geometry only. The name and blurb are shown to the player.`
+THE SETTING IS YOURS TO NAME, AND IT IS NOT DECORATION. The game picks its
+palette, its weather and its lighting by reading the words in the name and blurb
+you write — nothing else selects them, and there is no separate field. So if the
+player asked for a forest, or neon, or rain, say so in those words. The settings
+that exist are: ${MOOD_HINTS.join('; ')}. Anything else falls back to a clear
+afternoon, which is a fine answer when the player did not ask for one. Write the
+setting into the blurb even when the player named it themselves, because the blurb
+is what the game reads.
+
+Answer with the geometry only, plus that name and blurb. Both are shown to the
+player, and the blurb also chooses how the level looks.`
 
 export type LevelDesignResult =
   | { readonly ok: true; readonly report: DesignReport; readonly name: string

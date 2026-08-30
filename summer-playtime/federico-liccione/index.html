@@ -241,13 +241,19 @@
     <form class="compose" id="compose">
       <div class="composeTitle">or describe one and have it built</div>
       <input id="describe" type="text" autocomplete="off"
-        placeholder="a corridor with pillars and a low wall on the right">
+        placeholder="a forest clearing with two trees and a low rock, at dusk">
       <input id="apikey" type="password" autocomplete="off" spellcheck="false"
         placeholder="Claude API key — never stored, and the shipped levels need none">
       <button type="submit" id="build">Build this level</button>
       <div class="composeNote">
-        The model lays out the walls. The engine decides which positions your body
-        can fairly fight from — and says so.
+        Say what it is made of <em>and</em> where it is set — clear afternoon, dusk,
+        rainy night, neon, forest, industrial — because the palette and the weather
+        are read from the words, not from a menu.<br><br>
+        The model lays out the walls, and only the walls. Enemy positions come from
+        the same swept grid the shipped levels use, and the same solver decides
+        which of them your body can fairly fight from. It reports the measurement
+        afterwards, so a designed level is judged the way an authored one is rather
+        than trusted.
       </div>
     </form>
   </div>

@@ -14,7 +14,7 @@ README.md is the front door. Then, in this order:
   selection step, the play envelope, difficulty, the levels, the tracker's recovery,
   the look. §1–§14 describe the game as *planned*, and the two differ. §15 exists so
   that this file plus SPEC is enough to **rebuild** the project rather than merely
-  to recognise it; §15.11 is the build order that produces what ships.
+  to recognise it; §15.12 is the build order that produces what ships.
 - **PRIOR-ART.md** — what was already taken. §6 narrows the claim after
   implementation, because the pivot to a shooter moved this *closer* to the prior
   art on the verb.
@@ -213,8 +213,8 @@ at 0%: that is the cover.
 
 ## State — resume here
 
-`npm test` is green at **561 tests**, `npx tsc --noEmit` is clean, `npm run build`
-is clean and the bundle is ~74 kB. Every commit leaves the suite green, so
+`npm test` is green at **572 tests**, `npx tsc --noEmit` is clean, `npm run build`
+is clean and the bundle is ~84 kB. Every commit leaves the suite green, so
 `git log --oneline` is a reliable account of what exists — and each commit message
 quotes the playtest complaint it answers, which makes it a better design history
 than any summary.
@@ -283,7 +283,7 @@ like tuning knobs and are fairness thresholds.
 
 ## If you are rebuilding this from scratch
 
-SPEC §15.11 is the build order. Four things are worth knowing before you start,
+SPEC §15.12 is the build order. Four things are worth knowing before you start,
 because each cost this build real time:
 
 1. **Write §6.7's invariants as tests before the solver.** They are what decides

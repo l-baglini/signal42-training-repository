@@ -16,7 +16,8 @@
  * unfair one; a model that places walls cannot.
  */
 import { proposeAnchors } from './roomGeometry'
-import type { Billboard, RoomScan } from '../engine'
+import { assessEnemies } from '../engine'
+import type { Billboard, Envelope, Point3, RoomScan } from '../engine'
 
 /**
  * Where cover may sit, in cm beyond the screen.
@@ -138,5 +139,70 @@ export function levelFromRects(
       noSpawn: [],
       provenance: { model, atISO, costCents: 0 },
     },
+  }
+}
+
+/**
+ * Sweep a proposed room the way `npm run author` sweeps an authored one.
+ *
+ * The question this answers was asked directly: *"se richiedo un livello con
+ * determinati ostacoli, ho la certezza che tale livello sia giocabile e valido
+ * esattamente come se tu lo avessi creato e testato tu?"*
+ *
+ * On **fairness** the answer was always yes and needed no code: a designed room
+ * goes through the same validator and the same solver, so I1, I2 and I11 hold over
+ * it exactly as they hold over a shipped level, and a room that cannot supply a
+ * fair lineup is refused with its counts rather than played badly.
+ *
+ * On **quality** the answer was no, and this is what closes it. The shipped levels
+ * have their positions swept — several hundred candidates pushed through the solver
+ * with only the provable ones kept — while a designed room got a coarse
+ * deterministic grid, so the same walls yielded a thinner pool of fair positions
+ * for no reason other than which code path produced them. Now both are swept.
+ *
+ * The result is still only a *proposal*: `assessEnemies` re-judges every anchor
+ * against the body actually playing, which is why sweeping against one body cannot
+ * make a level unfair for another. A wider proposal can only give the judge more
+ * to work with.
+ */
+export interface SweepReport {
+  readonly anchors: readonly Point3[]
+  readonly considered: number
+  readonly fair: number
+}
+
+export function sweepFairAnchors(
+  occluders: readonly Billboard[],
+  env: Envelope,
+  opts: { readonly pitchCm?: number; readonly max?: number } = {},
+): SweepReport {
+  const grid = proposeAnchors(occluders, {
+    pitchCm: opts.pitchCm ?? 5,
+    // Deliberately far above what a level may hold: this is the candidate pool the
+    // solver gets to choose from, and the cap below applies to the survivors.
+    maxAnchors: 700,
+  })
+  if (grid.length === 0) return { anchors: [], considered: 0, fair: 0 }
+
+  const { assessments } = assessEnemies(
+    {
+      source: 'fixture',
+      occluders,
+      anchors: grid,
+      noSpawn: [],
+      provenance: { model: 'sweep', atISO: '1970-01-01T00:00:00.000Z', costCents: 0 },
+    },
+    env,
+  )
+  const fair: Point3[] = []
+  assessments.forEach((a, i) => {
+    if (a.fair) fair.push(grid[i]!)
+  })
+  return {
+    // Capped below the boundary validator's own limit, so a level never arrives
+    // already truncated by two caps disagreeing.
+    anchors: fair.slice(0, opts.max ?? 240),
+    considered: grid.length,
+    fair: fair.length,
   }
 }

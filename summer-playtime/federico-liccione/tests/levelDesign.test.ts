@@ -7,9 +7,11 @@
  * the engine judges them afterwards, unchanged.
  */
 import { describe, expect, it } from 'vitest'
-import { COVER_BAND, EXTENT, MAX_COVER, levelFromRects } from '../src/perceive/levelDesign'
+import {
+  COVER_BAND, EXTENT, MAX_COVER, levelFromRects, sweepFairAnchors,
+} from '../src/perceive/levelDesign'
 import type { ProposedRect } from '../src/perceive/levelDesign'
-import { assessEnemies } from '../src/engine'
+import { assessEnemies, playEnvelope } from '../src/engine'
 import { validateScan } from '../src/boundary/validate'
 import { seated } from '../fixtures/envelopes'
 
@@ -116,5 +118,74 @@ describe('the model lays out walls and still cannot authorise anything', () => {
     expect(r.scan.occluders).toHaveLength(0)
     expect(r.scan.anchors).toHaveLength(0)
     expect(assessEnemies(r.scan, seated()).assessments).toHaveLength(0)
+  })
+})
+
+describe('a designed level is swept like an authored one', () => {
+  /**
+   * The question this answers, asked by the playtester: *"se richiedo un livello
+   * con determinati ostacoli, ho la certezza che tale livello sia giocabile e
+   * valido esattamente come se tu lo avessi creato e testato tu?"*
+   *
+   * Fairness never depended on this and the rest of this file already proves it: a
+   * designed room goes through the same validator and the same solver. What did
+   * depend on it was **quality** — the shipped levels have their positions swept
+   * out of several hundred candidates while a designed one got a coarse grid, so
+   * the same walls yielded a thinner pool for no reason but which code path made
+   * them.
+   */
+  const walls: ProposedRect[] = [
+    { z: -24, x0: -46, x1: -16, y0: -30, y1: 30, label: 'left' },
+    { z: -24, x0: 14, x1: 44, y0: -30, y1: 30, label: 'right' },
+    { z: -38, x0: -12, x1: 10, y0: -32, y1: 6, label: 'low wall' },
+  ]
+  const env = playEnvelope(seated())
+
+  it('keeps only positions the solver can prove, and says how many it looked at', () => {
+    const { scan } = levelFromRects(walls, 'Designed', 'test', '2026-08-30T00:00:00.000Z')
+    const swept = sweepFairAnchors(scan.occluders, env)
+    expect(swept.considered).toBeGreaterThan(scan.anchors.length)
+    expect(swept.anchors.length).toBeGreaterThan(0)
+    expect(swept.anchors.length).toBeLessThanOrEqual(240)
+
+    // Every anchor it kept survives a fresh judgement, which is the only claim it
+    // is making — the engine re-judges them all again at round build anyway.
+    const { assessments } = assessEnemies(
+      { ...scan, anchors: [...swept.anchors] }, env,
+    )
+    expect(assessments.every((a) => a.fair)).toBe(true)
+  })
+
+  it('offers the solver more to work with than the coarse grid did', () => {
+    // The whole point. Same walls, same solver, more provable positions — so a
+    // designed room stops being thinner than an authored one by accident.
+    const { scan } = levelFromRects(walls, 'Designed', 'test', '2026-08-30T00:00:00.000Z')
+    const coarseFair = assessEnemies(scan, env).assessments.filter((a) => a.fair).length
+    const swept = sweepFairAnchors(scan.occluders, env)
+    expect(swept.anchors.length).toBeGreaterThan(coarseFair)
+  })
+
+  it('returns nothing for a room with no cover, rather than guessing', () => {
+    expect(sweepFairAnchors([], env)).toEqual({ anchors: [], considered: 0, fair: 0 })
+  })
+
+  it('is a proposal, not a verdict: another body re-judges it', () => {
+    /**
+     * Sweeping against one body cannot make a level unfair for another, because
+     * nothing downstream trusts the sweep. This is the same reason `npm run author`
+     * stores the *union* over reference bodies rather than the intersection: a
+     * level holds candidates, and the solver holds the judgement.
+     */
+    const { scan } = levelFromRects(walls, 'Designed', 'test', '2026-08-30T00:00:00.000Z')
+    const swept = sweepFairAnchors(scan.occluders, env)
+    const stiff = { ...seated(), vmax: seated().vmax / 4 }
+    const { assessments } = assessEnemies(
+      { ...scan, anchors: [...swept.anchors] }, playEnvelope(stiff),
+    )
+    // It may keep fewer, or none. What it may not do is ship one it cannot prove.
+    for (const a of assessments) {
+      if (!a.fair) continue
+      expect(a.retreatCm).toBeLessThanOrEqual(a.retreatBudgetCm + 1e-9)
+    }
   })
 })

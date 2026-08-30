@@ -129,6 +129,34 @@ const NIGHT: Mood = {
   rain: 0.7,
 }
 
+/**
+ * Outdoors and green. Added because a playtester asked whether they could request
+ * a natural setting and the honest answer was "sort of": `DAY` has a cyan sky and a
+ * grass-coloured floor, so it was the nearest thing by accident rather than on
+ * purpose. This one is on purpose — deep green ground, warm afternoon sky, wooden
+ * cover — and it is what the nature words below select.
+ */
+const FOREST: Mood = {
+  name: 'forest',
+  skyLow: [0.78, 0.86, 0.72],
+  skyHigh: [0.36, 0.62, 0.84],
+  cloud: [0.98, 0.98, 0.94],
+  // Deep ground, pale wood. The first pass had the floor and the cover within
+  // three hundredths of the same luminance, which the palette test caught: pretty,
+  // and invisible, since contrast rather than colour is what makes cover findable.
+  floorA: [0.20, 0.34, 0.17],
+  floorB: [0.15, 0.27, 0.14],
+  wall: [0.26, 0.34, 0.20],
+  wallCap: [0.60, 0.72, 0.38],
+  blockTop: [0.74, 0.60, 0.40],
+  blockFace: [0.52, 0.40, 0.26],
+  blockSide: [0.27, 0.20, 0.13],
+  blockEdge: [0.95, 0.86, 0.62],
+  shadow: [0.09, 0.16, 0.08],
+  fog: [0.62, 0.74, 0.70],
+  rain: 0,
+}
+
 const INDUSTRIAL: Mood = {
   name: 'industrial',
   skyLow: [0.74, 0.76, 0.70],
@@ -147,7 +175,7 @@ const INDUSTRIAL: Mood = {
   rain: 0,
 }
 
-export const MOODS: readonly Mood[] = [DAY, DUSK, NEON, NIGHT, INDUSTRIAL]
+export const MOODS: readonly Mood[] = [DAY, DUSK, NEON, NIGHT, FOREST, INDUSTRIAL]
 export const DEFAULT_MOOD = DAY
 
 const KEYWORDS: ReadonlyArray<readonly [Mood, readonly string[]]> = [
@@ -155,6 +183,18 @@ const KEYWORDS: ReadonlyArray<readonly [Mood, readonly string[]]> = [
   [NIGHT, ['night', 'notte', 'notturn', 'rain', 'pioggia', 'storm', 'tempesta', 'temporale', 'dark', 'buio', 'moon', 'luna']],
   [DUSK, ['sunset', 'tramonto', 'dusk', 'crepuscol', 'golden', 'dorat', 'evening', 'sera', 'alba', 'dawn', 'desert', 'deserto']],
   [INDUSTRIAL, ['industrial', 'industriale', 'factory', 'fabbrica', 'warehouse', 'magazzino', 'metal', 'metallo', 'pipe', 'tubo', 'concrete', 'cemento', 'bunker']],
+  [FOREST, ['forest', 'foresta', 'bosco', 'wood', 'legno', 'tree', 'albero', 'alberi', 'grass', 'erba', 'prato', 'meadow', 'garden', 'giardino', 'natur', 'jungle', 'giungla', 'park', 'parco', 'mountain', 'montagna', 'green', 'verde']],
+]
+
+/**
+ * The words a level can be asked for, so the composer's UI and the model's system
+ * prompt can both name them instead of guessing. Kept beside the table it
+ * describes, because a list of moods that drifts from the keywords is worse than
+ * no list.
+ */
+export const MOOD_HINTS: readonly string[] = [
+  'a clear afternoon', 'at dusk', 'a rainy night', 'a neon arcade',
+  'a forest clearing', 'an industrial warehouse',
 ]
 
 /** First match wins, and the order above is the priority. */

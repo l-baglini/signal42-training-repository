@@ -74,6 +74,13 @@ spent, in cents, next to what it produced.
 | **The furniture gets named** | Claude Sonnet, one vision call | with `P`, if you supply a key | fractions of a cent |
 | **A level from a sentence** | Claude Sonnet, one JSON call | type a description and press Build | fractions of a cent |
 
+Describe the setting as well as the shape — *clear afternoon, dusk, rainy night,
+neon, forest, industrial* — because the palette and the weather are read from the
+words rather than chosen from a menu. And a designed level is **swept and measured
+like a shipped one**: same validator, same solver, same invariants, and the panel
+reports the threat profile afterwards so the claim is a number rather than a
+promise. See SPEC §15.11.
+
 The key is typed into the page, used, and never stored. There are no secrets in
 this repository — check `git log -p` for one if you like.
 
@@ -114,13 +121,13 @@ fixtures/       hand-designed layouts, engine-swept anchors, synthetic bodies.
 ```
 
 ```
-npm test         561 tests. No network, no clock, no RNG.
+npm test         572 tests. No network, no clock, no RNG.
 npm run levels   what the engine makes of every level, per body. Read this before
                  changing a layout.
 npm run author   regenerates the levels: layouts by hand, anchors by sweep.
 npm run probe    what the solver thinks of a fixture room.
 npm run sweep    which candidate positions are fair.
-npm run build    tsc, then vite. ~74 kB.
+npm run build    tsc, then vite. ~84 kB.
 ```
 
 ---

@@ -1139,7 +1139,31 @@ Palettes are chosen by the level's **own words**, because all three writers who
 produce level text — the fixtures, the vision model naming a room, the language
 model laying one out — already write the words that should decide how it looks.
 
-### 15.11 Build order, for a rebuild
+### 15.11 A proposed level is swept, not trusted
+
+Three things can propose a room: a hand-designed layout, a depth scan of the
+player's own room, and a language model given a sentence. The architecture's claim
+is that it is **indifferent to who proposes** — same validator, same solver, same
+invariants — and that claim holds at the boundary.
+
+It does not hold *upstream* of the boundary unless it is made to, and this was
+missed once. Fairness was identical across the three paths from the beginning; what
+was not identical was how generously each one proposed. The hand-designed levels
+had their positions swept — several hundred candidates through the solver, only the
+provable ones kept — while a model-designed room got a coarse deterministic grid.
+Same walls, same solver, a thinner pool of fair positions, for no reason but the
+code path.
+
+So every proposed room is swept, and the banded threat profile of §15.7 is reported
+back for it. **"Same guarantees" and "same quality" are different claims**, and only
+the first one comes free from having a boundary.
+
+The sweep is a proposal and nothing downstream trusts it: `assessEnemies` re-judges
+every anchor against the body actually playing, which is why sweeping against one
+body cannot make a level unfair for another — the same reason §15.7's authoring
+step stores the union over reference bodies rather than the intersection.
+
+### 15.12 Build order, for a rebuild
 
 §14's order is the hunt's. This is the one that produces what ships, and the
 property worth preserving is that the game is provably fair long before it is

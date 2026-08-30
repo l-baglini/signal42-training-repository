@@ -13,11 +13,14 @@ import {
   chooseLineup,
   onScreen,
   playEnvelope,
+  reachCm,
+  threatByReach,
   threatCoverage,
   visible,
 } from './engine'
 import type { Billboard, Envelope, Point3, Viewport } from './engine'
 import { validateScan } from './boundary/validate'
+import { sweepFairAnchors } from './perceive/levelDesign'
 import { buildScene, type EnemyView } from './render/geometry'
 import { DEFAULT_MOOD, moodFor, type Mood } from './render/mood'
 import { Renderer } from './render/renderer'
@@ -96,6 +99,9 @@ let envelope: Envelope = referenceBody(tracker.latencyS())
  */
 const PLAY_FRACTION = 0.68
 const COMFORT_CM = 14
+/** One definition, used by the lineup and by every sweep, so they cannot disagree. */
+const playFor = (env: Envelope): Envelope =>
+  playEnvelope(env, { fraction: PLAY_FRACTION, comfortCm: COMFORT_CM })
 /** How deep the ordered lineup goes. Replacements come from it in order. */
 const LINEUP_DEPTH = 40
 let bodySource = 'reference body'
@@ -166,6 +172,16 @@ let rejectCounts: Record<string, number> = {}
 /** Fraction of the body's range with a threat visible from it. See `chooseLineup`. */
 let threatened = 0
 /**
+ * The same fraction, binned by centimetres of lean.
+ *
+ * The number the levels were iterated against, and the honest answer to "is a
+ * designed level as good as a shipped one" — it is the measurement rather than a
+ * promise, and it is shown for every level whatever proposed it. The aggregate
+ * above is a poor summary of it, because a lattice has far more cells in the middle
+ * of an envelope than at its edge.
+ */
+let threatProfile = ''
+/**
  * The difficulty, and the round settings it implies.
  *
  * A difficulty here only ever moves things that are not fairness — see
@@ -218,7 +234,7 @@ function rebuildLineup(): void {
    * exposure while playing is computed geometrically from the real eye, so leaning
    * further than this still works and still helps.
    */
-  const play = playEnvelope(envelope, { fraction: PLAY_FRACTION, comfortCm: COMFORT_CM })
+  const play = playFor(envelope)
   const { assessments, lattice } = assessEnemies(room, play, {
     viewport,
     /**
@@ -294,6 +310,14 @@ function rebuildLineup(): void {
   threatened = threatCoverage(
     lattice, room.occluders, cands, order, cfg.waveSize, { viewport },
   )
+  const reach = reachCm(lattice, play.rest) || 1
+  const CM = [3, 6, 9, 12]
+  threatProfile = threatByReach(
+    lattice, play, room.occluders, cands, order, cfg.waveSize,
+    CM.map((cm) => cm / reach + 1e-9), { viewport },
+  )
+    .map((b, i) => `${CM[i]}cm ${b.cells ? ((100 * b.threatened) / b.cells).toFixed(0) : '–'}%`)
+    .join(' · ')
 
   enemies = chosen.map((a) => ({
     at: a.enemy.at,
@@ -415,6 +439,7 @@ function renderHud(): void {
     // The measurement the lineup selection exists to move: how much of the space
     // this body can reach has a threat visible from it.
     `${(threatened * 100).toFixed(0)}% of your range is under threat\n` +
+    `by lean: ${threatProfile}\n` +
     (rejects ? `rejected: ${rejects}\n` : '') +
     `body (${bodySource}): jitter ${envelope.jitter.toFixed(2)} cm · ` +
     `vmax ${envelope.vmax.toFixed(0)} cm/s · latency ${(envelope.latency * 1000).toFixed(0)} ms\n` +
@@ -694,7 +719,24 @@ async function designLevel(description: string): Promise<void> {
       return
     }
 
-    const validated = validateScan(result.report.scan)
+    /**
+     * Swept before it is played, exactly as `npm run author` sweeps a shipped
+     * level.
+     *
+     * Fairness never depended on this — a designed room already went through the
+     * same validator and the same solver, so every invariant held over it. What did
+     * depend on it was *quality*: the shipped levels have their positions swept out
+     * of several hundred candidates while a designed one got a coarse grid, so the
+     * same walls yielded a thinner pool for no reason but which code path made
+     * them. Now both are swept, and the profile below says how it came out instead
+     * of asking anyone to take it on trust.
+     */
+    const swept = sweepFairAnchors(result.report.scan.occluders, playFor(envelope))
+    const validated = validateScan(
+      swept.anchors.length >= cfg.waveSize
+        ? { ...result.report.scan, anchors: swept.anchors }
+        : result.report.scan,
+    )
     room = validated.scan
     roomSource = `${result.name}, designed`
     applyMood(`${result.name} ${result.blurb} ${description}`, roundSeed)
@@ -713,8 +755,8 @@ async function designLevel(description: string): Promise<void> {
       `proposed   ${result.report.proposed} walls, kept ${result.report.kept}` +
       (result.report.clamped ? `, ${result.report.clamped} values clamped` : '') +
       (result.report.dropped ? `, ${result.report.dropped} dropped` : '') +
-      `\ncandidates ${room.anchors.length} positions offered by the grid` +
-      `\nengine     kept ${enemies.length} as fair enemies for your body`
+      `\nswept      ${swept.considered} candidate positions, ${swept.fair} provably fair` +
+      `\nengine     kept ${enemies.length} for your body — ${threatProfile}`
   } catch (err) {
     el('scanTitle').textContent = 'It could not build that'
     el('scanStage').textContent = err instanceof Error ? err.message : String(err)
@@ -787,15 +829,19 @@ async function runScan(): Promise<void> {
       el('scanStage').textContent = report.outcome.reason
       el('scanMeta').textContent = meta
     } else {
-      room = report.outcome.scan
+      // Swept like a designed level and like an authored one. Same reason.
+      const sweptRoom = sweepFairAnchors(report.outcome.scan.occluders, playFor(envelope))
+      room = sweptRoom.anchors.length >= cfg.waveSize
+        ? validateScan({ ...report.outcome.scan, anchors: sweptRoom.anchors }).scan
+        : report.outcome.scan
       occluderLabels = new Map()
       roomSource = `your room, ${report.device}/${report.dtype}`
       roundSeed++
       rebuildLineup()
       el('scanTitle').textContent = 'Your room is the level'
       el('scanStage').textContent =
-        `${room.occluders.length} pieces of cover, ${room.anchors.length} candidates proposed — ` +
-        `the engine kept ${enemies.length} as fair enemies.`
+        `${room.occluders.length} pieces of cover, ${room.anchors.length} candidates swept — ` +
+        `the engine kept ${enemies.length} as fair enemies. ${threatProfile}`
       el('scanMeta').textContent = meta
 
       const key = el<HTMLInputElement>('apikey').value
