@@ -1,9 +1,9 @@
 {
   "name": "blindspot",
+  "description": "Blind Spot \u2014 to see is to be seen. A cover shooter whose only positional controller is where your head is: an enemy is visible only from a position you must lean to reach, which is the only position it can shoot you from.",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "You lean to see. A head-tracked peek-and-dodge game whose level is the room you are sitting in.",
   "scripts": {
     "dev": "node tools/setup-assets.mjs && vite",
     "build": "tsc --noEmit && vite build",

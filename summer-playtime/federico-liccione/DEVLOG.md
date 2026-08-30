@@ -785,6 +785,44 @@ invisible to every test that asks whether the output is safe. "Same guarantees" 
 "same quality" are different claims, and this project had been quietly conflating
 them.
 
+## Auditing the name
+
+*"Pensi che il nome 'Blind Spot' sia sempre buono?"* Worth asking, and the answer
+was interesting enough to record: **the name was still describing the previous
+game.**
+
+"Blind spot" names what you cannot see. That was exactly right for the hunt this
+project started as, where the verb was finding something hidden. What ships is a
+cover shooter whose entire thesis is that the sightline has no direction — the
+position you can shoot it from is the position it can shoot you from — and the name
+says nothing about the half that makes it a game. It is also heavily taken (an NBC
+series ran under it for five years), which matters for something meant to be opened
+from a link.
+
+The defence is real, though: a piece of cover creates a blind spot **for both of
+you**, so the name does carry the symmetry — on a second reading. And a name that
+carries its point only on a second reading is doing less work than one that carries
+it on the first.
+
+Two candidates were considered seriously. *Sightline* names the exact object the
+solver computes and is symmetric by nature. *Exposure* names the central quantity
+and has a photographic echo that suits a webcam game. Both are better names for
+this game than the one it has.
+
+Kept anyway, and the reasoning is the part worth keeping. Sixty-four commit messages
+carry the old name, and in this project those messages are the design history — each
+one quotes the complaint it answers — so a rename buys a better label at the cost of
+making the record read like a mistake. And the actual defect is fixable without one:
+***to see is to be seen*** goes beside the name everywhere it appears, which
+converts the weakness into the point. A subtitle was the cheaper and more honest
+instrument than a rename, on the day before a deadline with the review still to
+write.
+
+The general note: **a name is a claim about what the thing is, and it can go stale
+exactly the way a specification does.** This one went stale at the same moment SPEC
+§1 did, for the same reason, and nobody noticed for weeks because a name is the one
+part of a project nothing tests.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

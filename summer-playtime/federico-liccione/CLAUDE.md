@@ -1,4 +1,6 @@
-# Blind Spot — notes for whoever picks this up
+# Blind Spot — *to see is to be seen*
+
+Notes for whoever picks this up.
 
 You lean to see. A webcam tracks head position; that one signal drives both an
 off-axis projection (the screen behaves like a window, not a picture) and the

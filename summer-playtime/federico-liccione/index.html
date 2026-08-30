@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Blind Spot</title>
+<title>Blind Spot — to see is to be seen</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -27,6 +27,10 @@
   #hud:not(.collapsed) .numbers { display: block; }
   #hud .numbers .who { margin: 12px 0 4px; }
   #hud h1 { margin: 0 0 2px; font-size: 14px; letter-spacing: .01em; }
+  /* The name says what you cannot see. The tagline says the half that makes it a
+     game: the position you can see it from is the position it can see you from. */
+  #hud h1 .tag { font-weight: 400; font-style: italic; font-size: 11.5px;
+    opacity: .5; letter-spacing: 0; margin-left: 6px; }
   #hud .sub { opacity: .55; font-size: 11px; margin-bottom: 10px; }
   table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 11px; }
   th { text-align: right; opacity: .5; font-weight: 500; padding: 3px 5px; }
@@ -156,7 +160,7 @@
   <canvas id="stage"></canvas>
 
   <div class="panel collapsed" id="hud">
-    <h1>Blind Spot</h1>
+    <h1>Blind Spot <span class="tag">to see is to be seen</span></h1>
     <div class="sub">
       An enemy is only visible from a position you have to move your head to reach.
       That is also the only position it can shoot you from.

@@ -1,5 +1,7 @@
 # Blind Spot
 
+### *to see is to be seen*
+
 **An enemy is only visible from a position you have to move your head to reach.
 That is also the only position it can shoot you from.**
 

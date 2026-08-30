@@ -887,6 +887,16 @@ them**, because a sightline has no direction. One boolean per enemy per frame is
 therefore simultaneously *I can shoot it* and *it can shoot me*, and the game
 never computes two.
 
+**The name is half of this, which is why it has a subtitle.** "Blind spot" names
+what you cannot see, and that was the right name for the hunt this began as, where
+the verb was finding something hidden. The game that shipped is about the moment
+you *both* can see, so the name was audited late and kept — a piece of cover does
+create a blind spot, and it creates one for each of you — with *to see is to be
+seen* alongside it, because a name that carries its point only on a second reading
+is doing less work than one that carries it on the first. Recorded here rather than
+fixed by renaming: sixty-four commit messages carry the old name and they are the
+project's design history.
+
 That symmetry is the whole design and it must not be softened. It is why the enemy
 is drawn as an eye that opens, why a covered enemy draws **nothing at all**, and
 why there is no separate "enemy line of fire" anywhere in the code.
