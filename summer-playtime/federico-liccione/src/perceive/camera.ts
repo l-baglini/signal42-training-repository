@@ -16,6 +16,7 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import type { Point3 } from '../engine'
 import type { Tracker } from './tracker'
 import { oneEuro3 } from './oneEuro'
+import { assetUrl } from './assets'
 import {
   DEFAULT_LIMITS,
   deadReckon,
@@ -50,8 +51,8 @@ export interface CameraTrackerOptions {
 }
 
 const DEFAULTS = {
-  wasmPath: '/mediapipe',
-  modelPath: '/models/face_landmarker.task',
+  wasmPath: assetUrl('mediapipe'),
+  modelPath: assetUrl('models/face_landmarker.task'),
   fovDeg: 60,
   ipdCm: 6.3,
   canthalCm: 9.0,

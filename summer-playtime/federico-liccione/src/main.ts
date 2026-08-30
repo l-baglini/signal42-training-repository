@@ -787,8 +787,35 @@ el<HTMLFormElement>('compose').addEventListener('submit', (e) => {
 
 /* ---------------- scanning ---------------- */
 
+/**
+ * The depth scan is left out of the hosted build, and the app is told so at
+ * compile time rather than discovering it as a 404.
+ *
+ * The scan needs 74 MB of ONNX weights that have no business in a git repository,
+ * so the published build genuinely does not contain the pipeline — not the models,
+ * not the half-megabyte of transformers.js that loads them. Saying that plainly
+ * beats letting somebody press `p` and watch it fail, and it is also the honest
+ * answer to what a static host can and cannot carry: the whole game, four levels
+ * and the webcam need none of it.
+ */
+const SCAN_AVAILABLE =
+  (import.meta as ImportMeta & { readonly env?: { readonly VITE_NO_SCAN?: string } })
+    .env?.VITE_NO_SCAN !== '1'
+
 async function runScan(): Promise<void> {
   if (scanning) return
+  if (!SCAN_AVAILABLE) {
+    const panel = el('scan')
+    panel.style.display = 'block'
+    el('scanTitle').textContent = 'The room scan is not in this build'
+    el('scanStage').textContent =
+      'It needs 74 MB of depth-model weights, which are not published with the ' +
+      'hosted version. Clone the repository and run `npm run dev` for it — the ' +
+      'four levels, the level designer and everything else here work as they are.'
+    el('scanMeta').textContent = ''
+    setTimeout(() => { panel.style.display = 'none' }, 9000)
+    return
+  }
   const cam = tracker as Tracker & { video?: HTMLVideoElement }
   if (tracker.kind !== 'camera' || !cam.video) {
     el('tracker').textContent = 'press c for the webcam first — the scan needs it'

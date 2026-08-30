@@ -9,6 +9,7 @@
  */
 import { FilesetResolver, ImageSegmenter } from '@mediapipe/tasks-vision'
 import type { PersonMask } from './roomGeometry'
+import { assetUrl } from './assets'
 
 export interface SegmenterOptions {
   readonly wasmPath?: string
@@ -22,10 +23,10 @@ export interface PersonSegmenter {
 }
 
 export async function loadSegmenter(opts: SegmenterOptions = {}): Promise<PersonSegmenter> {
-  const fileset = await FilesetResolver.forVisionTasks(opts.wasmPath ?? '/mediapipe')
+  const fileset = await FilesetResolver.forVisionTasks(opts.wasmPath ?? assetUrl('mediapipe'))
   const segmenter = await ImageSegmenter.createFromOptions(fileset, {
     baseOptions: {
-      modelAssetPath: opts.modelPath ?? '/models/selfie_segmenter.tflite',
+      modelAssetPath: opts.modelPath ?? assetUrl('models/selfie_segmenter.tflite'),
       delegate: 'GPU',
     },
     runningMode: 'IMAGE',

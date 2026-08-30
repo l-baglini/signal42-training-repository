@@ -823,6 +823,61 @@ exactly the way a specification does.** This one went stale at the same moment S
 §1 did, for the same reason, and nobody noticed for weeks because a name is the one
 part of a project nothing tests.
 
+## Publishing it, and a secret that was not one
+
+The deploy found a bug that only a deploy could find, which is the argument for
+doing it before the deadline rather than on it.
+
+**Every asset path started with a slash.** `/mediapipe`, `/models/...` — correct
+exactly once, when the app is at the root of its origin. GitHub Pages serves a
+project site from a subdirectory, so all of them would have resolved to the wrong
+root and 404'd, and the webcam — the entire point — would have failed on the one
+link anybody is going to click while working perfectly on the machine it was built
+on. `src/perceive/assets.ts` now builds every path from `import.meta.env.BASE_URL`
+and nothing else may build one by hand.
+
+**And GitHub's push protection blocked the first push**, reporting a Mistral API
+key in the built bundle. It was a false positive with a clean explanation: a public
+Gist id — 32 hex characters, which is exactly Mistral's key shape — inside a
+warning string in `@huggingface/transformers`' Whisper code, minified into the
+chunk. Verified rather than assumed: the string appears in `node_modules` and
+nowhere in this repository.
+
+The interesting part is what to do about it. There is a one-click "allow this
+secret" link, and taking it would have been the fastest correct action. I did not,
+because the honest fix was better than the correct one: **that chunk had no business
+in the hosted build at all.** The room scan needs 74 MB of ONNX weights that are not
+published, so half a megabyte of transformers.js and 23 MB of ONNX runtime were
+being shipped to support a feature that cannot run there. A `VITE_NO_SCAN` flag
+makes the app say so at compile time instead of discovering it as a 404 — and
+because the flag folds to a constant, Rollup then eliminated the dynamic import,
+the chunk, the runtime and the false positive together. The published bundle went
+from 84 kB to 76 kB and the site from 135 MB to 38 MB.
+
+The lesson generalises past this project: **a security warning is a question about
+what you are shipping, not an obstacle in front of shipping it.** The bypass would
+have left three problems standing — dead code, a wasted download, and a repository
+whose scanner I had taught myself to click past — and the answer to the actual
+question removed all three.
+
+## The review, and who is allowed to write it
+
+The brief asks for a review pass owned by the author and explicitly not self-graded
+by a model, and I said so twice before being asked to write it anyway. What went in
+was neither refusal nor a ghostwritten verdict: the assembled *facts* — what was
+built, what is tested, what is not verified, what the AI was good and bad at, what
+it cost — drafted from the build record, with the provenance of that arrangement
+stated in the first paragraph, and the final verdict left as the author's with
+prompts.
+
+That is the same standard the rest of the project holds itself to. A document
+claiming to be a human's honest assessment while being a model's is exactly the
+failure this codebase spends five hundred tests avoiding in the other direction, and
+a review that hides its own authorship would undermine every other claim in it. §5
+is the part worth reading anyway, and it is not flattering: every design correction
+in this project came from a person playing it, and the model's failure mode is not
+incorrectness but confidently building the wrong thing correctly.
+
 ## Open
 
 - WebGPU is absent from Firefox on Linux, which is the development machine. The

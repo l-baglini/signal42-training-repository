@@ -14,6 +14,13 @@ them.
 No install, no headset, no plugin. A browser tab and a webcam, or the keyboard if
 you would rather not be on camera.
 
+**Play it: https://fliccione.github.io/signal42-training-repository/** — allow the
+camera, then press space. The hosted build has everything except the room scan,
+which needs 74 MB of depth weights that do not belong in a repository; press `p`
+there and it says so.
+
+Or locally, which is the only way to get the scan:
+
 ```
 npm install
 npm run dev      # allow the camera, then press space
@@ -108,7 +115,7 @@ Then:
 | **SPEC.md** | Directed the build. **§0** lists the eight things it got wrong and **§15** specifies the game as it actually shipped — the fuse derivation, the standing lineup, the selection step, the play envelope. §6.7 is the invariants; §6.3 is the leverage identity, which decides where cover may sit. |
 | **DEVLOG.md** | Every finding that contradicted the spec, and every process failure — including the two commits that shipped with a red test and how the habit changed. |
 | **PRIOR-ART.md** | Written before implementation. It refuted the original novelty claim, which is why it exists. §6 was added afterwards and narrows the claim further. |
-| **REVIEW.md** | The author's own review pass. Not written by a model — the brief asks for the author's, and it would be worth nothing otherwise. |
+| **REVIEW.md** | The review pass, with its provenance stated at the top: assembled fact drafted from the build record, and the author's own verdict in the final section. What the tests do not check is §4, and where the AI helped and where it cost is §5. |
 | **CLAUDE.md** | Working notes. The things that will bite you, and what not to change. |
 
 ```

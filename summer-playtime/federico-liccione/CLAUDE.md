@@ -260,13 +260,21 @@ WASM out of the pinned npm package — so it cannot drift from the JS that loads
 and downloads the models into `public/`, which is gitignored. MediaPipe is behind a
 dynamic import, so the keyboard-only path stays a small bundle.
 
+**Deployed**, from the `gh-pages` branch of the author's fork:
+<https://fliccione.github.io/signal42-training-repository/>. Rebuild it with
+`VITE_NO_SCAN=1 npm run build` — that flag is what removes the depth pipeline, and
+Rollup then drops the whole `scanRoom` chunk, the transformers.js it pulls in and
+the 23 MB ONNX runtime with it. Copy `index.html`, `assets/`, `mediapipe/` and
+`models/face_landmarker.task` to the branch root with a `.nojekyll`; that is 38 MB.
+Do **not** publish `models/transformers` — and note that shipping it once tripped
+GitHub's push protection on a public Gist id inside a Whisper warning string, which
+is a false positive and was fixed by not shipping code the hosted build cannot use.
+
 **Still to do:**
 
-- **REVIEW.md.** It has to be written by the author, not by a model — the brief
-  says so explicitly, and a model-written review of a model-written codebase is
-  worth nothing. DEVLOG's list of what the tests cannot check is the raw material.
-- A GitHub Pages deploy, for a clickable link. The keyboard path and the authored
-  levels need no models, so a static build is enough.
+- **REVIEW.md's final section.** The document exists and states its own provenance;
+  the verdict at the end is the author's to write and is the part the brief is
+  actually asking for.
 - Open the PR. The branch is local only; `origin` is the upstream repo and `fork`
   is the author's.
 

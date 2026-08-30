@@ -11,12 +11,13 @@
  */
 import { env, pipeline } from '@huggingface/transformers'
 import type { DepthField } from './roomGeometry'
+import { assetUrl } from './assets'
 
 const MODEL_ID = 'onnx-community/depth-anything-v2-small'
 
 env.allowRemoteModels = false
 env.allowLocalModels = true
-env.localModelPath = '/models/transformers/'
+env.localModelPath = assetUrl('models/transformers/')
 
 export type DepthDevice = 'webgpu' | 'wasm'
 export type DepthDtype = 'fp16' | 'q8'
