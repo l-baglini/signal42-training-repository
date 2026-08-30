@@ -517,11 +517,9 @@ function renderRound(): void {
           'window rather than a picture. Press K to spend ten seconds measuring ' +
           'your range, which is what every number in this level is scaled to.'
         : cameraDenied
-          ? 'The webcam was not available, so WASD is standing in for your head: ' +
-            'it leans where you hold it and stays where you let go, and shift ducks ' +
-            'you back into cover. Press C to try the camera again.'
-          : 'WASD stands in for your head while the webcam starts up — it stays ' +
-            'where you let go, and shift ducks back into cover. ' +
+          ? 'The webcam was not available, so WASD is standing in for your head. ' +
+            'Press C to try the camera again.'
+          : 'WASD stands in for your head while the webcam starts up. ' +
             'Press C to switch by hand.') +
       '\n\nAim and shoot with the mouse. Ninety seconds; being hit costs six.'
   } else {
