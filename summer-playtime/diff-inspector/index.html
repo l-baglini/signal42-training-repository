@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON/CSV Diff & Inspector</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>JSON/CSV Diff &amp; Inspector</h1>
+  <p>Paste two JSON or CSV blobs, get a structural diff — not a line diff.</p>
+  <div class="toolbar">
+    <button id="exampleBtn" data-next="json">Load JSON example</button>
+    <button id="compareBtn" class="primary">Compare</button>
+  </div>
+</header>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<section class="inputs">
+  <div class="panel">
+    <div class="panel-head">
+      <strong>Original</strong>
+      <div class="spacer"></div>
+      <select id="leftFormat">
+        <option value="auto">Auto-detect</option>
+        <option value="json">JSON</option>
+        <option value="csv">CSV</option>
+      </select>
+      <input type="file" id="leftFile" accept=".json,.csv,.txt">
+    </div>
+    <textarea id="leftText" placeholder="Paste JSON or CSV here…" spellcheck="false"></textarea>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <strong>Modified</strong>
+      <div class="spacer"></div>
+      <select id="rightFormat">
+        <option value="auto">Auto-detect</option>
+        <option value="json">JSON</option>
+        <option value="csv">CSV</option>
+      </select>
+      <input type="file" id="rightFile" accept=".json,.csv,.txt">
+    </div>
+    <textarea id="rightText" placeholder="Paste JSON or CSV here…" spellcheck="false"></textarea>
+  </div>
+</section>
+
+<div class="key-column-row" id="keyColumnRow">
+  <label for="keyColumnSelect">Align CSV rows by key column:</label>
+  <select id="keyColumnSelect">
+    <option value="">(none — positional)</option>
+  </select>
+</div>
+
+<section class="results">
+  <div class="summary" id="summary"></div>
+  <div class="results-head">
+    <input type="text" id="filterInput" placeholder="Filter by path / column…">
+    <div class="actions">
+      <button id="exportMdBtn">Export Markdown</button>
+      <button id="exportJsonBtn">Export JSON</button>
+    </div>
+  </div>
+  <div class="diff-list" id="diffList">
+    <div class="empty-state">Paste two inputs and click Compare.</div>
+  </div>
+</section>
+
+<footer>Runs entirely in your browser — nothing is sent anywhere.</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
