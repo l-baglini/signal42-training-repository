@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: officechaos
+      POSTGRES_PASSWORD: officechaos
+      POSTGRES_DB: officechaos
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U officechaos -d officechaos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./server
+    environment:
+      DATABASE_URL: postgresql://officechaos:officechaos@db:5432/officechaos
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      PORT: "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  client:
+    build: ./client
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

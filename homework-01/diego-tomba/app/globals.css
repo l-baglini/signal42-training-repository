@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(99, 102, 241, 0.18),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at -10% 10%,
+      rgba(56, 189, 248, 0.12),
+      transparent 55%
+    ),
+    #060912;
+  color: #e2e8f0;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin, subtle scrollbars to match the dark surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}

@@ -1,0 +1,52 @@
+# Local testing stack: MongoDB + the web server, plus an on-demand importer.
+#
+#   docker compose up --build            # start mongo + server (http://localhost:8802)
+#   docker compose run --rm importer     # run a one-off sellers.json import
+#   docker compose down -v               # stop and wipe the mongo volume
+#
+# DATABASE_URL/DATABASE_NAME are set here to point at the bundled mongo service.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  server:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "8802"
+      DATABASE_URL: "mongodb://mongo:27017/"
+      DATABASE_NAME: "sellers-data"
+    ports:
+      - "8802:8802"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command: ["node", "dist/server/index.js"]
+
+  # On-demand importer — not started by `up`. Run it explicitly:
+  #   docker compose run --rm importer
+  importer:
+    build: .
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: "mongodb://mongo:27017/"
+      DATABASE_NAME: "sellers-data"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command: ["node", "dist/import/index.js", "--now"]
+
+volumes:
+  mongo-data:

@@ -1,0 +1,15 @@
+node_modules
+dist
+*.log
+import.log
+
+# Secrets — never commit real credentials. Use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Local TLS material (not used in Fargate; TLS is terminated at the ALB)
+cert
+*.key
+*.crt
+*.pem

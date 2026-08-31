@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Villain Origin Story</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Spectral:ital,wght@0,400;0,600;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --void:#15101d; --oxblood:#2a1129; --violet:#6b3fa0;
+    --gold:#e8b43a; --bone:#ede6d6; --danger:#c2412d; --panel:#1c1326;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(120% 90% at 50% -10%, #2a1129 0%, #15101d 60%);
+    color: var(--bone);
+    font-family: 'Spectral', serif;
+    padding: 3rem 1.2rem 5rem;
+    display: flex; justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+
+  .eyebrow {
+    font-family: 'Space Mono', monospace; letter-spacing: .32em; text-transform: uppercase;
+    font-size: .72rem; color: var(--gold); opacity: .85; margin-bottom: .5rem;
+  }
+  h1.masthead {
+    font-family: 'Cinzel Decorative', serif; font-weight: 900; color: var(--bone);
+    font-size: clamp(2rem, 7vw, 2.8rem); line-height: 1.04; margin: 0 0 .3rem;
+  }
+  .rule { height: 1px; background: linear-gradient(90deg, var(--gold), transparent); margin: .9rem 0 1.2rem; }
+  .lede { color: #cbb9d6; margin: 0 0 2rem; font-size: 1.05rem; }
+
+  label {
+    display: block; font-family: 'Space Mono', monospace; letter-spacing: .12em;
+    text-transform: uppercase; font-size: .72rem; color: var(--bone); margin: 1.1rem 0 .4rem;
+  }
+  textarea, input {
+    width: 100%; background: #1d1426; color: var(--bone);
+    border: 1px solid #4a2f55; border-radius: 2px; padding: .8rem .9rem;
+    font-family: 'Space Mono', monospace; font-size: .95rem; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--gold); outline-offset: 1px; border-color: var(--gold); }
+  textarea::placeholder, input::placeholder { color: #7a6685; }
+
+  button.go {
+    margin-top: 1.6rem; width: 100%; background: var(--danger); color: #fff; border: none;
+    border-radius: 2px; font-family: 'Space Mono', monospace; font-weight: 700;
+    letter-spacing: .18em; text-transform: uppercase; padding: .85rem 1.2rem;
+    font-size: .85rem; cursor: pointer; transition: background .15s ease;
+  }
+  button.go:hover { background: #d9512f; }
+  button.go:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* Dossier */
+  .dossier {
+    position: relative; background: var(--panel); border: 1px solid #4a2f55;
+    border-top: 3px solid var(--gold); padding: 2rem 2rem 2.4rem; margin-top: 2rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5); display: none;
+  }
+  .dossier.show { display: block; }
+  .stamp {
+    position: absolute; top: 18px; right: 14px; transform: rotate(8deg);
+    border: 3px solid var(--danger); color: var(--danger); border-radius: 4px;
+    font-family: 'Space Mono', monospace; font-weight: 700; text-transform: uppercase;
+    padding: .35rem .6rem; font-size: .7rem; letter-spacing: .12em; opacity: .92;
+    text-align: center; line-height: 1.3; max-width: 170px;
+  }
+  .stamp small { display: block; font-size: .58rem; opacity: .85; letter-spacing: .2em; }
+  .dossier.show .stamp { animation: thunk .4s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes thunk {
+    0% { transform: rotate(8deg) scale(2.2); opacity: 0; }
+    100% { transform: rotate(8deg) scale(1); opacity: .92; }
+  }
+  .casebar {
+    font-family: 'Space Mono', monospace; font-size: .7rem; letter-spacing: .18em;
+    color: var(--gold); text-transform: uppercase; margin-bottom: 1rem; max-width: 60%;
+  }
+  .alias {
+    font-family: 'Cinzel Decorative', serif; font-weight: 900; color: var(--bone);
+    font-size: clamp(1.7rem, 6vw, 2.2rem); line-height: 1.1; margin: .2rem 0 1.4rem;
+    text-shadow: 0 0 26px rgba(232,180,58,.18);
+  }
+  .field-label {
+    font-family: 'Space Mono', monospace; font-size: .66rem; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--violet); margin: 1.4rem 0 .4rem;
+  }
+  .narrative { font-size: 1.06rem; line-height: 1.65; }
+  .narrative p { margin: 0 0 .9rem; }
+  ul.powers { padding-left: 1.1rem; margin: .2rem 0 0; }
+  ul.powers li { margin: .35rem 0; }
+  .tagline {
+    font-family: 'Cinzel Decorative', serif; color: var(--gold); font-size: 1.2rem;
+    text-align: center; margin-top: 1.9rem; padding-top: 1.3rem; border-top: 1px solid #4a2f55;
+  }
+  button.again {
+    margin-top: 1.6rem; width: 100%; background: transparent; color: var(--gold);
+    border: 1px solid #4a2f55; border-radius: 2px; font-family: 'Space Mono', monospace;
+    letter-spacing: .14em; text-transform: uppercase; padding: .7rem; font-size: .75rem; cursor: pointer;
+  }
+  button.again:hover { border-color: var(--gold); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dossier.show .stamp { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="eyebrow">Department of Infamy · Confidential</div>
+  <h1 class="masthead">Villain Origin Story</h1>
+  <div class="rule"></div>
+  <p class="lede">Every supervillain started with one small, unforgivable inconvenience. Name yours.</p>
+
+  <label for="incident">The final straw — the petty thing that broke you</label>
+  <textarea id="incident" rows="3" placeholder="e.g. someone took the parking spot I'd been patiently waiting for"></textarea>
+
+  <label for="hero">Your name (optional — for the record)</label>
+  <input id="hero" type="text" placeholder="e.g. Dave from Accounting" />
+
+  <button class="go" id="generate">Initiate transformation</button>
+
+  <section class="dossier" id="dossier" aria-live="polite">
+    <div class="stamp">Threat Level<small id="threat"></small></div>
+    <div class="casebar" id="casebar"></div>
+    <div class="alias" id="alias"></div>
+
+    <div class="field-label">Origin</div>
+    <div class="narrative" id="origin"></div>
+
+    <div class="field-label">Powers Acquired</div>
+    <ul class="powers" id="powers"></ul>
+
+    <div class="field-label">The Plan</div>
+    <div class="narrative"><p id="plan"></p></div>
+
+    <div class="field-label">Known Nemesis</div>
+    <div class="narrative"><p id="nemesis"></p></div>
+
+    <div class="field-label">Fatal Weakness</div>
+    <div class="narrative"><p id="weakness"></p></div>
+
+    <div class="tagline" id="tagline"></div>
+    <button class="again" id="again">Summon another (same straw)</button>
+  </section>
+</main>
+
+<script>
+  const ADJECTIVES = ["Lukewarm","Unsalted","Expired","Mildly Inconvenienced","Perpetually Buffering","Slightly Damp","Overdrawn","Unsubscribed","Recently Ghosted","Chronically Underbaked","Improperly Filed","Double-Parked","Unmuted","Left on Read","Withholding","Unread"];
+  const NOUNS = ["Reckoning","Vengeance","Asterisk","Footnote","Spreadsheet","Stapler","Reply-All","Out-of-Office","Pop-Up","Paywall","Group Chat","Loading Bar","Error 404","Final Notice","Unskippable Ad","Cookie Banner","Software Update","Terms & Conditions"];
+  const TITLES = ["Baron","Madame","Lord","Doctor","Professor","Count","Captain","Mistress","The Dread","Archduke","Sister","Brother","The Honorable"];
+  const PROPER = ["Vendetta","Spite","Asterisk","Malware","Backslash","Ctrl-Z","Decaf","Semicolon","Overcast","Lowercase","Voicemail","Autocorrect","Buffering","Notarized"];
+  const PLACES = ["Aisle Seven","the Self-Checkout","Customer Support","the Group Project","the HOA","the Comments Section","Seat 14B","the Returns Desk","the Waiting Room","Tier-Two Support","the Spam Folder","the Quiet Carriage","the Parking Structure"];
+  const THREAT = ["Mildly Concerning","Eye-Roll Inducing","Passive-Aggressive","Catastrophic (for morale)","HR-Involved","Citywide Sighing","Apocalyptic, but petty","Beyond Lukewarm","Code Beige","Existentially Annoying"];
+  const OPENINGS = [
+    "Once, you were no one in particular — a face in the queue, a name spelled wrong on a coffee cup.",
+    "You used to be normal. You paid your taxes. You returned the shopping carts. You let people merge.",
+    "There was a time when you wanted nothing more than to be left alone with a fully charged phone.",
+    "You were ordinary once. Forgettable, even. You said 'no worries' and you meant it.",
+    "Long ago, you believed in the system. You read the terms. You waited your turn."
+  ];
+  const INCIDENTS = [
+    "Then came the day everything cracked: {mid}.",
+    "But the universe had other plans. {cap}. That was the moment something inside you went quiet — and then very, very loud.",
+    "And then it happened. {cap}. A small thing, they said. They were wrong.",
+    "Until {mid}. They called it minor. They will not call it that again.",
+    "It was an ordinary day. And then: {mid}. The last domino in a line you didn't know you'd been stacking."
+  ];
+  const TRANSFORMATIONS = [
+    "Something in you snapped clean in half, and what crawled out was not interested in 'no worries.'",
+    "You did not seek power. Power found you — slightly damp and deeply petty — in a parking lot.",
+    "In that instant the meek thing you'd been dissolved, and {alias} stepped into the fluorescent light.",
+    "You stopped apologizing. You started planning.",
+    "The version of you that holds doors and rounds up the tip simply... left. {alias} remained."
+  ];
+  const POWERS = [
+    "the ability to make any printer jam from across the room",
+    "an aura that drops every nearby Wi-Fi connection to a single, taunting bar",
+    "the power to turn every traffic light red the instant you approach",
+    "the gift of reviving email chains that should have died weeks ago",
+    "exact command over the moment a podcast cuts to an ad",
+    "the power to empty any ice machine seconds before your turn",
+    "telekinetic control of every shopping cart with one bad wheel",
+    "the talent for scheduling meetings that could have been a single email",
+    "an unbreakable ability to be 'just browsing' for four uninterrupted hours",
+    "the curse of always knowing — but never saying — the correct answer",
+    "the power to make any 'quick call' last fifty-five minutes",
+    "dominion over the final 2% of every phone battery",
+    "mastery of the voicemail that says only 'call me back'",
+    "the power to make every elevator stop at every floor, forever"
+  ];
+  const PLANS = [
+    "Your plan is simple, and terrible: to set every clock in the city four minutes fast, permanently.",
+    "You will replace all the world's pens with the kind that don't quite work.",
+    "Your masterstroke — a global rollout of mandatory updates, scheduled exclusively during lunch.",
+    "You intend to reply-all to humanity, and CC its enemies.",
+    "You will rename every file 'final_FINAL_v2_USE_THIS_ONE' until civilization weeps.",
+    "Your endgame is one citywide group chat that no one is permitted to leave.",
+    "You shall make every self-checkout detect an 'unexpected item in the bagging area' — eternally.",
+    "You will ensure every set of instructions ships with one screw left over."
+  ];
+  const NEMESES = [
+    "Only one stands in your way: a relentlessly cheerful barista who remembers every order but yours.",
+    "Your sworn enemy is the IT guy who insists it's 'probably your cables.'",
+    "One foe haunts you still — the neighbor who reverses into the shared driveway at 6 a.m.",
+    "There is one who can stop you: the colleague who says 'per my last email' and means it.",
+    "Your nemesis is a small, smug dog with no respect for property lines.",
+    "Standing against you: the customer ahead, paying entirely in exact change and anecdotes."
+  ];
+  const WEAKNESSES = [
+    "Your one weakness: a sincere, unprompted compliment. It disarms you completely. Pathetic.",
+    "You can be undone by a single working stapler, placed gently in your hand.",
+    "Your kryptonite remains, embarrassingly, free samples.",
+    "One thing stops you cold: someone holding the door, then actually waiting.",
+    "Your fatal flaw — you cannot leave a 4.8-star review unread. You must know what went wrong.",
+    "You are powerless against a perfectly timed 'no worries, take your time.'"
+  ];
+  const TAGLINES = [
+    "They made you wait. Now the whole world will.",
+    "You asked for the manager. You became one.",
+    "Somewhere, a printer is already afraid.",
+    "The receipt was longer than your arm. So is your reach now.",
+    "Remember the name — or don't. That's exactly the kind of thing that started all this."
+  ];
+  const FALLBACK = "the barista spelled your name wrong — again";
+
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  function sample(a, n) {
+    const c = [...a]; const out = [];
+    while (out.length < n && c.length) out.push(c.splice(Math.floor(Math.random()*c.length),1)[0]);
+    return out;
+  }
+  const clean = t => { t = (t||"").trim().replace(/[.!?]+$/,""); return t || FALLBACK; };
+  const lowerFirst = t => t ? t[0].toLowerCase()+t.slice(1) : t;
+  const capFirst = t => t ? t[0].toUpperCase()+t.slice(1) : t;
+  // escape user text before inserting into innerHTML
+  const esc = t => t.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function makeAlias() {
+    const p = pick(["adjNoun","titleProper","ofPlace"]);
+    if (p === "adjNoun") return `The ${pick(ADJECTIVES)} ${pick(NOUNS)}`;
+    if (p === "titleProper") return `${pick(TITLES)} ${pick(PROPER)}`;
+    return `The Phantom of ${pick(PLACES)}`;
+  }
+  function caseNo() {
+    const L = "ABCDEFGHJKMNPQRSTVWXYZ";
+    return `${100+Math.floor(Math.random()*900)}-${L[Math.floor(Math.random()*L.length)]}${10+Math.floor(Math.random()*90)}`;
+  }
+
+  function generate() {
+    const raw = clean(document.getElementById("incident").value);
+    const incident = esc(raw);
+    const heroRaw = document.getElementById("hero").value.trim();
+    const hero = heroRaw ? esc(heroRaw) : "Subject Unknown";
+    const alias = makeAlias();
+
+    document.getElementById("threat").textContent = pick(THREAT);
+    document.getElementById("casebar").textContent = `Case File No. ${caseNo()} · Known As: ${hero}`;
+    document.getElementById("alias").textContent = alias;
+
+    const incidentLine = pick(INCIDENTS)
+      .replace("{mid}", lowerFirst(incident))
+      .replace("{cap}", capFirst(incident));
+    const transformation = pick(TRANSFORMATIONS).replaceAll("{alias}", alias);
+    document.getElementById("origin").innerHTML =
+      `<p>${pick(OPENINGS)}</p><p>${incidentLine}</p><p>${transformation}</p>`;
+
+    document.getElementById("powers").innerHTML =
+      sample(POWERS, 3).map(p => `<li>${p}</li>`).join("");
+    document.getElementById("plan").textContent = pick(PLANS);
+    document.getElementById("nemesis").textContent = pick(NEMESES);
+    document.getElementById("weakness").textContent = pick(WEAKNESSES);
+    document.getElementById("tagline").textContent = `"${pick(TAGLINES)}"`;
+
+    const d = document.getElementById("dossier");
+    d.classList.remove("show");
+    void d.offsetWidth;        // restart the stamp animation
+    d.classList.add("show");
+    d.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  document.getElementById("generate").addEventListener("click", generate);
+  document.getElementById("again").addEventListener("click", generate);
+</script>
+</body>
+</html>
