@@ -1,0 +1,18 @@
+POST http://localhost:8088/register
+Content-Type: application/json
+
+{
+  "name": "Mario",
+  "email": "mario@example.com",
+  "password": "segreto"
+}
+
+###
+
+POST http://localhost:8088/login
+Content-Type: application/json
+
+{
+  "email": "mario@example.com",
+  "password": "MarBen00!"
+}

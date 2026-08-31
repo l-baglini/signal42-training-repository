@@ -1,0 +1,15 @@
+@token = REPLACE_WITH_ACCESS_TOKEN_FROM_LOGIN
+
+GET http://localhost:8088/preferences
+Authorization: Bearer {{token}}
+
+###
+
+PATCH http://localhost:8088/preferences
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "backupActive": false,
+  "cloudProvider": "drive"
+}

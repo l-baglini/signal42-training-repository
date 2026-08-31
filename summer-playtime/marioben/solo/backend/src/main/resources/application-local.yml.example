@@ -1,0 +1,14 @@
+########################################################################
+# Copy this file to application-local.yml (same folder), fill in real
+# values, and run with SPRING_PROFILES_ACTIVE=local.
+#
+# application-local.yml is gitignored: it never gets committed, so these
+# keys stay isolated to this project instead of living in your shared
+# shell profile with your other projects' AWS credentials.
+#
+# Use an IAM user scoped to just this bucket (see guida_aws_setup.txt),
+# never your AWS root account keys.
+########################################################################
+aws:
+  access-key-id: AKIA...
+  secret-access-key: ...

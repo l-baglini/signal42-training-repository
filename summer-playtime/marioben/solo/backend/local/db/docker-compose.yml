@@ -1,0 +1,31 @@
+services:
+  mysql-solo:
+    image: mysql:8
+    container_name: mysql_solo
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Mario1!
+      MYSQL_DATABASE: solo
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_solo_data:/var/lib/mysql
+
+  postgres-solo-vectors:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_solo_vectors
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Mario1!
+      POSTGRES_DB: solo_vectors
+    ports:
+      # 5433, not 5432: avoids clashing with any other local Postgres already using the default
+      # port (e.g. a leftover container from an unrelated earlier experiment).
+      - "5433:5432"
+    volumes:
+      - postgres_solo_vectors_data:/var/lib/postgresql/data
+
+volumes:
+  mysql_solo_data:
+  postgres_solo_vectors_data:

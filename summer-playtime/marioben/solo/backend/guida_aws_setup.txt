@@ -1,0 +1,264 @@
+====================================================================
+GUIDA COMPLETA: CREAZIONE E CONFIGURAZIONE SICURA DI UN ACCOUNT AWS
+====================================================================
+Data creazione guida: 28/07/2026
+
+
+====================================================================
+FASE 1 - CREAZIONE DELL'ACCOUNT AWS
+====================================================================
+
+1. Vai su https://aws.amazon.com/ e clicca su "Crea un account AWS".
+
+2. Inserisci:
+   - Indirizzo email (usa un indirizzo che controlli spesso, sarà
+     l'email del ROOT USER)
+   - Nome account (es. "MioProgetto-Prod")
+   - Password FORTE (almeno 16 caratteri, mix di maiuscole,
+     minuscole, numeri, simboli). Usa un password manager.
+
+3. Inserisci i dati di contatto (personale o business).
+
+4. Inserisci un metodo di pagamento (carta di credito/debito).
+   AWS fa un piccolo addebito di verifica che viene rimborsato.
+
+5. Verifica il numero di telefono (SMS o chiamata con codice OTP).
+
+6. Scegli il piano di supporto:
+   - "Basic support - Free" è sufficiente per iniziare.
+
+7. Account creato! Riceverai una mail di conferma.
+
+IMPORTANTE: l'account root ha PIENO accesso a tutto, incluso il
+billing. Non va mai usato per il lavoro quotidiano (vedi Fase 3).
+
+
+====================================================================
+FASE 2 - MESSA IN SICUREZZA DEL ROOT USER (PRIORITÀ MASSIMA)
+====================================================================
+
+1. Attiva subito l'MFA (Multi-Factor Authentication) sul root user:
+   - Console AWS > in alto a destra clicca sul nome account >
+     "Security credentials"
+   - Sezione "Multi-factor authentication (MFA)" > "Assign MFA device"
+   - Scegli un'app authenticator (consigliato: Google Authenticator,
+     Authy, 1Password) oppure una chiave hardware (YubiKey) se
+     disponibile.
+   - Scansiona il QR code e inserisci i due codici consecutivi
+     generati per confermare.
+
+2. NON creare Access Key (chiavi API) per il root user. Se ne esistono
+   già (create per errore), eliminale da "Security credentials" >
+   "Access keys".
+
+3. Salva le credenziali root in un posto sicuro (password manager),
+   non condividerle mai, non inserirle in script o file di codice.
+
+4. Da questo momento in poi il root user si usa SOLO per:
+   - operazioni che richiedono esplicitamente il root (es. chiudere
+     l'account, cambiare piano di supporto, alcune impostazioni di
+     billing avanzate)
+   - creare il primo utente IAM amministrativo (Fase 3)
+
+5. (Consigliato) Blocca l'uso del root impostando un alert se
+   qualcuno effettua login come root: vedi Fase 6 (CloudTrail +
+   EventBridge) oppure attiva semplicemente le notifiche email che
+   AWS invia automaticamente per i login root.
+
+
+====================================================================
+FASE 3 - CREAZIONE UTENTI E RUOLI IAM (IDENTITY AND ACCESS MANAGEMENT)
+====================================================================
+
+Il principio guida è: "least privilege" (minimo privilegio
+necessario). Non usare mai il root per il lavoro quotidiano.
+
+3.1 Attiva IAM Identity Center (raccomandato, ex AWS SSO) OPPURE
+    usa utenti IAM classici (più semplice per un singolo
+    utente/piccolo team):
+
+--- OPZIONE SEMPLICE: Utente IAM amministrativo ---
+
+1. Vai su IAM (Identity and Access Management) dalla console.
+
+2. Users > "Create user"
+   - Nome utente: es. "mario-admin"
+   - Spunta "Provide user access to the AWS Management Console"
+   - Password: personalizzata, forte, con obbligo di cambio al
+     primo accesso
+
+3. Assegna i permessi:
+   - "Attach policies directly"
+   - Seleziona "AdministratorAccess" (solo per l'utente admin
+     principale, uno o due al massimo)
+
+4. Completa la creazione e ATTIVA SUBITO L'MFA anche per questo
+   utente (IAM > Users > seleziona utente > Security credentials >
+   Assign MFA device), stesso procedimento del root.
+
+5. Da ora, effettua il login quotidiano con questo utente IAM
+   (URL tipo: https://<account-id>.signin.aws.amazon.com/console),
+   NON con il root.
+
+--- OPZIONE AVANZATA (consigliata se crescerai / avrai un team) ---
+
+1. Attiva "IAM Identity Center" (Organizations > Identity Center).
+2. Crea gruppi (es. Admins, Developers, ReadOnly) con policy
+   specifiche assegnate al gruppo, non ai singoli utenti.
+3. Crea utenti e assegnali ai gruppi.
+4. Usa i "Permission Sets" per definire cosa può fare ogni gruppo.
+
+3.2 Regole generali IAM
+
+- Non usare MAI le Access Key del root.
+- Per accesso programmatico (script, CLI, CI/CD) crea un utente IAM
+  dedicato con permessi minimi specifici (non AdministratorAccess),
+  oppure meglio ancora usa IAM ROLES con credenziali temporanee
+  invece di Access Key permanenti.
+- Per servizi AWS che devono accedere ad altri servizi AWS (es. una
+  Lambda che legge da S3), usa sempre un IAM ROLE assegnato al
+  servizio, MAI Access Key incorporate nel codice.
+- Ruota le Access Key periodicamente (ogni 90 giorni) se proprio
+  devi usarle.
+- Attiva la password policy per tutti gli utenti IAM:
+  IAM > Account settings > Password policy:
+  - lunghezza minima 14 caratteri
+  - richiedi maiuscole, minuscole, numeri, simboli
+  - scadenza password ogni 90 giorni
+  - impedisci riutilizzo delle ultime 5 password
+
+3.3 Creare un ruolo IAM (esempio pratico)
+
+1. IAM > Roles > "Create role"
+2. Scegli il "trusted entity type":
+   - AWS service (es. EC2, Lambda) se il ruolo serve a un servizio
+   - AWS account se serve per accesso cross-account
+3. Assegna solo le policy necessarie (es. AmazonS3ReadOnlyAccess se
+   il servizio deve solo leggere da S3).
+4. Dai un nome descrittivo (es. "lambda-read-s3-role").
+5. Collega il ruolo al servizio (es. nella configurazione della
+   Lambda, sezione "Execution role").
+
+
+====================================================================
+FASE 4 - BUDGET ALERT E CONTROLLO DEI COSTI
+====================================================================
+
+1. Vai su "Billing and Cost Management" > "Budgets".
+
+2. Clicca "Create budget".
+
+3. Scegli "Use a template" > "Zero spend budget" per essere
+   avvisato al primo centesimo speso (utile se non ti aspetti costi),
+   OPPURE "Customize" per un budget mensile personalizzato.
+
+4. Se personalizzato:
+   - Tipo: "Cost budget"
+   - Periodo: Monthly
+   - Importo: es. 20 USD/mese (adegua alle tue aspettative)
+   - Soglie di alert consigliate:
+     * 50% del budget → email di avviso
+     * 80% del budget → email di avviso
+     * 100% del budget → email di avviso
+     * 100% "forecasted" (previsto) → email di avviso preventivo
+
+5. Inserisci l'indirizzo email che riceverà le notifiche.
+
+6. Salva il budget.
+
+7. (Consigliato) Attiva anche i "Free Tier alerts":
+   - Billing Preferences > spunta "Receive Free Tier Usage Alerts"
+   - Inserisci l'email per essere avvisato quando ti avvicini ai
+     limiti del piano gratuito (free tier).
+
+8. (Consigliato) Attiva i "Cost anomaly detection":
+   - Billing > "Cost Anomaly Detection" > crea un monitor per essere
+     avvisato automaticamente di spese anomale/inaspettate.
+
+9. Controlla periodicamente "Cost Explorer" per analizzare i costi
+   nel tempo per servizio.
+
+
+====================================================================
+FASE 5 - SICUREZZA GENERALE DELL'ACCOUNT
+====================================================================
+
+1. Attiva AWS CloudTrail (per audit/log di tutte le azioni):
+   - Vai su CloudTrail > "Create trail"
+   - Nome trail, salva i log in un bucket S3 dedicato
+   - Attiva "Log file validation" per garantire integrità dei log
+   - Questo ti permette di vedere CHI ha fatto COSA e QUANDO
+
+2. Attiva AWS Config (facoltativo ma utile):
+   - Monitora la conformità delle risorse alle best practice
+
+3. Attiva Amazon GuardDuty (rilevamento minacce):
+   - Servizio di detection automatica per attività sospette
+     (accessi anomali, malware, scanning, ecc.)
+   - Ha un costo ma il tier iniziale è economico e ne vale la pena
+
+4. Attiva AWS Security Hub (facoltativo):
+   - Dashboard centralizzata che aggrega i risultati di sicurezza
+     di più servizi (GuardDuty, Config, Inspector, ecc.)
+
+5. Configura i Security Group e le regole di rete con criterio:
+   - Non aprire mai porte come SSH (22) o RDP (3389) a 0.0.0.0/0
+     (tutto internet). Limita l'accesso al tuo IP specifico o usa
+     AWS Systems Manager Session Manager al posto di SSH diretto.
+
+6. Cripta i dati:
+   - Attiva la crittografia di default per i bucket S3 (SSE-S3 o
+     SSE-KMS)
+   - Attiva la crittografia per i volumi EBS
+   - Usa AWS KMS per gestire le chiavi di crittografia
+
+7. Backup:
+   - Configura AWS Backup per risorse critiche (EBS, RDS, ecc.)
+   - Attiva il versioning sui bucket S3 importanti
+
+8. Region e Data Residency:
+   - Scegli la region più vicina/adatta (es. eu-south-1 Milano,
+     eu-west-1 Irlanda) considerando GDPR e latenza.
+
+9. Tag delle risorse:
+   - Usa un sistema di tag coerente (es. Project, Environment,
+     Owner) per tenere sotto controllo costi e responsabilità.
+
+
+====================================================================
+FASE 6 - CHECKLIST RIASSUNTIVA (DA FARE SUBITO)
+====================================================================
+
+[ ] Account AWS creato
+[ ] MFA attivato sul ROOT user
+[ ] Nessuna Access Key sul ROOT user
+[ ] Utente IAM amministrativo creato (non usare più il root per
+    il lavoro quotidiano)
+[ ] MFA attivato anche sull'utente IAM admin
+[ ] Password policy configurata per tutti gli utenti IAM
+[ ] Budget mensile creato con alert a 50/80/100%
+[ ] Free Tier alerts attivati
+[ ] Cost Anomaly Detection attivato
+[ ] CloudTrail attivato per audit dei log
+[ ] GuardDuty attivato per rilevamento minacce
+[ ] Nessuna porta critica (22/3389) aperta a tutto internet
+[ ] Crittografia S3/EBS attivata
+[ ] Backup configurato per risorse critiche
+[ ] Region scelta in base a GDPR/latenza
+[ ] Sistema di tag per risorse definito
+
+
+====================================================================
+RISORSE UTILI
+====================================================================
+
+- AWS Well-Architected Framework (pilastro Security):
+  https://aws.amazon.com/architecture/well-architected/
+
+- AWS Free Tier: https://aws.amazon.com/free/
+
+- IAM Best Practices (documentazione ufficiale AWS)
+
+====================================================================
+FINE GUIDA
+====================================================================

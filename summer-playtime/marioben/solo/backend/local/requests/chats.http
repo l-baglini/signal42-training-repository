@@ -1,0 +1,47 @@
+@token = REPLACE_WITH_ACCESS_TOKEN_FROM_LOGIN
+@chatId = REPLACE_WITH_CHAT_UUID
+
+GET http://localhost:8088/chats
+Authorization: Bearer {{token}}
+
+###
+
+POST http://localhost:8088/chats
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "id": "{{chatId}}",
+  "name": "Personale",
+  "icon": "chat",
+  "color": "blue",
+  "favorite": false,
+  "backup": true,
+  "securityMode": "none"
+}
+
+###
+
+PATCH http://localhost:8088/chats/{{chatId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "favorite": true
+}
+
+###
+
+PATCH http://localhost:8088/chats/{{chatId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "securityMode": "pin",
+  "securityPinHash": "abc123"
+}
+
+###
+
+DELETE http://localhost:8088/chats/{{chatId}}
+Authorization: Bearer {{token}}

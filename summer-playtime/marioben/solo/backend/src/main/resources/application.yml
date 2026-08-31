@@ -1,0 +1,106 @@
+server:
+  port: 8088
+  address: 0.0.0.0
+#  database connections
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/solo}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:Mario1!}
+
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    show-sql: true
+  security:
+    jwt:
+      # No fallback on purpose: this signs every auth token, so it must come from the
+      # environment (or application-local.yml for local dev) rather than live in a
+      # committed file. Missing JWT_SECRET fails app startup instead of silently signing
+      # with a value anyone with repo access could read and forge tokens against.
+      secret: ${JWT_SECRET:}
+      issuer: ${JWT_ISSUER:api.solo.com}
+      # 7 giorni: prima era 600 (10 minuti), che con l'auto-logout su 401 lato app forzava un
+      # nuovo login praticamente ad ogni sessione. Non esiste un refresh-token flow (vedi
+      # refresh-ttl-seconds sotto, mai usato da nessun endpoint), quindi questo è l'unica cosa
+      # che tiene la sessione viva: va scaduto raro, non impercettibile.
+      access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS:604800}
+      refresh-ttl-seconds: ${JWT_REFRESH_TTL_SECONDS:86400}
+  # a message.json + a couple of photos/PDFs fit well under this; raise it if attachments grow
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 50MB
+  # spring-ai-starter-mcp-server-webmvc pulls in an R2DBC auto-configuration that has nothing to
+  # connect to here (no reactive datasource configured) and would otherwise fail app startup.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcTransactionManagerAutoConfiguration
+  ai:
+    mcp:
+      server:
+        name: solo-mcp
+        version: 1.0.0
+        sse-endpoint: /mcp/sse
+        sse-message-endpoint: /mcp/message
+
+# "Accedi con Google" (vedi com.solo.authentication.config.GoogleAuthConfig): lista separata da
+# virgole di ogni OAuth Client ID Google che l'app può presentare — uno di tipo "Android"
+# (package com.mario.solo + SHA-1 della firma) e uno di tipo "iOS" (bundle id com.mario.solo),
+# vedi EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID/EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID lato frontend. Sono
+# le "audience" attese negli ID token firmati da Google. Vuoto di default: l'endpoint
+# /auth/google resta attivo ma rifiuta sempre finché non viene impostato almeno un client id.
+google:
+  client-ids: ${GOOGLE_CLIENT_IDS:}
+
+# S3 bucket used as content store for message bodies and attachments (see com.solo.message).
+# access-key-id/secret-access-key default to blank here on purpose: with nothing set, S3Config
+# falls back to the AWS SDK's default credential chain (IAM role in prod). For local dev, put
+# real values in application-local.yml (gitignored, never committed — see .example next to it)
+# and run with SPRING_PROFILES_ACTIVE=local, so these keys stay isolated to this project instead
+# of living in your shared shell profile.
+aws:
+  region: ${AWS_REGION:eu-central-1}
+  access-key-id: ${AWS_ACCESS_KEY_ID:}
+  secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+  s3:
+    bucket: ${AWS_S3_MESSAGES_BUCKET:mybucketstack-mytestbucket81062429-00zfbwvwn7qj}
+
+# Local-AI message search (see SPEC.md §3.6 / CLAUDE.md): a second Postgres+pgvector datasource
+# used only to index message embeddings, entirely separate from the MySQL datasource above (see
+# com.solo.search.config.VectorDbConfig). Nothing here talks to the internet — embeddings and the
+# final answer both come from a local LM Studio instance.
+vector:
+  datasource:
+    url: ${VECTOR_DB_URL:jdbc:postgresql://localhost:5433/solo_vectors}
+    username: ${VECTOR_DB_USERNAME:postgres}
+    password: ${VECTOR_DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+
+# LM Studio's OpenAI-compatible embeddings endpoint. No default model: which one is right depends
+# entirely on what's loaded in LM Studio (an empty model name is a request-time error, not a
+# startup one, so the rest of the app keeps working without this feature configured).
+embedding:
+  base-url: ${EMBEDDING_BASE_URL:http://localhost:1234}
+  model: ${EMBEDDING_MODEL:}
+
+# LM Studio's native chat endpoint (not the OpenAI-compatible one): this is what supports the
+# "integrations" field that lets the model call back into our MCP tool mid-generation. High
+# read-timeout on purpose: an MCP-augmented generation can take minutes.
+llm:
+  base-url: ${LLM_BASE_URL:http://localhost:1234}
+  chat-path: ${LLM_CHAT_PATH:/api/v1/chat}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:google/gemma-4-e4b}
+  integrations: ${LLM_INTEGRATIONS:mcp/solo}
+  connect-timeout-ms: ${LLM_CONNECT_TIMEOUT_MS:10000}
+  read-timeout-ms: ${LLM_READ_TIMEOUT_MS:600000}
+
+# The MCP search tool has no app session/JWT to scope itself by (LM Studio calls it directly, not
+# through an authenticated user request) — see SPEC.md §3.6. It searches this one account's
+# messages only. Empty by default: the tool refuses to search rather than guessing an account.
+search:
+  owner-email: ${SEARCH_OWNER_EMAIL:}

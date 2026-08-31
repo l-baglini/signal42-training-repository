@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/001-init-schema.sql
+  - include:
+      file: db/changelog/002-add-backup-and-user-preference.sql
+  - include:
+      file: db/changelog/003-add-chat-and-user-preference-fields.sql
+  - include:
+      file: db/changelog/004-add-plan.sql
+  - include:
+      file: db/changelog/005-user-preference-plan.sql
+  - include:
+      file: db/changelog/006-add-message.sql
+  - include:
+      file: db/changelog/007-add-message-user-created-at-index.sql
