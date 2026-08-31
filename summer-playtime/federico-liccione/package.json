@@ -1,0 +1,31 @@
+{
+  "name": "blindspot",
+  "description": "Blind Spot \u2014 to see is to be seen. A cover shooter whose only positional controller is where your head is: an enemy is visible only from a position you must lean to reach, which is the only position it can shoot you from.",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/setup-assets.mjs && vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "probe": "vitest run --config vitest.tools.config.ts tools/probe.test.ts --reporter=basic",
+    "sweep": "vitest run --config vitest.tools.config.ts tools/sweep.test.ts --reporter=basic",
+    "setup": "node tools/setup-assets.mjs",
+    "levels": "vitest run --config vitest.tools.config.ts tools/levels.test.ts --reporter=basic",
+    "designed": "vitest run --config vitest.tools.config.ts tools/designed.test.ts --reporter=basic",
+    "author": "vitest run --config vitest.tools.config.ts tools/author.test.ts --reporter=basic"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@mediapipe/tasks-vision": "^1.0.1"
+  }
+}

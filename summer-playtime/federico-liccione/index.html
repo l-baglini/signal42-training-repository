@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blind Spot — to see is to be seen</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #04060b; color: #dfe6f2; overflow: hidden;
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .panel { position: fixed; z-index: 10; padding: 12px 14px; border-radius: 10px;
+    background: rgba(6, 9, 16, .84); border: 1px solid rgba(255,255,255,.12);
+    backdrop-filter: blur(8px); }
+  #hud { top: 12px; left: 12px; width: 340px; max-height: calc(100% - 24px); overflow: auto;
+    transition: opacity .18s; }
+  /* An enemy can stand anywhere on the glass, including behind this panel, so it
+     gets out of the way for the ninety seconds that matter. Unless the numbers
+     have been asked for with H, in which case watching them *is* the point. */
+  #hud.tucked { opacity: 0; pointer-events: none; }
+  #hud:not(.collapsed) { width: 430px; }
+  /* The engine's numbers are for the author and for the showcase, not for play, so
+     they start hidden and H brings them back. The sliders stay: one of them is the
+     screen width, and the projection is wrong until it is right. */
+  #hud .numbers { display: none; }
+  #hud:not(.collapsed) .numbers { display: block; }
+  #hud .numbers .who { margin: 12px 0 4px; }
+  #hud h1 { margin: 0 0 2px; font-size: 14px; letter-spacing: .01em; }
+  /* The name says what you cannot see. The tagline says the half that makes it a
+     game: the position you can see it from is the position it can see you from. */
+  #hud h1 .tag { font-weight: 400; font-style: italic; font-size: 11.5px;
+    opacity: .5; letter-spacing: 0; margin-left: 6px; }
+  #hud .sub { opacity: .55; font-size: 11px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 11px; }
+  th { text-align: right; opacity: .5; font-weight: 500; padding: 3px 5px; }
+  th:first-child { text-align: left; }
+  td { text-align: right; padding: 3px 5px; border-top: 1px solid rgba(255,255,255,.07);
+    font-variant-numeric: tabular-nums; }
+  td:first-child { text-align: left; }
+  tr.fair td { color: #7ce0c0; }
+  tr.on td { color: #ffdb5c; font-weight: 600; }
+  tr.rejected td { opacity: .42; }
+  #stats { margin-top: 10px; font-family: ui-monospace, monospace; font-size: 11px; opacity: .8;
+    white-space: pre-line; }
+  .keygroup { margin-top: 7px; font-size: 11px; opacity: .62; }
+  .keygroup .on { color: #7ce0c0; opacity: .9; }
+  .who { display: block; font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+    opacity: .55; margin-bottom: 2px; }
+  kbd { background: rgba(255,255,255,.1); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
+  #cost { bottom: 12px; left: 12px; max-width: 330px; display: none;
+    font-family: ui-monospace, monospace; font-size: 11px; }
+  #cost .lbl { font-family: ui-sans-serif, system-ui, sans-serif; opacity: .5;
+    margin-bottom: 5px; letter-spacing: .04em; }
+  #cost #costBody { white-space: pre-line; opacity: .85; }
+  #score { top: 12px; right: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  #score .big { font-size: 26px; font-weight: 600; line-height: 1.1; }
+  #score .lbl { font-size: 11px; opacity: .55; }
+  #refusal { left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 560px;
+    display: none; border-color: rgba(255,140,140,.4); }
+  #refusal h2 { margin: 0 0 8px; font-size: 15px; color: #ff9c9c; }
+  #refusal p { margin: 0 0 10px; }
+  #refusal .counts { font-family: ui-monospace, monospace; font-size: 11px; opacity: .75;
+    white-space: pre-line; }
+  #ruler { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10;
+    display: none; text-align: center; }
+  #ruler .bar { height: 14px; border: 2px solid #ffd479; border-top: 0; }
+  #ruler .lbl { color: #ffd479; font-size: 11px; margin-top: 3px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .row label { flex: 0 0 130px; opacity: .7; font-size: 11px; }
+  .row input { flex: 1; min-width: 0; }
+  .row input[type=text], .row input[type=password] { background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 5px; color: #e7edf8;
+    padding: 4px 7px; font-size: 11px; font-family: inherit; }
+  /* Buttons rather than a select: a focused select swallows the space bar, which
+     is the key that starts the round. */
+  .seg { flex: 1; display: flex; gap: 4px; min-width: 0; }
+  .seg button { flex: 1; padding: 4px 2px; font: inherit; font-size: 11px;
+    color: #cfd8e8; background: rgba(255,255,255,.06); cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14); border-radius: 5px; }
+  .seg button:hover { background: rgba(255,255,255,.12); }
+  .seg button[aria-pressed="true"] { background: rgba(124,224,192,.20);
+    border-color: rgba(124,224,192,.55); color: #bff0e0; }
+  .row .val { flex: 0 0 52px; text-align: right; font-family: ui-monospace, monospace; font-size: 11px; }
+  /* Sensitivity acts on captured pointer deltas, so it needs the capture. If the
+     browser refuses, say so rather than leaving a slider that does nothing. */
+  .row.inert { opacity: .45; }
+  .row.inert label::after { content: ' — no pointer capture'; opacity: .7; }
+  #fatal { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 520px;
+    border-color: rgba(255,140,140,.4); }
+  #cam { position: fixed; bottom: 12px; right: 12px; z-index: 10; }
+  #cam video { width: 168px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15);
+    transform: scaleX(-1); display: block; }
+  #tracker { margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px; opacity: .8; }
+  #calib { left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; max-width: 480px;
+    text-align: center; border-color: rgba(124,224,192,.35); }
+  #calib h2 { margin: 0 0 6px; font-size: 15px; color: #7ce0c0; }
+  #round { left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 460px;
+    text-align: center; }
+  #round h2 { margin: 0 0 8px; font-size: 17px; }
+  #round p { margin: 0 0 10px; white-space: pre-line; }
+  #round .note { font-size: 11px; opacity: .6; }
+  /* The one thing worth interrupting the player for: ten seconds of calibration
+     is what scales every number in the level to their own neck. */
+  #round .urge { margin: 10px 0 0; padding: 8px 10px; border-radius: 7px;
+    background: rgba(255,212,121,.10); border: 1px solid rgba(255,212,121,.34);
+    color: #ffd479; font-size: 12px; display: none; }
+  #round .urge kbd { background: rgba(255,212,121,.18); color: #ffe3a6; }
+  #round .compose { margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,.12); text-align: left; }
+  #round .composeTitle { font-size: 11px; opacity: .55; margin-bottom: 7px;
+    letter-spacing: .03em; }
+  #round .compose input { display: block; width: 100%; margin-bottom: 6px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 6px; color: #e7edf8; padding: 7px 9px; font: inherit; font-size: 12px; }
+  #round .compose input:focus { outline: none; border-color: rgba(124,224,192,.55); }
+  #round .compose button { width: 100%; margin: 2px 0 8px; padding: 8px 10px;
+    border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+    background: #2f6f5f; color: #eafff6; border: 1px solid #49a686; }
+  #round .compose button:hover:not(:disabled) { background: #38826f; }
+  #round .compose button:disabled { opacity: .5; cursor: default; }
+  #round .composeNote { font-size: 10.5px; opacity: .45; line-height: 1.45; }
+  #scan { left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 520px;
+    display: none; text-align: left; border-color: rgba(124,180,224,.4); }
+  #scan h2 { margin: 0 0 8px; font-size: 15px; color: #8cc4f0; }
+  #scan p { margin: 0 0 8px; }
+  #scan .meta { font-family: ui-monospace, monospace; font-size: 11px; opacity: .75;
+    white-space: pre-line; }
+  #warm { position: fixed; left: 50%; bottom: 168px; transform: translateX(-50%); z-index: 10;
+    width: 240px; display: none; text-align: center; }
+  #warm .track { height: 5px; border-radius: 3px; background: rgba(255,255,255,.10); overflow: hidden; }
+  #warm .fill { height: 100%; width: 0%; background: #4fb8a0; transition: width .08s linear; }
+  #warm .lbl { font-size: 10.5px; opacity: .55; margin-top: 4px; letter-spacing: .06em; }
+  #hold { position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%); z-index: 10;
+    width: 240px; display: none; text-align: center; }
+  #hold .track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.13); overflow: hidden; }
+  #hold .fill { height: 100%; width: 0%; background: #7ce0c0; transition: width .06s linear; }
+  #hold .lbl { font-size: 11px; opacity: .7; margin-top: 5px; letter-spacing: .04em; }
+  #hint { position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%); z-index: 10;
+    display: none; text-align: center; }
+  #hint .arrow { font-size: 40px; line-height: 1; color: #7ce0c0; }
+  #hint .text { font-size: 12px; opacity: .75; margin-top: 2px; }
+  .hitflash { position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: rgba(230,60,70,.32); opacity: 0; transition: opacity .35s; }
+  #labels { position: fixed; inset: 0; z-index: 9; pointer-events: none; }
+  #labels .label { position: absolute; left: 0; top: 0; white-space: nowrap;
+    font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase;
+    color: rgba(190,230,255,.72); text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+  #crosshair { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none;
+    display: none; margin: -11px 0 0 -11px; width: 22px; height: 22px; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute;
+    background: rgba(255,255,255,.75); }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { top: 10px; left: 0; height: 2px; width: 22px; }
+  #calib .count { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #calib .note { font-size: 11px; opacity: .6; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <div class="panel collapsed" id="hud">
+    <h1>Blind Spot <span class="tag">to see is to be seen</span></h1>
+    <div class="sub">
+      An enemy is only visible from a position you have to move your head to reach.
+      That is also the only position it can shoot you from.
+    </div>
+    <div id="tracker"></div>
+
+    <div class="keygroup">
+      <span class="who">Play</span>
+      <kbd>space</kbd> start &nbsp; <kbd>click</kbd> shoot &nbsp;
+      <kbd>[</kbd> <kbd>]</kbd> change level
+    </div>
+    <div class="keygroup">
+      <span class="who">Move your head</span>
+      The webcam is the controller. <kbd>C</kbd> webcam / keyboard &nbsp;
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> lean &nbsp;
+      <kbd>Q</kbd><kbd>E</kbd> nearer / further &nbsp;
+      <kbd>M</kbd> follow the pointer
+    </div>
+    <div class="keygroup">
+      <span class="who">Set up</span>
+      <kbd>K</kbd> measure your range — ten seconds, and every threshold in the
+      game is scaled to it &nbsp; <kbd>R</kbd> ruler, to check the width below
+    </div>
+    <div class="keygroup">
+      <span class="who">Show</span>
+      <kbd>H</kbd> the engine's numbers &nbsp; <kbd>N</kbd> sound &nbsp;
+      <kbd>O</kbd> compare: window <span class="on">on</span> / plain camera
+    </div>
+    <div class="keygroup">
+      <span class="who">AI, when you ask for it</span>
+      <kbd>P</kbd> build the level from your own room &nbsp; or describe one below
+    </div>
+
+    <div class="row">
+      <label>Your screen's width</label>
+      <input id="width" type="range" min="12" max="80" step="0.5" value="34">
+      <span class="val" id="widthVal"></span>
+    </div>
+    <div class="row" id="diffRow">
+      <label>Difficulty</label>
+      <div class="seg" id="diffSeg"></div>
+    </div>
+    <div class="row" id="sensRow">
+      <label>Aim sensitivity, in a round</label>
+      <input id="sens" type="range" min="0.3" max="3" step="0.05" value="1">
+      <span class="val" id="sensVal"></span>
+    </div>
+    <div class="row scanonly">
+      <label>Room depth, when scanning</label>
+      <input id="farwall" type="range" min="120" max="600" step="10" value="320">
+      <span class="val" id="farwallVal"></span>
+    </div>
+
+    <div class="numbers">
+      <div class="who">What the engine measured</div>
+      <table>
+        <thead><tr><th>enemy</th><th>lean</th><th>window</th><th>fuse</th><th>state</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="stats"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="cost">
+    <div class="lbl">runtime AI</div>
+    <div id="costBody"></div>
+  </div>
+
+  <div class="panel" id="score">
+    <div class="big" id="clock">90.0</div>
+    <div class="lbl">seconds</div>
+    <div class="big" id="scoreValue" style="margin-top:8px">0</div>
+    <div class="lbl">score</div>
+    <div class="lbl" id="tally" style="margin-top:6px"></div>
+  </div>
+
+  <div class="panel" id="round">
+    <h2 id="roundTitle">Blind Spot</h2>
+    <p id="roundBody"></p>
+    <div class="note">press <kbd>space</kbd> to play &nbsp;·&nbsp; <kbd>[</kbd> <kbd>]</kbd> for another level</div>
+    <div class="urge" id="urge"></div>
+    <form class="compose" id="compose">
+      <div class="composeTitle">or describe one and have it built</div>
+      <input id="describe" type="text" autocomplete="off"
+        placeholder="a forest clearing with two trees and a low rock, at dusk">
+      <input id="apikey" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Claude API key — never stored, and the shipped levels need none">
+      <button type="submit" id="build">Build this level</button>
+      <div class="composeNote">
+        Say what it is made of <em>and</em> where it is set — clear afternoon, dusk,
+        rainy night, neon, forest, industrial — because the palette and the weather
+        are read from the words, not from a menu.<br><br>
+        The model lays out the walls, and only the walls. Enemy positions come from
+        the same swept grid the shipped levels use, and the same solver decides
+        which of them your body can fairly fight from. It reports the measurement
+        afterwards, so a designed level is judged the way an authored one is rather
+        than trusted.
+      </div>
+    </form>
+  </div>
+
+  <div class="panel" id="refusal">
+    <h2>This room will not make a fair level</h2>
+    <p id="refusalReason"></p>
+    <div class="counts" id="refusalCounts"></div>
+  </div>
+
+  <div class="panel" id="scan">
+    <h2 id="scanTitle">Scanning the room</h2>
+    <p id="scanStage"></p>
+    <div class="meta" id="scanMeta"></div>
+  </div>
+
+  <div class="panel" id="fatal"><h2>Cannot start</h2><p id="fatalMessage"></p></div>
+
+  <div id="warm"><div class="track"><div class="fill" id="warmFill"></div></div>
+    <div class="lbl" id="warmLabel">GETTING WARMER</div></div>
+  <div id="hold"><div class="track"><div class="fill" id="holdFill"></div></div>
+    <div class="lbl" id="holdLabel">HOLD IT</div></div>
+  <div id="hint"><div class="arrow" id="hintArrow"></div><div class="text" id="hintText"></div></div>
+  <div id="labels"></div>
+  <div id="crosshair"></div>
+  <div class="hitflash" id="flash"></div>
+  <div id="cam"></div>
+
+  <div class="panel" id="calib">
+    <h2 id="calibTitle">Measuring your body</h2>
+    <p id="calibPrompt">Lean as far as is comfortable — left, right, up, and towards the screen.</p>
+    <div class="count" id="calibCount"></div>
+    <div class="note">Every guarantee the game makes is expressed against this measurement.</div>
+  </div>
+
+  <div id="ruler"><div class="bar"></div><div class="lbl">10 cm</div></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
