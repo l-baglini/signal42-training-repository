@@ -20,10 +20,14 @@ office manager one button per venue to produce the message to send.
 ## Core flow
 
 1. Manager configures the venues once: name, mode (eat-in / takeaway / both),
-   and a daily ordering cutoff time (e.g. "order by 10:30").
+   a daily ordering cutoff time (e.g. "order by 10:30"), and that venue's
+   menu (a short list of dish names — not free text).
 2. An employee opens the page, picks a date (today or one of the next two
-   weeks), picks an open venue, fills in name + order + mode, and submits.
-   A venue whose cutoff for that date has already passed cannot be selected.
+   weeks), picks an open venue, fills in name, chooses one dish from that
+   venue's menu, optionally adds a short free-text note (e.g. "no onions"),
+   picks a mode, and submits. A venue whose cutoff for that date has already
+   passed cannot be selected, and a venue with no menu items yet can't be
+   ordered from.
 3. An employee can cancel or edit their own request until the cutoff, using a
    private edit link saved in their browser (no login).
 4. The manager opens the dashboard for a date, sees requests grouped by
@@ -37,8 +41,12 @@ office manager one button per venue to produce the message to send.
 
 - `venues`: id, name, mode (`dine_in` | `takeaway` | `both`), cutoff_time
   (`HH:MM`, server-local), contact (free text, optional), active.
-- `requests`: id, venue_id, date (`YYYY-MM-DD`), person_name, mode, order_text,
-  edit_token, created_at, cancelled_at.
+- `menu_items`: id, venue_id, name, active — the fixed set of dishes an
+  employee can pick from for that venue.
+- `requests`: id, venue_id, date (`YYYY-MM-DD`), person_name, mode, dish (the
+  menu item name chosen at order time — denormalized so a later menu edit
+  doesn't rewrite history), note (optional free text), edit_token,
+  created_at, cancelled_at.
 - `sent_marks`: venue_id + date → sent_at.
 
 ## Acceptance criteria
@@ -53,12 +61,14 @@ office manager one button per venue to produce the message to send.
   than erroring out.
 - An employee can cancel their own request before the cutoff without needing
   to know anyone else's data.
+- A request's dish must be one of that venue's active menu items — checked
+  server-side, not just offered as radio buttons in the UI.
 
 ## Non-goals
 
 - No authentication/login — this is a small internal tool; identity is a
   free-text name plus a private edit link, not a security boundary.
-- No payments, no menu/pricing management, no real-time push updates (a page
+- No pricing on menu items, no payments, no real-time push updates (a page
   reload is enough).
 - No multi-timezone support — the server's local time is the source of truth
   for cutoffs (set via `TZ=Europe/Rome` in Docker Compose).
@@ -84,5 +94,6 @@ everywhere else (no auth hardening, no migrations framework, no e2e suite).
 - `npm run build && npm test` passes.
 - `docker compose up --build` serves the app with no `.env` required for the
   core flow (AI drafting degrades to the fallback template without a key).
-- A manager can seed at least one venue, an employee can place and cancel an
-  order against it, and the manager can generate a message for it, end to end.
+- A manager can seed at least one venue and menu item, an employee can place
+  and cancel an order against it, and the manager can generate a message for
+  it, end to end.

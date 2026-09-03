@@ -41,8 +41,15 @@
           <p class="meta">Modalità: <%= venue.mode === 'dine_in' ? 'sul posto' : 'asporto' %></p>
         <% } %>
 
-        <label for="orderText">Cosa ordini</label>
-        <textarea id="orderText" name="orderText" rows="3" maxlength="500" <%= closed ? 'disabled' : '' %>><%= request.order_text %></textarea>
+        <fieldset class="menu-choice" <%= closed ? 'disabled' : '' %>>
+          <legend>Cosa ordini</legend>
+          <% menuItems.forEach(function(item) { %>
+            <label><input type="radio" name="dish" value="<%= item.name %>" <%= request.dish === item.name ? 'checked' : '' %>> <%= item.name %></label>
+          <% }) %>
+        </fieldset>
+
+        <label for="note">Nota (opzionale)</label>
+        <textarea id="note" name="note" rows="2" maxlength="200" <%= closed ? 'disabled' : '' %>><%= request.note || '' %></textarea>
 
         <% if (!closed) { %>
           <button type="submit" class="button">Salva modifiche</button>

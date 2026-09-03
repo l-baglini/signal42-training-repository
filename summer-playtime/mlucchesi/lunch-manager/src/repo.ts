@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import crypto from "crypto";
-import type { LunchRequest, RequestMode, Venue, VenueMode } from "./types";
+import type { LunchRequest, MenuItem, RequestMode, Venue, VenueMode } from "./types";
 
 export function listActiveVenues(db: Database.Database): Venue[] {
   return db
@@ -22,6 +22,40 @@ export function createVenue(
     )
     .run(input.name, input.mode, input.cutoffTime, input.contact);
   return getVenue(db, Number(info.lastInsertRowid))!;
+}
+
+export function listActiveMenuItems(db: Database.Database, venueId: number): MenuItem[] {
+  return db
+    .prepare("SELECT * FROM menu_items WHERE venue_id = ? AND active = 1 ORDER BY id")
+    .all(venueId) as MenuItem[];
+}
+
+export function isActiveMenuItemName(
+  db: Database.Database,
+  venueId: number,
+  name: string,
+): boolean {
+  return !!getActiveMenuItemByName(db, venueId, name);
+}
+
+function getActiveMenuItemByName(
+  db: Database.Database,
+  venueId: number,
+  name: string,
+): MenuItem | undefined {
+  return db
+    .prepare("SELECT * FROM menu_items WHERE venue_id = ? AND active = 1 AND name = ?")
+    .get(venueId, name) as MenuItem | undefined;
+}
+
+export function addMenuItem(db: Database.Database, venueId: number, name: string): MenuItem {
+  const existing = getActiveMenuItemByName(db, venueId, name);
+  if (existing) return existing;
+
+  const info = db
+    .prepare("INSERT INTO menu_items (venue_id, name) VALUES (?, ?)")
+    .run(venueId, name);
+  return db.prepare("SELECT * FROM menu_items WHERE id = ?").get(info.lastInsertRowid) as MenuItem;
 }
 
 export function listRequestsForDate(db: Database.Database, date: string): LunchRequest[] {
@@ -49,16 +83,25 @@ export function createRequest(
     date: string;
     personName: string;
     mode: RequestMode;
-    orderText: string;
+    dish: string;
+    note: string | null;
   },
 ): LunchRequest {
   const editToken = crypto.randomBytes(16).toString("hex");
   const info = db
     .prepare(
-      `INSERT INTO requests (venue_id, date, person_name, mode, order_text, edit_token)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO requests (venue_id, date, person_name, mode, dish, note, edit_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(input.venueId, input.date, input.personName, input.mode, input.orderText, editToken);
+    .run(
+      input.venueId,
+      input.date,
+      input.personName,
+      input.mode,
+      input.dish,
+      input.note,
+      editToken,
+    );
   return db
     .prepare("SELECT * FROM requests WHERE id = ?")
     .get(info.lastInsertRowid) as LunchRequest;
@@ -67,11 +110,12 @@ export function createRequest(
 export function updateRequest(
   db: Database.Database,
   id: number,
-  input: { mode: RequestMode; orderText: string },
+  input: { mode: RequestMode; dish: string; note: string | null },
 ): void {
-  db.prepare("UPDATE requests SET mode = ?, order_text = ? WHERE id = ?").run(
+  db.prepare("UPDATE requests SET mode = ?, dish = ?, note = ? WHERE id = ?").run(
     input.mode,
-    input.orderText,
+    input.dish,
+    input.note,
     id,
   );
 }

@@ -5,21 +5,27 @@ const input = {
   venueName: "Trattoria Da Gino",
   date: "2026-07-24",
   lines: [
-    { personName: "Marco", mode: "dine_in" as const, orderText: "Margherita" },
-    { personName: "Sara", mode: "takeaway" as const, orderText: "Cotoletta" },
+    { personName: "Marco", mode: "dine_in" as const, dish: "Margherita", note: "senza cipolla" },
+    { personName: "Sara", mode: "takeaway" as const, dish: "Cotoletta", note: null },
   ],
 };
 
 describe("buildFallbackMessage", () => {
-  it("is deterministic and includes every order line", () => {
+  it("is deterministic and includes every order line, with the note in parentheses", () => {
     const msg = buildFallbackMessage(input);
     expect(msg).toContain("Trattoria Da Gino");
     expect(msg).toContain("2026-07-24");
     expect(msg).toContain("Marco");
-    expect(msg).toContain("Margherita");
+    expect(msg).toContain("Margherita (senza cipolla)");
     expect(msg).toContain("Sara");
     expect(msg).toContain("Cotoletta");
     expect(buildFallbackMessage(input)).toBe(msg);
+  });
+
+  it("omits the parentheses entirely when there is no note", () => {
+    const msg = buildFallbackMessage(input);
+    expect(msg).toContain("Sara (asporto): Cotoletta");
+    expect(msg).not.toContain("Cotoletta (");
   });
 });
 

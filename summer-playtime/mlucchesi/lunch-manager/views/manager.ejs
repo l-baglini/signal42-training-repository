@@ -24,12 +24,21 @@
           <% if (g.sent) { %><span class="badge badge-open">Inviato</span><% } %>
         </div>
 
+        <p class="muted small">
+          Menù: <%= g.menuItems.length === 0 ? 'nessun piatto configurato' : g.menuItems.map(function(m) { return m.name; }).join(', ') %>
+        </p>
+        <form method="post" action="/manager/venues/<%= g.venue.id %>/menu-items" class="inline-form menu-item-form">
+          <input type="hidden" name="date" value="<%= date %>">
+          <input type="text" name="name" placeholder="Aggiungi piatto..." maxlength="80" required>
+          <button type="submit" class="button button-secondary">Aggiungi piatto</button>
+        </form>
+
         <% if (g.requests.length === 0) { %>
           <p class="muted">Nessun ordine per questo giorno.</p>
         <% } else { %>
           <ul class="order-list">
             <% g.requests.forEach(function(r) { %>
-              <li><strong><%= r.person_name %></strong> (<%= r.mode === 'dine_in' ? 'sul posto' : 'asporto' %>) — <%= r.order_text %></li>
+              <li><strong><%= r.person_name %></strong> (<%= r.mode === 'dine_in' ? 'sul posto' : 'asporto' %>) — <%= r.dish %><%= r.note ? ' (' + r.note + ')' : '' %></li>
             <% }) %>
           </ul>
 

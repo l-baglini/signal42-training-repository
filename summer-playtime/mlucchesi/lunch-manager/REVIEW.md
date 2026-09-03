@@ -41,6 +41,33 @@ correctness + simplification) plus manual checks before being called done.
   SPEC calls out as load-bearing): `employee.ts` checks `isPastCutoff()` on
   every create/edit path, not just on the initial page render.
 
+## Round 2 — the "menu items" feature (free-text order → fixed menu + note)
+
+A second `/code-review` pass after replacing the free-text order field with
+a per-venue multiple-choice menu (+ optional note) found two more issues,
+both fixed:
+
+3. **Schema change wouldn't reach an existing database file.** `db.ts`'s
+   `CREATE TABLE IF NOT EXISTS requests (...)` was updated to the new
+   `dish`/`note` columns, but `IF NOT EXISTS` is a no-op against any database
+   file that already had the old `order_text` column — a real risk given the
+   Docker Compose setup persists SQLite in a named volume across restarts.
+   Reproduced: built the old schema in a file, ran the new `createDb()`
+   against it, got `table requests has no column named dish` on the next
+   `createRequest()`. **Fix:** added a small one-off `migrateRequestsTable()`
+   repair (checked via `PRAGMA table_info`, not a general migrations
+   framework — SPEC's non-goal is about not building versioned up/down
+   migration tooling, not about ignoring a reproduced data-loss bug) that
+   adds the new columns and backfills `dish` from `order_text` when it finds
+   the old shape. Covered by `test/db.test.ts` against a real on-disk SQLite
+   file (in-memory DBs can't exercise "reopen an existing file").
+4. **Menu items could be duplicated.** `addMenuItem()` had no uniqueness
+   check, so double-submitting "Aggiungi piatto" created two identical,
+   indistinguishable radio options for the same dish. **Fix:** `addMenuItem`
+   now returns the existing active item instead of inserting a duplicate
+   when the name already exists for that venue (still allowed across
+   different venues). Covered by two repo tests.
+
 ## Not chased further (accepted for this risk tier)
 
 - No rate limiting / abuse protection on request creation — an internal

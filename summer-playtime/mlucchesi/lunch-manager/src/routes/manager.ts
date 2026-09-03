@@ -3,9 +3,11 @@ import type Database from "better-sqlite3";
 import { isValidCutoffTime, today } from "../services/cutoff";
 import { draftMessage } from "../services/messageDraft";
 import {
+  addMenuItem,
   createVenue,
   getVenue,
   isSent,
+  listActiveMenuItems,
   listActiveVenues,
   listRequestsForDate,
   markSent,
@@ -26,6 +28,7 @@ export function managerRouter(db: Database.Database): Router {
     // Every active venue is shown, even with zero requests, so the manager sees the full picture.
     const groups = venues.map((venue) => ({
       venue,
+      menuItems: listActiveMenuItems(db, venue.id),
       requests: requests.filter((r) => r.venue_id === venue.id),
       sent: isSent(db, venue.id, date),
     }));
@@ -42,6 +45,17 @@ export function managerRouter(db: Database.Database): Router {
 
     if (name && VALID_VENUE_MODES.includes(mode) && isValidCutoffTime(cutoffTime)) {
       createVenue(db, { name, mode, cutoffTime, contact });
+    }
+    res.redirect(`/manager?date=${date}`);
+  });
+
+  router.post("/manager/venues/:id/menu-items", (req, res) => {
+    const venueId = Number(req.params.id);
+    const name = String(req.body.name || "").trim();
+    const date = String(req.body.date || today());
+
+    if (name && getVenue(db, venueId)) {
+      addMenuItem(db, venueId, name);
     }
     res.redirect(`/manager?date=${date}`);
   });
@@ -68,7 +82,7 @@ export function managerRouter(db: Database.Database): Router {
 
     const lines = listRequestsForDate(db, date)
       .filter((r) => r.venue_id === venueId)
-      .map((r) => ({ personName: r.person_name, mode: r.mode, orderText: r.order_text }));
+      .map((r) => ({ personName: r.person_name, mode: r.mode, dish: r.dish, note: r.note }));
 
     const result = await draftMessage({ venueName: venue.name, date, lines });
     res.json(result);

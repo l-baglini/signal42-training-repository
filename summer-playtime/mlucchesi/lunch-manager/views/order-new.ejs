@@ -16,30 +16,40 @@
 
     <% if (error) { %><p class="error"><%= error %></p><% } %>
 
-    <form method="post" action="/order/new" class="form">
-      <input type="hidden" name="date" value="<%= date %>">
-      <input type="hidden" name="venueId" value="<%= venue.id %>">
+    <% if (menuItems.length === 0) { %>
+      <p class="muted">Nessun piatto configurato per questo locale ancora. Chiedi all'office manager di aggiungerne uno.</p>
+    <% } else { %>
+      <form method="post" action="/order/new" class="form">
+        <input type="hidden" name="date" value="<%= date %>">
+        <input type="hidden" name="venueId" value="<%= venue.id %>">
 
-      <label for="personName">Il tuo nome</label>
-      <input type="text" id="personName" name="personName" required maxlength="80" autocomplete="name">
+        <label for="personName">Il tuo nome</label>
+        <input type="text" id="personName" name="personName" required maxlength="80" autocomplete="name">
 
-      <% if (venue.mode === 'both') { %>
-        <fieldset class="modes">
-          <legend>Modalità</legend>
-          <label><input type="radio" name="mode" value="dine_in" checked> Sul posto</label>
-          <label><input type="radio" name="mode" value="takeaway"> Asporto</label>
+        <% if (venue.mode === 'both') { %>
+          <fieldset class="modes">
+            <legend>Modalità</legend>
+            <label><input type="radio" name="mode" value="dine_in" checked> Sul posto</label>
+            <label><input type="radio" name="mode" value="takeaway"> Asporto</label>
+          </fieldset>
+        <% } else { %>
+          <input type="hidden" name="mode" value="<%= venue.mode %>">
+          <p class="meta">Modalità: <%= venue.mode === 'dine_in' ? 'sul posto' : 'asporto' %></p>
+        <% } %>
+
+        <fieldset class="menu-choice">
+          <legend>Cosa ordini</legend>
+          <% menuItems.forEach(function(item, idx) { %>
+            <label><input type="radio" name="dish" value="<%= item.name %>" <%= idx === 0 ? 'checked' : '' %>> <%= item.name %></label>
+          <% }) %>
         </fieldset>
-      <% } else { %>
-        <input type="hidden" name="mode" value="<%= venue.mode %>">
-        <p class="meta">Modalità: <%= venue.mode === 'dine_in' ? 'sul posto' : 'asporto' %></p>
-      <% } %>
 
-      <label for="orderText">Cosa ordini</label>
-      <textarea id="orderText" name="orderText" rows="3" required maxlength="500"
-                placeholder="Es. Margherita senza cipolla"></textarea>
+        <label for="note">Nota (opzionale)</label>
+        <textarea id="note" name="note" rows="2" maxlength="200" placeholder="Es. senza cipolla, poco piccante..."></textarea>
 
-      <button type="submit" class="button">Invia ordine</button>
-    </form>
+        <button type="submit" class="button">Invia ordine</button>
+      </form>
+    <% } %>
   </main>
 </body>
 </html>

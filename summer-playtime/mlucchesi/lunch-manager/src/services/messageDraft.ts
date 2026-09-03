@@ -4,7 +4,8 @@ import type { RequestMode } from "../types";
 export interface OrderLine {
   personName: string;
   mode: RequestMode;
-  orderText: string;
+  dish: string;
+  note: string | null;
 }
 
 export interface DraftInput {
@@ -23,12 +24,15 @@ const MODE_LABEL: Record<RequestMode, string> = {
   takeaway: "asporto",
 };
 
+function formatLine(l: OrderLine): string {
+  const dishWithNote = l.note ? `${l.dish} (${l.note})` : l.dish;
+  return `- ${l.personName} (${MODE_LABEL[l.mode]}): ${dishWithNote}`;
+}
+
 /** Deterministic, no-dependency message — the guardrail when AI isn't available. */
 export function buildFallbackMessage(input: DraftInput): string {
   const header = `Ordine pranzo per ${input.venueName} — ${input.date} (${input.lines.length} persone)`;
-  const lines = input.lines.map(
-    (l) => `- ${l.personName} (${MODE_LABEL[l.mode]}): ${l.orderText}`,
-  );
+  const lines = input.lines.map(formatLine);
   return [header, "", ...lines].join("\n");
 }
 
@@ -48,9 +52,7 @@ export async function draftMessage(input: DraftInput): Promise<DraftResult> {
   try {
     const client = new Anthropic();
     const model = process.env.ANTHROPIC_MODEL || "claude-opus-5";
-    const orderList = input.lines
-      .map((l) => `- ${l.personName} (${MODE_LABEL[l.mode]}): ${l.orderText}`)
-      .join("\n");
+    const orderList = input.lines.map(formatLine).join("\n");
 
     const response = await client.messages.create({
       model,
@@ -61,7 +63,8 @@ export async function draftMessage(input: DraftInput): Promise<DraftResult> {
         "(es. su WhatsApp) al gestore di un ristorante/mensa per comunicare " +
         "l'ordine pranzo di un ufficio. Includi il nome del locale, la data, " +
         "il totale delle persone e l'elenco nome + modalità (sul posto/asporto) " +
-        "+ ordine. Nessun preambolo, nessuna nota finale: solo il messaggio.",
+        "+ piatto scelto, con eventuale nota tra parentesi. Nessun preambolo, " +
+        "nessuna nota finale: solo il messaggio.",
       messages: [
         {
           role: "user",
