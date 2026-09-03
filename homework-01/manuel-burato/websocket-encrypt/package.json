@@ -1,0 +1,50 @@
+{
+  "name": "websocket-encrypt",
+  "version": "0.1.0",
+  "description": "POC didattico: canale WebSocket con cifratura ibrida bidirezionale (RSA-OAEP + AES-256-GCM).",
+  "author": "Aryel",
+  "license": "MIT",
+  "keywords": [
+    "websocket",
+    "encryption",
+    "aes-256-gcm",
+    "rsa-oaep",
+    "hybrid-encryption",
+    "poc",
+    "workshop"
+  ],
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p examples/tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "npm run build && node --import tsx --test test/*.test.ts",
+    "example:server": "npm run build && tsx examples/server.ts",
+    "example:client": "npm run build && tsx examples/client.ts",
+    "demo:tamper": "npm run build && tsx examples/tamper-demo.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

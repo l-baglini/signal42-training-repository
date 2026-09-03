@@ -1,0 +1,19 @@
+# Dart tool cache
+.dart_tool/
+
+# pub dependencies
+.packages
+pubspec.lock
+
+# Build output
+.build/
+
+# Compiled binary dropped in root (legacy location before .build/ convention)
+maze-escape
+maze-escape.exe
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.iml

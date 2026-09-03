@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-uWxY/CJNBR+1zjPWmfnSnVxwRheevXITnMqoEIeG1LJrdI0GlVs/9cVSyPYXdcSF" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ads.txt Inspector | OneTag</title>
+    <style>
+        .status {
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 6px 0 rgba(0, 0, 0, .4);
+            padding: .4em 1em;
+            flex: 0 0 auto;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .status button {
+            appearance: none;
+            background: #fff;
+            font-size: 1em;
+            height: 100%;
+            cursor: pointer;
+            padding: 0.4em 0.6em;
+            border: 1px solid #dedede;
+            border-radius: 2px;
+            box-shadow: 0 0.1em 0 0.05em rgba(0, 0, 0, .4);
+            color: #484848;
+            display: inline-block;
+        }
+        .status button:active {
+            box-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+            position: relative;
+            top: 1px;
+        }
+        .logo a {
+            display: flex;
+        }
+        .logo img {
+            height: 1.6em;
+            margin-right: .6em;
+        }
+        .container-md {
+            max-width: 860px;
+        }
+        form .form-control {
+            width: auto;
+            margin-bottom: 1em;
+        }
+        form label {
+            display: block;
+        }
+        section {
+            margin-bottom: 1em;
+        }
+        textarea {
+            width: 100%;
+        }
+        .overlay {
+            visibility: hidden;
+            transition: opacity .2s linear, visibility 0s .2s, transform .6s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+            transform: translateY(1em);
+        }
+        .overlay[data-open] {
+            transform: translateY(0);
+            transition: opacity .2s linear, transform .6s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 1;
+            visibility: inherit;
+        }
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style-type: none;
+        }
+        body {
+            font-family: 'Open Sans', sans-serif;
+            background: #eaeaea;
+        }
+        section {
+            background: #fff;
+            padding: 1em 1.4em;
+            border-radius: 4px;
+        }
+        .result[data-empty] {
+            display: none;
+        }
+        .result {
+            font-family: monospace;
+            font-size: .8em;
+            white-space: nowrap;
+            overflow: auto;
+        }
+        #inspect .spinner-border {
+            position: absolute;
+            top: calc(50% - 0.5rem);
+            left: calc(50% - 0.5rem);
+        }
+        #inspect[data-loading] .text {
+            visibility: hidden;
+        }
+        #inspect:not([data-loading]) .spinner-border {
+            visibility: hidden;
+        }
+        #inspect {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <nav class="status navbar navbar-expand-sm mb-4">
+        <a class="logo" href="/">
+            <img src="logo.png" alt="logo">
+        </a>
+    </nav>
+    <div class="container-md">
+        <header>
+            <h1 class="display-5">ads.txt inspector</h1>
+        </header>
+        <section class="parameters">
+            <form>
+                <label>
+                    <span>Domain</span>
+                    <input class="form-control" type="text" name="domain">
+                </label>
+                <button id="inspect" class="btn btn-primary" disabled>
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span class="text">Inspect</span>
+                </button>
+            </form>
+        </section>
+        <section class="result" data-empty></section>
+    </div>
+    <div id="failure-modal" class="modal fade" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Error</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    An error occurred while scraping <span id="failed-domain"></span>'s ads.txt
+                </div>
+                <div class="modal-footer">
+                    <button id="confirm" type="button" class="btn btn-primary" data-bs-dismiss="modal" aria-label="Close">Ok</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-kQtW33rZJAHjgefvhyyzcGF3C5TFyBQBA13V1RKPf4uH+bwyzQxZ6CmMZHmNBEfJ" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/promise-polyfill/8.2.1/polyfill.min.js"></script>
+    <script>
+        var form = document.querySelector('form');
+        var failureModal = new bootstrap.Modal(document.querySelector('#failure-modal'));
+        document.querySelector('#failure-modal').addEventListener('hide.bs.modal', function() {
+            form.elements['domain'].value = '';
+        });
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            var domain = this.elements['domain'].value;
+            form.querySelector('button').setAttribute('data-loading', '');
+            Promise.all([
+                new Promise(function(resolve, reject) {
+                    var request = new XMLHttpRequest();
+                    request.open('post', '/ads-txt');
+                    request.setRequestHeader('Content-Type', 'application/json');
+                    request.addEventListener('load', function() {
+                        if (request.status !== 200) {
+                            reject();
+                        } else {
+                            resolve(JSON.parse(request.response).contents);
+                        }
+
+                    });
+                    request.send(JSON.stringify({ domain: domain }));
+                }),
+                new Promise(function(resolve) {
+                    setTimeout(resolve, 1200);
+                }),
+            ]).then(function(results) {
+                document.querySelector('.result').innerText = results[0];
+                document.querySelector('.result').removeAttribute('data-empty');
+            }).catch(function() {
+                document.querySelector('#failed-domain').innerText = domain;
+                failureModal.show();
+            }).finally(function() {
+                form.querySelector('button').removeAttribute('data-loading', '');
+            });
+        });
+        form.elements['domain'].addEventListener('input', function() {
+            if (this.value === '') {
+                form.querySelector('button').setAttribute('disabled', '');
+            } else {
+                form.querySelector('button').removeAttribute('disabled');
+            }
+        });
+    </script>
+</body>
+</html>
