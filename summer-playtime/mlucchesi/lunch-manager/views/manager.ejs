@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Office manager — Lunch Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav') %>
+
+  <main class="stage">
+    <h1>Riepilogo pranzo</h1>
+
+    <form method="get" action="/manager" class="date-form">
+      <label for="date">Giorno</label>
+      <input type="date" id="date" name="date" value="<%= date %>" onchange="this.form.submit()">
+    </form>
+
+    <% groups.forEach(function(g) { %>
+      <section class="venue-group">
+        <div class="card-head">
+          <h2><%= g.venue.name %> <span class="muted">(<%= g.requests.length %>)</span></h2>
+          <% if (g.sent) { %><span class="badge badge-open">Inviato</span><% } %>
+        </div>
+
+        <% if (g.requests.length === 0) { %>
+          <p class="muted">Nessun ordine per questo giorno.</p>
+        <% } else { %>
+          <ul class="order-list">
+            <% g.requests.forEach(function(r) { %>
+              <li><strong><%= r.person_name %></strong> (<%= r.mode === 'dine_in' ? 'sul posto' : 'asporto' %>) — <%= r.order_text %></li>
+            <% }) %>
+          </ul>
+
+          <button type="button" class="button generate-message"
+                  data-venue-id="<%= g.venue.id %>" data-date="<%= date %>">
+            Genera messaggio
+          </button>
+          <textarea class="message-output" rows="4" readonly hidden></textarea>
+          <button type="button" class="button copy-message" hidden>Copia</button>
+          <span class="message-source muted small"></span>
+
+          <form method="post" action="/manager/sent" class="inline-form">
+            <input type="hidden" name="venueId" value="<%= g.venue.id %>">
+            <input type="hidden" name="date" value="<%= date %>">
+            <button type="submit" class="button button-secondary"><%= g.sent ? 'Segna come da inviare' : 'Segna come inviato' %></button>
+          </form>
+        <% } %>
+      </section>
+    <% }) %>
+
+    <section class="venue-group">
+      <h2>Aggiungi locale</h2>
+      <form method="post" action="/manager/venues" class="form">
+        <input type="hidden" name="date" value="<%= date %>">
+        <label for="name">Nome</label>
+        <input type="text" id="name" name="name" required maxlength="80">
+
+        <fieldset class="modes">
+          <legend>Modalità</legend>
+          <label><input type="radio" name="mode" value="dine_in" checked> Sul posto</label>
+          <label><input type="radio" name="mode" value="takeaway"> Asporto</label>
+          <label><input type="radio" name="mode" value="both"> Entrambe</label>
+        </fieldset>
+
+        <label for="cutoffTime">Orario massimo prenotazione</label>
+        <input type="time" id="cutoffTime" name="cutoffTime" required value="11:00">
+
+        <label for="contact">Contatto (opzionale)</label>
+        <input type="text" id="contact" name="contact" maxlength="120" placeholder="Telefono, WhatsApp...">
+
+        <button type="submit" class="button">Aggiungi</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="/js/manager.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordina — <%= venue.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav') %>
+
+  <main class="stage stage-narrow">
+    <a class="back" href="/order?date=<%= date %>">&larr; Torna ai locali</a>
+    <h1><%= venue.name %></h1>
+    <p class="meta">Giorno <%= date %> · ordina entro le <%= venue.cutoff_time %></p>
+
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+    <form method="post" action="/order/new" class="form">
+      <input type="hidden" name="date" value="<%= date %>">
+      <input type="hidden" name="venueId" value="<%= venue.id %>">
+
+      <label for="personName">Il tuo nome</label>
+      <input type="text" id="personName" name="personName" required maxlength="80" autocomplete="name">
+
+      <% if (venue.mode === 'both') { %>
+        <fieldset class="modes">
+          <legend>Modalità</legend>
+          <label><input type="radio" name="mode" value="dine_in" checked> Sul posto</label>
+          <label><input type="radio" name="mode" value="takeaway"> Asporto</label>
+        </fieldset>
+      <% } else { %>
+        <input type="hidden" name="mode" value="<%= venue.mode %>">
+        <p class="meta">Modalità: <%= venue.mode === 'dine_in' ? 'sul posto' : 'asporto' %></p>
+      <% } %>
+
+      <label for="orderText">Cosa ordini</label>
+      <textarea id="orderText" name="orderText" rows="3" required maxlength="500"
+                placeholder="Es. Margherita senza cipolla"></textarea>
+
+      <button type="submit" class="button">Invia ordine</button>
+    </form>
+  </main>
+</body>
+</html>

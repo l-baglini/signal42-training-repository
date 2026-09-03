@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordina il pranzo — Lunch Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav') %>
+
+  <main class="stage">
+    <h1>Ordina il pranzo</h1>
+
+    <form method="get" action="/order" class="date-form">
+      <label for="date">Giorno</label>
+      <input type="date" id="date" name="date" value="<%= date %>" min="<%= today %>"
+             onchange="this.form.submit()">
+    </form>
+
+    <% if (venues.length === 0) { %>
+      <p class="empty">Nessun locale configurato ancora. Chiedi all'office manager di aggiungerne uno.</p>
+    <% } %>
+
+    <div class="cards">
+      <% venues.forEach(function(v) { %>
+        <div class="card <%= v.closed ? 'card-closed' : '' %>">
+          <div class="card-head">
+            <h2><%= v.name %></h2>
+            <span class="badge <%= v.closed ? 'badge-closed' : 'badge-open' %>">
+              <%= v.closed ? 'Chiuso' : 'Aperto' %>
+            </span>
+          </div>
+          <p class="meta">
+            <%= v.mode === 'both' ? 'Sul posto o asporto' : (v.mode === 'dine_in' ? 'Solo sul posto' : 'Solo asporto') %>
+            · ordina entro le <%= v.cutoff_time %>
+          </p>
+          <% if (v.closed) { %>
+            <p class="muted">Prenotazioni chiuse per questo giorno.</p>
+          <% } else { %>
+            <a class="button" href="/order/new?date=<%= date %>&venueId=<%= v.id %>">Ordina qui</a>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+
+    <p class="muted small">
+      Hai già un ordine per oggi? Usa il link che hai ricevuto dopo averlo inviato
+      per modificarlo o annullarlo (fino all'orario di chiusura del locale).
+    </p>
+  </main>
+</body>
+</html>
