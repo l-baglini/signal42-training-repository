@@ -1,0 +1,23 @@
+# docker compose up --build   -> http://localhost:8900
+# docker compose down -v      -> stop and wipe the sqlite volume
+#
+# ANTHROPIC_API_KEY is optional: without it "Generate message" uses the
+# deterministic fallback template instead of the AI-drafted one.
+
+services:
+  server:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "8900"
+      DATABASE_PATH: "/app/data/lunch-manager.sqlite"
+      TZ: "Europe/Rome"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-}"
+    ports:
+      - "8900:8900"
+    volumes:
+      - lunch-data:/app/data
+
+volumes:
+  lunch-data:

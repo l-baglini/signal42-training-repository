@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Il tuo ordine — Lunch Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav') %>
+
+  <main class="stage stage-narrow">
+    <% if (!request) { %>
+      <h1>Ordine non trovato</h1>
+      <p class="muted">Il link non è valido, oppure l'ordine è già stato annullato.</p>
+      <a class="button" href="/order">Torna alla pagina ordini</a>
+    <% } else { %>
+      <a class="back" href="/order?date=<%= request.date %>">&larr; Torna ai locali</a>
+      <h1><%= venue.name %></h1>
+      <p class="meta">
+        Giorno <%= request.date %> · ordina entro le <%= venue.cutoff_time %>
+        <% if (closed) { %> · <strong>chiuso</strong><% } %>
+      </p>
+
+      <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+      <p class="muted small">Salva questo link: ti serve per modificare o annullare l'ordine.</p>
+
+      <form method="post" action="/order/<%= request.id %>?token=<%= request.edit_token %>" class="form">
+        <label>Nome</label>
+        <p><%= request.person_name %></p>
+
+        <% if (venue.mode === 'both') { %>
+          <fieldset class="modes" <%= closed ? 'disabled' : '' %>>
+            <legend>Modalità</legend>
+            <label><input type="radio" name="mode" value="dine_in" <%= request.mode === 'dine_in' ? 'checked' : '' %>> Sul posto</label>
+            <label><input type="radio" name="mode" value="takeaway" <%= request.mode === 'takeaway' ? 'checked' : '' %>> Asporto</label>
+          </fieldset>
+        <% } else { %>
+          <input type="hidden" name="mode" value="<%= venue.mode %>">
+          <p class="meta">Modalità: <%= venue.mode === 'dine_in' ? 'sul posto' : 'asporto' %></p>
+        <% } %>
+
+        <fieldset class="menu-choice" <%= closed ? 'disabled' : '' %>>
+          <legend>Cosa ordini</legend>
+          <% menuItems.forEach(function(item) { %>
+            <label><input type="radio" name="dish" value="<%= item.name %>" <%= request.dish === item.name ? 'checked' : '' %>> <%= item.name %></label>
+          <% }) %>
+        </fieldset>
+
+        <label for="note">Nota (opzionale)</label>
+        <textarea id="note" name="note" rows="2" maxlength="200" <%= closed ? 'disabled' : '' %>><%= request.note || '' %></textarea>
+
+        <% if (!closed) { %>
+          <button type="submit" class="button">Salva modifiche</button>
+        <% } %>
+      </form>
+
+      <% if (!closed) { %>
+        <form method="post" action="/order/<%= request.id %>/cancel?token=<%= request.edit_token %>"
+              onsubmit="return confirm('Annullare questo ordine?')">
+          <button type="submit" class="button button-danger">Annulla ordine</button>
+        </form>
+      <% } %>
+    <% } %>
+  </main>
+</body>
+</html>
