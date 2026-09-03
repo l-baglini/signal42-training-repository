@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SetLog</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header id="app-header">
+    <h1>SetLog</h1>
+  </header>
+
+  <main id="app-main">
+
+    <!-- ===================== TODAY ===================== -->
+    <section id="screen-today" class="screen">
+
+      <div id="quick-stats" class="quick-stats">
+        <div><b id="stat-week-count">0</b><span>this week</span></div>
+        <div><b id="stat-streak">0</b><span>week streak</span></div>
+      </div>
+
+      <div id="today-empty" class="empty-state">
+        <p>No workout in progress.</p>
+        <button id="btn-start-workout" class="btn-primary">Start Workout</button>
+      </div>
+
+      <div id="today-active" class="hidden">
+        <div class="today-date-row">
+          <span id="today-date"></span>
+          <button id="btn-discard-workout" class="btn-text">Discard</button>
+        </div>
+
+        <div id="draft-exercise-list"></div>
+
+        <button id="btn-add-exercise" class="btn-secondary">+ Add Exercise</button>
+        <button id="btn-finish-workout" class="btn-primary">Finish Workout</button>
+      </div>
+
+    </section>
+
+    <!-- ===================== HISTORY ===================== -->
+    <section id="screen-history" class="screen hidden">
+      <div id="history-empty" class="empty-state hidden"><p>No workouts logged yet.</p></div>
+      <div id="history-list"></div>
+    </section>
+
+    <!-- ===================== PROGRESS ===================== -->
+    <section id="screen-progress" class="screen hidden">
+      <div id="progress-empty" class="empty-state hidden">
+        <p>Log a workout to see progress here.</p>
+      </div>
+
+      <div id="progress-content" class="hidden">
+        <select id="progress-exercise-select"></select>
+
+        <div class="toggle-row">
+          <button id="toggle-best-weight" class="toggle-btn active" data-mode="best">Best weight</button>
+          <button id="toggle-total-volume" class="toggle-btn" data-mode="volume">Total volume</button>
+        </div>
+
+        <div id="progress-chart-empty" class="empty-state hidden">
+          <p>Log a few sessions with this exercise to see a chart here.</p>
+        </div>
+        <canvas id="progress-canvas"></canvas>
+
+        <p id="progress-summary" class="summary-line"></p>
+      </div>
+    </section>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <section id="screen-settings" class="screen hidden">
+
+      <div class="settings-block">
+        <h2>Backup</h2>
+        <p class="muted">Everything lives only in this browser's storage — no account, no cloud. Export a backup now and then, especially before clearing browser data or switching devices.</p>
+        <button id="btn-export" class="btn-secondary">Export backup (.json)</button>
+        <label for="file-import" class="btn-secondary">Import backup (.json)</label>
+        <input id="file-import" type="file" accept="application/json" class="hidden">
+      </div>
+
+      <div class="settings-block">
+        <h2>Danger zone</h2>
+        <button id="btn-clear-data" class="btn-clear">Clear all data</button>
+      </div>
+
+      <p id="settings-status" class="summary-line"></p>
+    </section>
+
+  </main>
+
+  <nav id="tab-bar">
+    <button class="tab-btn active" data-screen="today">Today</button>
+    <button class="tab-btn" data-screen="history">History</button>
+    <button class="tab-btn" data-screen="progress">Progress</button>
+    <button class="tab-btn" data-screen="settings">Settings</button>
+  </nav>
+
+  <!-- Exercise picker modal (used by "Add Exercise") -->
+  <div id="modal-picker" class="modal hidden">
+    <div class="modal-box">
+      <h2>Add Exercise</h2>
+
+      <div id="picker-list-view">
+        <input id="picker-search" type="text" placeholder="Search exercises…">
+        <div id="picker-results"></div>
+        <button id="btn-new-exercise" class="btn-secondary">+ New exercise</button>
+      </div>
+
+      <div id="picker-new-view" class="hidden">
+        <label>Name<br><input id="new-exercise-name" type="text"></label>
+        <label>Muscle group<br>
+          <select id="new-exercise-group">
+            <option>Chest</option>
+            <option>Back</option>
+            <option>Legs</option>
+            <option>Shoulders</option>
+            <option>Arms</option>
+            <option>Core</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <button id="btn-save-new-exercise" class="btn-primary">Add & use</button>
+        <button id="btn-cancel-new-exercise" class="btn-text">Back to list</button>
+      </div>
+
+      <button class="btn-cancel" data-close-modal>Close</button>
+    </div>
+  </div>
+
+  <!-- Session detail / edit modal (used by History) -->
+  <div id="modal-session-detail" class="modal hidden">
+    <div class="modal-box">
+      <div class="today-date-row">
+        <span id="detail-date"></span>
+        <button id="btn-delete-session" class="btn-text btn-danger">Delete Session</button>
+      </div>
+      <div id="detail-exercise-list"></div>
+      <button class="btn-cancel" data-close-modal>Close</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
